@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "clan-based-tuning"
+version = "0.0.1"
+description = "Framework integrations for clan-based optimizer hyperparameter tuning over shared distributed gradients."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+authors = [
+    { name = "Christopher M O'Quinn", email = "chrisoquinn.2@gmail.com" },
+]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "torch>=2.4",
+    "lightning>=2.5,<3",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+]
+
+[project.urls]
+Repository = "https://github.com/smithblack-0/ClanBasedTuning"
+Issues = "https://github.com/smithblack-0/ClanBasedTuning/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = ["-ra", "--strict-config", "--strict-markers"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.format]
+docstring-code-format = true
