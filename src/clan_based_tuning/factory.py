@@ -1,176 +1,130 @@
-"""Small construction facade that keeps scheduler and strategy contracts aligned."""
+"""Construct concrete Lightning extension units inside a native Tune trial."""
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from clan_based_tuning.lightning import ClanDDPStrategy, ClanRuntime
-from clan_based_tuning.spec import ClanSpec
+from lightning import Trainer
+from lightning.pytorch.callbacks import EarlyStopping
+
+from clan_based_tuning.lightning.environment import (
+    ClanLightningEnvironment,
+    _ClanRuntime,
+)
+from clan_based_tuning.lightning.strategy import ClanDDPStrategy
+from clan_based_tuning.optimizer import (
+    OptimizerStrategy,
+)
+from clan_based_tuning.optimizer import (
+    apply_optimizer_strategy as default_optimizer_strategy,
+)
+from clan_based_tuning.spec import _ClanMetadata, _metadata_from_trial_config
+
+if TYPE_CHECKING:
+    from lightning.pytorch.callbacks import Callback
 
 
 @dataclass(frozen=True, slots=True)
-class ClanBase:
-    """Construct matching Ray and Lightning integration objects.
+class ClanLightningPlugins:
+    """Concrete objects for Lightning's strategy, plugin, and callback slots."""
 
-    This is configuration glue, not another controller. Mutable lifecycle state
-    remains in Ray's scheduler and the running Lightning strategy instances.
+    strategy: ClanDDPStrategy
+    environment: ClanLightningEnvironment
+    report_callback: Callback
+
+
+def make_clan_lightning_plugins(
+    config: Mapping[str, Any],
+    *,
+    metrics: str | list[str] | dict[str, str],
+    apply_optimizer_strategy: OptimizerStrategy = default_optimizer_strategy,
+    filename: str = "checkpoint",
+    on: str = "validation_end",
+    **ddp_kwargs: Any,
+) -> ClanLightningPlugins:
+    """Return the concrete Lightning units for the current Tune trial.
+
+    Call this inside the Tune training function, after Ray supplies ``config``.
+    The returned objects go directly into ``Trainer(strategy=...)``,
+    ``Trainer(plugins=...)``, and ``Trainer(callbacks=...)``. Model construction
+    and ``Trainer.fit(model)`` remain explicit user code.
     """
 
-    spec: ClanSpec
+    metadata = _metadata_from_trial_config(config)
+    runtime = _resolve_tune_runtime(metadata)
+    if not callable(apply_optimizer_strategy):
+        raise TypeError("apply_optimizer_strategy must be callable")
+    environment = ClanLightningEnvironment(runtime)
+    strategy = ClanDDPStrategy(
+        metadata,
+        config,
+        runtime,
+        apply_optimizer_strategy,
+        **ddp_kwargs,
+    )
+    callback = _tune_report_callback(metrics=metrics, filename=filename, on=on)
+    return ClanLightningPlugins(
+        strategy=strategy,
+        environment=environment,
+        report_callback=callback,
+    )
 
-    def strategy(
-        self,
-        trial_config: Mapping[str, Any],
-        *,
-        runtime: ClanRuntime | None = None,
-        **ddp_kwargs: Any,
-    ) -> ClanDDPStrategy:
-        return ClanDDPStrategy(
-            self.spec,
-            trial_config,
-            runtime=runtime,
-            **ddp_kwargs,
+
+def prepare_clan_trainer(trainer: Trainer) -> Trainer:
+    """Validate explicit user composition and return the Trainer unchanged.
+
+    This function does not inject, replace, or repair components. It catches
+    topology and lifecycle conflicts that would otherwise deadlock a coupled
+    population while leaving ordinary Lightning features under user control.
+    """
+
+    if not isinstance(trainer.strategy, ClanDDPStrategy):
+        raise TypeError("Trainer.strategy must be ClanDDPStrategy")
+    if not isinstance(trainer.strategy.cluster_environment, ClanLightningEnvironment):
+        raise TypeError(
+            "Trainer.plugins must include the ClanLightningEnvironment returned by "
+            "make_clan_lightning_plugins()"
         )
-
-    def scheduler(self, **kwargs: Any):
-        from clan_based_tuning.ray import ClanBasedTraining
-
-        return ClanBasedTraining(self.spec, **kwargs)
-
-    @property
-    def trainer_requirements(self) -> dict[str, Any]:
-        """Return required Trainer settings not owned by the strategy object."""
-
-        return {
-            "devices": 1,
-            "num_nodes": 1,
-            "enable_checkpointing": False,
-        }
-
-    def tune_config(self, *, scheduler: Any, **kwargs: Any):
-        """Create a TuneConfig that keeps the complete clan concurrently resident."""
-
-        try:
-            from ray import tune
-            from clan_based_tuning.ray import ClanBasedTraining
-        except ModuleNotFoundError as error:
-            raise ModuleNotFoundError(
-                'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
-            ) from error
-
-        if not isinstance(scheduler, ClanBasedTraining):
-            raise TypeError("scheduler must be created by ClanBase.scheduler()")
-        if scheduler.clan.compatibility_signature != self.spec.compatibility_signature:
-            raise ValueError("scheduler was created for a different clan structure")
-
-        num_samples = kwargs.pop("num_samples", self.spec.population_size)
-        max_concurrent = kwargs.pop(
-            "max_concurrent_trials", self.spec.population_size
+    if trainer.num_devices != 1 or trainer.num_nodes != 1:
+        raise ValueError("Clan Based Training requires one Lightning device/process per Tune trial")
+    callback_type = _tune_report_callback_type()
+    if not any(isinstance(callback, callback_type) for callback in trainer.callbacks):
+        raise TypeError(
+            "Trainer.callbacks must include the Tune reporting callback returned by "
+            "make_clan_lightning_plugins()"
         )
-        reuse_actors = kwargs.pop("reuse_actors", False)
-        search_algorithm = kwargs.get("search_alg")
-        time_budget = kwargs.get("time_budget_s")
-        if num_samples != self.spec.population_size:
-            raise ValueError("num_samples must equal ClanSpec.population_size")
-        if max_concurrent != self.spec.population_size:
-            raise ValueError(
-                "max_concurrent_trials must equal ClanSpec.population_size"
-            )
-        if reuse_actors:
-            raise ValueError(
-                "Actor reuse is unsupported because each PBT window must rebuild "
-                "its cross-trial process group from the selected checkpoints"
-            )
-        if search_algorithm is not None:
-            raise ValueError(
-                "A separate Ray search algorithm is unsupported. ClanBasedTraining "
-                "owns optimizer exploration through synchronous PBT."
-            )
-        if time_budget is not None:
-            raise ValueError(
-                "time_budget_s can interrupt a coupled clan mid-window; stop the run "
-                "through the shared progress attribute instead."
-            )
-        return tune.TuneConfig(
-            scheduler=scheduler,
-            num_samples=num_samples,
-            max_concurrent_trials=max_concurrent,
-            reuse_actors=False,
-            **kwargs,
+    if any(isinstance(callback, EarlyStopping) for callback in trainer.callbacks):
+        raise ValueError(
+            "Lightning EarlyStopping can terminate one clan member while peers are "
+            "inside a collective; stop the population through Ray Tune instead"
         )
+    return trainer
 
-    def run_config(self, *, scheduler: Any, **kwargs: Any):
-        """Create a RunConfig that stops and fails the clan as one coupled unit."""
 
-        try:
-            from ray import tune
-            from clan_based_tuning.ray import ClanBasedTraining
-        except ModuleNotFoundError as error:
-            raise ModuleNotFoundError(
-                'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
-            ) from error
+def _resolve_tune_runtime(metadata: _ClanMetadata) -> _ClanRuntime:
+    try:
+        from clan_based_tuning.ray.rendezvous import resolve_tune_runtime
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
+        ) from error
+    return resolve_tune_runtime(metadata)
 
-        if not isinstance(scheduler, ClanBasedTraining):
-            raise TypeError("scheduler must be created by ClanBase.scheduler()")
-        if scheduler.clan.compatibility_signature != self.spec.compatibility_signature:
-            raise ValueError("scheduler was created for a different clan structure")
 
-        stop = kwargs.get("stop")
-        if not isinstance(stop, Mapping) or set(stop) != {scheduler.progress_attribute}:
-            raise ValueError(
-                "stop must be a mapping with exactly the scheduler's common progress "
-                f"attribute {scheduler.progress_attribute!r}; per-trial fitness or "
-                "callable stoppers can break the collective."
-            )
+def _tune_report_callback(*, metrics, filename: str, on: str):
+    callback_type = _tune_report_callback_type()
+    return callback_type(metrics=metrics, filename=filename, on=on)
 
-        checkpoint_config = kwargs.get("checkpoint_config")
-        if checkpoint_config is not None:
-            num_to_keep = checkpoint_config.num_to_keep
-            if num_to_keep is not None and num_to_keep <= 2:
-                raise ValueError(
-                    "Ray PBT may still need a source checkpoint during exploit; "
-                    "checkpoint_config.num_to_keep must be None or greater than 2."
-                )
 
-        failure_config = kwargs.pop("failure_config", None)
-        if failure_config is None:
-            failure_config = tune.FailureConfig(max_failures=0, fail_fast=True)
-        elif failure_config.max_failures != 0 or not failure_config.fail_fast:
-            raise ValueError(
-                "Clan Based Training currently requires max_failures=0 and "
-                "fail_fast=True; independent member recovery cannot repair a failed "
-                "collective window."
-            )
-        return tune.RunConfig(failure_config=failure_config, **kwargs)
-
-    def tune_checkpoint_path(self, filename: str = "checkpoint"):
-        """Materialize the current Ray checkpoint for a Lightning fit call."""
-
-        from clan_based_tuning.ray.checkpoint import tune_checkpoint_path
-
-        return tune_checkpoint_path(filename)
-
-    def tune_report_callback(
-        self,
-        *,
-        metrics: Any,
-        filename: str = "checkpoint",
-        on: str = "validation_end",
-    ):
-        """Construct Ray's native Lightning reporting/checkpoint callback."""
-
-        try:
-            from ray.tune.integration.pytorch_lightning import (
-                TuneReportCheckpointCallback,
-            )
-        except ModuleNotFoundError as error:
-            raise ModuleNotFoundError(
-                'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
-            ) from error
-        return TuneReportCheckpointCallback(
-            metrics=metrics,
-            filename=filename,
-            on=on,
+def _tune_report_callback_type():
+    try:
+        from ray.tune.integration.pytorch_lightning import (
+            TuneReportCheckpointCallback,
         )
+    except ModuleNotFoundError as error:
+        raise ModuleNotFoundError(
+            'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
+        ) from error
+    return TuneReportCheckpointCallback

@@ -1,11 +1,10 @@
-"""Strict synchronous Ray PBT scheduler for shared-gradient native trials."""
+"""Synchronous Ray PBT scheduler for shared-gradient native trials."""
 
 from __future__ import annotations
 
-from hashlib import sha256
 from typing import Any
 
-from clan_based_tuning.spec import ClanSpec
+from clan_based_tuning.spec import CLAN_METADATA_KEY, _ClanMetadata
 
 try:
     from ray.tune.schedulers import PopulationBasedTraining
@@ -17,24 +16,24 @@ else:
 
 
 class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
-    """Constrain Ray PBT to one fixed synchronous shared-gradient clan.
+    """Run ordinary Ray PBT while keeping one complete gradient-sharing clan.
 
-    Ray's scheduler remains authoritative for trial identity, checkpoint-driven
-    exploitation, configuration mutation, pause, and resume. This subclass adds
-    only the constraints required for all native trials to participate in one
-    collective training window.
+    Ray remains authoritative for trial identity, scoring, mutation, checkpoint
+    selection and cloning, pause, resume, and scheduler persistence. This class
+    adds only the constraints and rendezvous lifecycle required for every native
+    trial to enter the same synchronous DDP window.
     """
 
     _supports_buffered_results = False
 
     def __init__(
         self,
-        clan: ClanSpec,
+        population_size: int,
         *,
-        hyperparam_mutations: dict[str, Any],
         synch: bool = True,
-        custom_explore_fn: Any | None = None,
-        **kwargs: Any,
+        rendezvous_timeout_s: float = 300.0,
+        rendezvous_poll_interval_s: float = 0.1,
+        **pbt_kwargs: Any,
     ) -> None:
         if not _RAY_AVAILABLE:
             raise ModuleNotFoundError(
@@ -42,76 +41,54 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
             )
         if not synch:
             raise ValueError("ClanBasedTraining requires synchronous PBT")
-        if custom_explore_fn is not None:
-            raise ValueError(
-                "custom_explore_fn is unsupported because it could mutate "
-                "non-optimizer trial configuration"
-            )
-        mutation_keys = frozenset(hyperparam_mutations)
-        if mutation_keys != clan.optimizer_config_keys:
-            raise ValueError(
-                "hyperparam_mutations must exactly match the optimizer fields "
-                f"declared by ClanSpec: expected {sorted(clan.optimizer_config_keys)}, "
-                f"got {sorted(mutation_keys)}"
-            )
-        if any(isinstance(value, dict) for value in hyperparam_mutations.values()):
-            raise ValueError(
-                "Nested PBT mutation dictionaries are not supported in the first release"
-            )
 
-        time_attr = kwargs.get("time_attr", "training_iteration")
+        time_attr = pbt_kwargs.get("time_attr", "training_iteration")
         if time_attr == "time_total_s":
             raise ValueError(
-                "ClanBasedTraining requires a common progress counter, not wall-clock time_total_s"
+                "ClanBasedTraining requires a common progress counter, not time_total_s"
             )
-        if kwargs.get("require_attrs", True) is not True:
+        if pbt_kwargs.get("require_attrs", True) is not True:
             raise ValueError(
                 "ClanBasedTraining requires require_attrs=True so missing fitness or "
                 "progress reports fail immediately"
             )
-        kwargs["time_attr"] = time_attr
-        kwargs["require_attrs"] = True
+        pbt_kwargs["time_attr"] = time_attr
+        pbt_kwargs["require_attrs"] = True
+        mutations = pbt_kwargs.get("hyperparam_mutations", {})
+        if CLAN_METADATA_KEY in mutations:
+            raise ValueError(f"{CLAN_METADATA_KEY!r} is reserved integration metadata")
 
-        self.clan = clan
-        self._member_ranks: dict[str, int] = {}
-        self._canonical_static_config_signature: bytes | None = None
+        self._metadata = _ClanMetadata(
+            population_size=population_size,
+            rendezvous_timeout_s=rendezvous_timeout_s,
+            rendezvous_poll_interval_s=rendezvous_poll_interval_s,
+        )
+        self._member_ids: set[str] = set()
         self._canonical_resource_signature: object | None = None
         self._rendezvous_handle = None
+        super().__init__(synch=True, **pbt_kwargs)
 
-        super().__init__(
-            hyperparam_mutations=hyperparam_mutations,
-            custom_explore_fn=None,
-            synch=True,
-            **kwargs,
-        )
+    @property
+    def population_size(self) -> int:
+        return self._metadata.population_size
 
     @property
     def progress_attribute(self) -> str:
-        """Return the common monotonic progress key used for perturbation boundaries."""
+        """Return the monotonic progress key used for perturbation boundaries."""
 
         return self._time_attr
 
     def on_trial_add(self, tune_controller, trial) -> None:
-        self._resolve_or_bind_clan(trial.config)
+        self._metadata.bind_trial_config(trial.config)
         super().on_trial_add(tune_controller, trial)
-        trial_id = trial.trial_id
-        if trial_id not in self._member_ranks:
-            if len(self._member_ranks) >= self.clan.population_size:
-                raise RuntimeError("Tune created more trials than ClanSpec.population_size")
-            self._member_ranks[trial_id] = len(self._member_ranks)
 
-        static_signature = self._static_config_signature(trial.config)
-        if self._canonical_static_config_signature is None:
-            self._canonical_static_config_signature = static_signature
-        elif static_signature != self._canonical_static_config_signature:
-            raise ValueError(
-                "Clan trials may differ only in declared optimizer hyperparameters"
-            )
-
+        self._member_ids.add(trial.trial_id)
+        if len(self._member_ids) > self.population_size:
+            raise RuntimeError("Tune created more trials than ClanBasedTraining.population_size")
         if trial.max_failures != 0:
             raise ValueError(
                 "Independent Ray trial recovery is unsupported. Set max_failures=0 "
-                "so a failed collective window terminates instead of restoring one member alone."
+                "so a failed collective window terminates with the population."
             )
 
         resource_signature = self._resource_signature(trial)
@@ -120,42 +97,30 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         elif resource_signature != self._canonical_resource_signature:
             raise ValueError("Every clan trial must request identical resources")
 
-        self._publish_member_ranks()
+        if len(self._member_ids) == self.population_size:
+            self._publish_members()
 
     def on_trial_result(self, tune_controller, trial, result: dict[str, Any]) -> str:
-        if len(self._member_ranks) != self.clan.population_size:
+        if len(self._member_ids) != self.population_size:
             raise RuntimeError(
-                "The full clan population was not created before training began"
+                "The full clan population was not created before training began. "
+                "Set num_samples and max_concurrent_trials to population_size and "
+                "ensure the cluster can schedule every member simultaneously."
             )
-        if self._static_config_signature(trial.config) != self._canonical_static_config_signature:
-            raise RuntimeError(
-                "A clan trial changed non-optimizer configuration during training"
-            )
+        self._metadata.bind_trial_config(trial.config)
         return super().on_trial_result(tune_controller, trial, result)
+
+    def _get_new_config(self, trial, trial_to_clone):
+        """Use native Ray exploration while protecting rendezvous authority."""
+
+        config, operations = super()._get_new_config(trial, trial_to_clone)
+        self._metadata.bind_trial_config(config)
+        return config, operations
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state["_rendezvous_handle"] = None
         return state
-
-    def _resolve_or_bind_clan(self, config: dict[str, Any]) -> None:
-        resolved = self.clan.resolve_trial_config(config)
-        if self._member_ranks:
-            if resolved != self.clan:
-                raise RuntimeError("Tune trials contain inconsistent clan metadata")
-        else:
-            self.clan = resolved
-        self.clan.bind_trial_config(config)
-
-    def _static_config_signature(self, config: dict[str, Any]) -> bytes:
-        import ray.cloudpickle as cloudpickle
-
-        static_config = {
-            key: value
-            for key, value in config.items()
-            if key not in self.clan.optimizer_config_keys
-        }
-        return sha256(cloudpickle.dumps(static_config)).digest()
 
     @staticmethod
     def _resource_signature(trial) -> object:
@@ -174,11 +139,11 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         )
         return bundles, request.strategy
 
-    def _publish_member_ranks(self) -> None:
+    def _publish_members(self) -> None:
         from clan_based_tuning.ray.rendezvous import get_or_create_rendezvous
 
         if self._rendezvous_handle is None:
-            self._rendezvous_handle = get_or_create_rendezvous(self.clan)
+            self._rendezvous_handle = get_or_create_rendezvous(self._metadata)
         import ray
 
-        ray.get(self._rendezvous_handle.register_members.remote(dict(self._member_ranks)))
+        ray.get(self._rendezvous_handle.register_members.remote(sorted(self._member_ids)))

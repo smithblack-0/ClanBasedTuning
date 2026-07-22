@@ -1,6 +1,6 @@
 # Lightning component and lifecycle contracts
 
-Status: companion design detail for the Lightning integration assessment
+Status: superseded historical design detail; see `native_trial_build_contract.md`
 
 Date: 2026-07-21
 

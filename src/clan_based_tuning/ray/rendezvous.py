@@ -7,8 +7,8 @@ import time
 from dataclasses import dataclass
 from uuid import uuid4
 
-from clan_based_tuning.lightning.environment import ClanRuntime
-from clan_based_tuning.spec import ClanSpec
+from clan_based_tuning.lightning.environment import _ClanRuntime
+from clan_based_tuning.spec import _ClanMetadata
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,33 +44,17 @@ class RendezvousState:
         self._current_session: _Session | None = None
         self._next_session_id = 0
 
-    def register_member(self, trial_id: str, rank: int) -> None:
-        if not trial_id:
-            raise ValueError("trial_id must be non-empty")
-        if not 0 <= rank < self.population_size:
-            raise ValueError("rank must be within population_size")
-        previous_rank = self.member_ranks.get(trial_id)
-        if previous_rank is not None and previous_rank != rank:
-            raise RuntimeError(
-                f"Trial {trial_id!r} was already registered as rank {previous_rank}"
-            )
-        other_trial = next(
-            (
-                other_id
-                for other_id, other_rank in self.member_ranks.items()
-                if other_rank == rank and other_id != trial_id
-            ),
-            None,
-        )
-        if other_trial is not None:
-            raise RuntimeError(
-                f"Clan rank {rank} is already assigned to trial {other_trial!r}"
-            )
-        self.member_ranks[trial_id] = rank
+    def register_members(self, trial_ids: list[str]) -> None:
+        """Assign deterministic ranks after the complete population is known."""
 
-    def register_members(self, member_ranks: dict[str, int]) -> None:
-        for trial_id, rank in member_ranks.items():
-            self.register_member(trial_id, rank)
+        if len(trial_ids) != self.population_size:
+            raise ValueError("Rendezvous requires the complete clan population")
+        if len(set(trial_ids)) != len(trial_ids) or any(not item for item in trial_ids):
+            raise ValueError("Clan trial IDs must be unique and non-empty")
+        member_ranks = {trial_id: rank for rank, trial_id in enumerate(sorted(trial_ids))}
+        if self.member_ranks and self.member_ranks != member_ranks:
+            raise RuntimeError("Rendezvous was already registered with another population")
+        self.member_ranks = member_ranks
 
     def get_rank(self, trial_id: str) -> int | None:
         return self.member_ranks.get(trial_id)
@@ -127,9 +111,7 @@ class RendezvousState:
         )
         rank_zero = self._pending[rank_zero_trial]
         assert rank_zero.port is not None
-        tokens = {
-            trial_id: member.token for trial_id, member in self._pending.items()
-        }
+        tokens = {trial_id: member.token for trial_id, member in self._pending.items()}
         self._current_session = _Session(
             session_id=self._next_session_id,
             tokens=tokens,
@@ -149,12 +131,10 @@ class _RendezvousActor:
 
     def validate_population_size(self, population_size: int) -> None:
         if population_size != self._state.population_size:
-            raise RuntimeError(
-                "Existing rendezvous actor has a different population size"
-            )
+            raise RuntimeError("Existing rendezvous actor has a different population size")
 
-    def register_members(self, member_ranks: dict[str, int]) -> None:
-        self._state.register_members(member_ranks)
+    def register_members(self, trial_ids: list[str]) -> None:
+        self._state.register_members(trial_ids)
 
     def get_rank(self, trial_id: str) -> int | None:
         return self._state.get_rank(trial_id)
@@ -183,7 +163,7 @@ def _require_ray():
     return ray
 
 
-def get_or_create_rendezvous(clan: ClanSpec):
+def get_or_create_rendezvous(clan: _ClanMetadata):
     """Return the named Ray actor for this clan, creating it when necessary."""
 
     ray = _require_ray()
@@ -198,7 +178,7 @@ def get_or_create_rendezvous(clan: ClanSpec):
     return handle
 
 
-def resolve_tune_runtime(clan: ClanSpec) -> ClanRuntime:
+def resolve_tune_runtime(clan: _ClanMetadata) -> _ClanRuntime:
     """Resolve the current native Tune trial into a clan process-group rank."""
 
     ray = _require_ray()
@@ -215,7 +195,7 @@ def resolve_tune_runtime(clan: ClanSpec) -> ClanRuntime:
     except ValueError as error:
         raise RuntimeError(
             "Clan rendezvous does not exist. Construct the Tune run with "
-            "ClanBasedTraining before creating ClanDDPStrategy."
+            "ClanBasedTraining before creating Lightning plugins."
         ) from error
 
     deadline = time.monotonic() + clan.rendezvous_timeout_s
@@ -225,9 +205,7 @@ def resolve_tune_runtime(clan: ClanSpec) -> ClanRuntime:
         if rank is None:
             time.sleep(clan.rendezvous_poll_interval_s)
     if rank is None:
-        raise TimeoutError(
-            f"Trial {trial_id!r} was not registered with the clan scheduler"
-        )
+        raise TimeoutError(f"Trial {trial_id!r} was not registered with the clan scheduler")
 
     token = uuid4().hex
     host = ray.util.get_node_ip_address()
@@ -246,7 +224,7 @@ def resolve_tune_runtime(clan: ClanSpec) -> ClanRuntime:
             "and that the cluster can schedule every member simultaneously."
         )
 
-    return ClanRuntime(
+    return _ClanRuntime(
         trial_id=trial_id,
         actor_token=token,
         session_id=int(session["session_id"]),

@@ -1,4 +1,4 @@
-"""Lightning cluster environment for one native Tune trial in a clan."""
+"""Lightning environment for one native Tune trial in a clan."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from lightning.pytorch.plugins.environments import ClusterEnvironment
 
 
 @dataclass(frozen=True, slots=True)
-class ClanRuntime:
-    """Resolved process-group identity for one running Tune trial actor."""
+class _ClanRuntime:
+    """Resolved actor-local process-group identity used by the plugins."""
 
     trial_id: str
     actor_token: str
@@ -37,15 +37,15 @@ class ClanRuntime:
             raise ValueError("master_port must be a valid TCP port")
 
 
-class ClanClusterEnvironment(ClusterEnvironment):
-    """Expose an externally launched cross-trial process group to Lightning.
+class ClanLightningEnvironment(ClusterEnvironment):
+    """Present an externally launched cross-trial process group to Lightning.
 
-    Lightning must not launch subprocesses or overwrite ranks. Each native Tune
-    trial already owns one process and receives its rank from the clan
-    rendezvous.
+    Lightning must not launch subprocesses or rewrite ranks. Each native Tune
+    trial already owns one process, while the clan rendezvous supplies the
+    cross-trial rank and endpoint.
     """
 
-    def __init__(self, runtime: ClanRuntime) -> None:
+    def __init__(self, runtime: _ClanRuntime) -> None:
         super().__init__()
         self._runtime = runtime
 
@@ -81,8 +81,6 @@ class ClanClusterEnvironment(ClusterEnvironment):
         return 0
 
     def node_rank(self) -> int:
-        # Each Trainer owns one process and does not launch a multi-node job.
-        # Global rank comes directly from the external clan runtime.
         return 0
 
     def teardown(self) -> None:

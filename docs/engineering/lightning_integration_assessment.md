@@ -1,6 +1,6 @@
 # Lightning integration assessment for ClanBasedTuning
 
-Status: design recommendation after source review and framework-contract probes
+Status: superseded historical assessment; see `native_trial_build_contract.md`
 
 Date: 2026-07-21
 
