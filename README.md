@@ -169,6 +169,9 @@ that is not a fundamental restriction of Clan Based Training.
 See [`docs/engineering/native_trial_build_contract.md`](docs/engineering/native_trial_build_contract.md)
 for the detailed ownership and lifecycle contract.
 
+Product audiences, viability gates, capability maturity, and rollout order are
+tracked in [`docs/product_roadmap.md`](docs/product_roadmap.md).
+
 ## Development
 
 Python 3.11 through 3.13 is supported.
