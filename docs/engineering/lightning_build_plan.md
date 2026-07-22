@@ -1,6 +1,6 @@
 # Lightning integration build and verification plan
 
-Status: staged implementation and verification companion to the Lightning integration assessment
+Status: superseded build plan for the one-outer-job design. Retained for comparison; the current native Tune-trial design is defined in [`native_trial_build_contract.md`](native_trial_build_contract.md).
 
 Date: 2026-07-21
 

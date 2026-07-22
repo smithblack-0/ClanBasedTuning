@@ -21,11 +21,14 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
 dependencies = [
-    "torch>=2.4",
-    "lightning>=2.5,<3",
+    "torch>=2.10,<2.11",
+    "lightning>=2.6,<2.7",
 ]
 
 [project.optional-dependencies]
+ray = [
+    "ray[tune]>=2.56,<2.57",
+]
 dev = [
     "pytest>=8.3",
     "ruff>=0.9",
@@ -41,6 +44,10 @@ where = ["src"]
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
 testpaths = ["tests"]
+markers = [
+    "framework_contract: executable contract with an upstream framework",
+    "requires_ray: requires a local Ray installation",
+]
 
 [tool.ruff]
 line-length = 100
