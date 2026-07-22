@@ -54,6 +54,22 @@ class ClanDDPStrategy(DDPStrategy):
         self._apply_optimizer_strategy = apply_optimizer_strategy
         super().__init__(**ddp_kwargs)
 
+    @property
+    def distributed_sampler_kwargs(self) -> dict[str, int]:
+        """Describe the clan topology to Lightning's automatic sampler.
+
+        Lightning's ordinary DDP strategy derives sampler topology from the
+        number of processes launched by one Trainer. Clan members are instead
+        independent Tune trials, so each Trainer launches one process while the
+        clan runtime defines the shared world. Returning that runtime here keeps
+        automatic training samplers consistent with the process group.
+        """
+
+        return {
+            "num_replicas": self._runtime.world_size,
+            "rank": self._runtime.global_rank,
+        }
+
     def setup_environment(self) -> None:
         if self.num_processes != 1:
             raise RuntimeError(

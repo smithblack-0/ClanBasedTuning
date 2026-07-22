@@ -12,6 +12,7 @@ def test_scheduler_does_not_own_optimizer_mapping_schema():
     assert "optimizer_fields" not in ClanBasedTraining.__init__.__annotations__
 
 
+@pytest.mark.requires_ray
 def test_scheduler_reserves_only_its_integration_metadata_key():
     with pytest.raises(ValueError, match="reserved integration metadata"):
         ClanBasedTraining(

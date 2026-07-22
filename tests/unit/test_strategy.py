@@ -11,12 +11,16 @@ from clan_based_tuning.lightning.environment import _ClanRuntime
 from clan_based_tuning.spec import _ClanMetadata
 
 
-def _runtime(*, checkpoint_available: bool = False) -> _ClanRuntime:
+def _runtime(
+    *,
+    global_rank: int = 0,
+    checkpoint_available: bool = False,
+) -> _ClanRuntime:
     return _ClanRuntime(
         trial_id="trial-a",
         actor_token="actor-a",
         session_id=0,
-        global_rank=0,
+        global_rank=global_rank,
         world_size=2,
         master_address="127.0.0.1",
         master_port=12345,
@@ -43,6 +47,20 @@ def test_strategy_supplies_required_ddp_settings_without_hiding_environment():
     assert strategy._ddp_kwargs["init_sync"] is False
     assert strategy._ddp_kwargs["broadcast_buffers"] is False
     assert strategy.cluster_environment is None
+
+
+def test_strategy_supplies_cross_trial_topology_to_automatic_samplers():
+    metadata = _ClanMetadata(population_size=2, rendezvous_name="test-clan")
+    config = {"lr": 0.1}
+    metadata.bind_trial_config(config)
+    strategy = ClanDDPStrategy(
+        metadata,
+        config,
+        _runtime(global_rank=1),
+        apply_optimizer_strategy,
+    )
+
+    assert strategy.distributed_sampler_kwargs == {"num_replicas": 2, "rank": 1}
 
 
 def test_strategy_rejects_explicit_conflicting_ddp_settings():
