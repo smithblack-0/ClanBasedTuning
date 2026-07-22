@@ -25,7 +25,15 @@ from lightning import LightningModule, Trainer
 from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
-from clan_based_tuning import ClanDDPStrategy, ClanRuntime, ClanSpec, OptimizerField
+from clan_based_tuning import (
+    ClanDDPStrategy,
+    apply_optimizer_strategy,
+)
+from clan_based_tuning.lightning.environment import (
+    ClanLightningEnvironment,
+    _ClanRuntime,
+)
+from clan_based_tuning.spec import _ClanMetadata
 
 
 class ProbeScalarTrial(LightningModule):
@@ -95,12 +103,13 @@ def _worker(
     trial_directory.mkdir(parents=True, exist_ok=True)
 
     model = ProbeScalarTrial(initial_weight=initial_weights[rank])
-    clan = ClanSpec(
+    metadata = _ClanMetadata(
         population_size=world_size,
-        optimizer_fields=(OptimizerField("lr", "lr"),),
         rendezvous_name="cpu-probe",
     )
-    runtime = ClanRuntime(
+    config = {"lr": learning_rates[rank]}
+    metadata.bind_trial_config(config)
+    runtime = _ClanRuntime(
         trial_id=f"trial-{rank}",
         actor_token=f"stage-{stage_directory}-rank-{rank}",
         session_id=0,
@@ -109,10 +118,12 @@ def _worker(
         master_address="127.0.0.1",
         master_port=port,
     )
+    environment = ClanLightningEnvironment(runtime)
     strategy = ClanDDPStrategy(
-        clan,
-        {"lr": learning_rates[rank]},
-        runtime=runtime,
+        metadata,
+        config,
+        runtime,
+        apply_optimizer_strategy,
         process_group_backend="gloo",
     )
     trainer = Trainer(
@@ -120,6 +131,7 @@ def _worker(
         devices=1,
         num_nodes=1,
         strategy=strategy,
+        plugins=[environment],
         max_steps=max_steps,
         max_epochs=10,
         logger=False,

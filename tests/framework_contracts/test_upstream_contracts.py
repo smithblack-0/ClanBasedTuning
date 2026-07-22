@@ -29,8 +29,7 @@ def test_lightning_base_checkpoint_write_is_global_zero_gated():
     tree = ast.parse(source)
     conditions = [node.test for node in ast.walk(tree) if isinstance(node, ast.If)]
     assert any(
-        isinstance(condition, ast.Attribute)
-        and condition.attr == "is_global_zero"
+        isinstance(condition, ast.Attribute) and condition.attr == "is_global_zero"
         for condition in conditions
     )
 
@@ -56,6 +55,23 @@ def test_ray_pbt_exploit_keeps_target_trial_and_replaces_its_continuation():
     assert "set_config" in called_attributes
     assert "_get_new_config" in called_attributes
     assert "copy" in called_attributes
+
+
+@pytest.mark.framework_contract
+@pytest.mark.requires_ray
+def test_synchronous_ray_pbt_pauses_every_member_at_the_boundary():
+    ray = pytest.importorskip("ray")
+    del ray
+    from ray.tune.schedulers.pbt import PopulationBasedTraining
+
+    source = textwrap.dedent(inspect.getsource(PopulationBasedTraining.on_trial_result))
+
+    # A cross-trial DDP group can reform only if source and target members both
+    # cross the synchronous pause boundary. This sentinel forces a source review
+    # if Ray changes that lifecycle rather than allowing asymmetric restoration.
+    assert "self._synch" in source
+    assert "TrialScheduler.PAUSE" in source
+    assert "trial.status == Trial.PAUSED" in source
 
 
 @pytest.mark.framework_contract

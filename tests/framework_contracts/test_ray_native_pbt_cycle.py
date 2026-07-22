@@ -4,7 +4,6 @@ from __future__ import annotations
 
 # Ray is optional, so the module-level skip necessarily precedes Ray-dependent imports.
 # ruff: noqa: E402
-
 import pytest
 
 pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
@@ -17,10 +16,11 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from clan_based_tuning import (
-    ClanBase,
-    ClanSpec,
-    OptimizerField,
-    ReplicatedDistributedSampler,
+    ClanBasedTraining,
+    make_clan_lightning_plugins,
+    prepare_clan_trainer,
+    replicated_sampler,
+    tune_checkpoint_path,
 )
 
 
@@ -53,14 +53,9 @@ class _RayScalarTrial(LightningModule):
 
 
 def test_native_tune_trials_exploit_restore_and_reform_clan(tmp_path):
-    clan = ClanBase(
-        ClanSpec(
-            population_size=2,
-            optimizer_fields=(OptimizerField("lr", "lr"),),
-            rendezvous_timeout_s=60.0,
-        )
-    )
-    scheduler = clan.scheduler(
+    scheduler = ClanBasedTraining(
+        population_size=2,
+        rendezvous_timeout_s=60.0,
         metric="fitness",
         mode="min",
         perturbation_interval=1,
@@ -73,20 +68,21 @@ def test_native_tune_trials_exploit_restore_and_reform_clan(tmp_path):
 
     def train(config):
         model = _RayScalarTrial()
-        strategy = clan.strategy(
+        clan = make_clan_lightning_plugins(
             config,
+            metrics={"fitness": "fitness", "learning_rate": "learning_rate"},
             process_group_backend="gloo",
-        )
-        callback = clan.tune_report_callback(
-            metrics={"fitness": "fitness", "learning_rate": "learning_rate"}
         )
         trainer = Trainer(
             accelerator="cpu",
-            strategy=strategy,
-            **clan.trainer_requirements,
+            devices=1,
+            num_nodes=1,
+            strategy=clan.strategy,
+            plugins=[clan.environment],
             max_epochs=10,
             logger=False,
-            callbacks=[callback],
+            callbacks=[clan.report_callback],
+            enable_checkpointing=False,
             enable_progress_bar=False,
             enable_model_summary=False,
             num_sanity_val_steps=0,
@@ -96,9 +92,10 @@ def test_native_tune_trials_exploit_restore_and_reform_clan(tmp_path):
         validation_loader = DataLoader(
             validation_dataset,
             batch_size=1,
-            sampler=ReplicatedDistributedSampler(validation_dataset),
+            sampler=replicated_sampler(validation_dataset),
         )
-        with clan.tune_checkpoint_path() as checkpoint_path:
+        prepare_clan_trainer(trainer)
+        with tune_checkpoint_path() as checkpoint_path:
             trainer.fit(
                 model,
                 train_dataloaders=train_loader,
@@ -111,13 +108,18 @@ def test_native_tune_trials_exploit_restore_and_reform_clan(tmp_path):
         tuner = tune.Tuner(
             tune.with_resources(train, {"cpu": 1}),
             param_space={},
-            run_config=clan.run_config(
-                scheduler=scheduler,
+            run_config=tune.RunConfig(
                 storage_path=str(tmp_path),
                 stop={"training_iteration": 2},
+                failure_config=tune.FailureConfig(max_failures=0, fail_fast=True),
                 verbose=0,
             ),
-            tune_config=clan.tune_config(scheduler=scheduler),
+            tune_config=tune.TuneConfig(
+                scheduler=scheduler,
+                num_samples=2,
+                max_concurrent_trials=2,
+                reuse_actors=False,
+            ),
         )
         results = tuner.fit()
     finally:

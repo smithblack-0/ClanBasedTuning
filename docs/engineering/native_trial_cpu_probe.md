@@ -10,7 +10,7 @@ Can independently managed trial processes use the package strategy to join one s
 
 ## Probe
 
-Two CPU processes stand in for separately launched Tune trial actors. Each creates its own Lightning `Trainer`, model, optimizer configuration, and checkpoint path. The probe uses the real `ClanDDPStrategy` with a supplied `ClanRuntime` and Gloo backend.
+Two CPU processes stand in for separately launched Tune trial actors. Each creates its own Lightning `Trainer`, model, optimizer configuration, and checkpoint path. The probe constructs the real `ClanDDPStrategy` and `ClanLightningEnvironment` with a test-only actor runtime and the Gloo backend, isolating the Lightning seam from Ray.
 
 ### Window 1
 
