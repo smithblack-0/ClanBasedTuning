@@ -1,269 +1,190 @@
-# Product direction and roadmap
+# Product thesis and roadmap
 
-Status: consolidated product-model draft
+Status: governing product direction
 
-Last updated: 2026-07-22
+Date: 2026-07-22
 
-This revision is ready for review of the product direction, supported-use
-boundaries, and rollout logic. It is not a final roadmap or a certification of
-the current implementation. Capability statuses, documentation work, and deeper
-engineering concerns are preliminary inputs for the architecture audit and will
-change when evidence changes.
+This document defines the intent under which ClanBasedTuning is designed and
+reviewed. The principles are project commitments, not optional preferences. If
+an implementation conflicts with them, the implementation changes unless the
+project deliberately revises this thesis.
 
-Feedback is requested on four questions:
+## Project thesis
 
-1. Does the consolidated model describe the product we are trying to build?
-2. Are the use cases distinct, worthwhile, and supported at the right levels?
-3. Do the success conditions follow from that model without mixing in feature
-   design?
-4. Does the rollout deepen the model in the right order?
+ClanBasedTuning will let developers who already understand Population Based
+Training and distributed training use Clan Tuning to adapt optimizers during a
+training run. They should be able to add the required Clan Tuning hooks to an
+existing pipeline without surrendering that pipeline to a new training
+framework.
 
-Line editing, detailed feature commitments, and judgments about the current
-architecture are not the review target for this revision.
+The product is a small set of well-contracted Clan Tuning primitives. Thin
+utilities assemble those primitives for common framework combinations. The
+primitives receive at least the same engineering attention as the convenient
+path because they are what make the library adaptable, auditable, and useful
+beyond its first reference integration.
 
-## Consolidated product model
+Operationally, Clan Tuning requires population members to retain distinct
+model trajectories, optimizer state, and tuning configuration while
+contributing to shared gradients. Each member applies the shared gradient
+through its own optimizer. Population selection may transfer training state
+between members; the receiving member's current configuration must then be
+applied to the inherited optimizer state. Fitness must remain comparable
+without reducing away the member differences being selected.
 
-ClanBasedTuning should make evolutionary optimizer adaptation over shared
-distributed gradients usable through existing training and tuning frameworks.
-The novelty is not merely that DDP and evolution can be combined. The intended
-contribution is a robust set of CBT primitives, one complete integration for a
-common use case, and reproducible evidence for the algorithm and the additional
-capabilities developed here.
+That is the behavior the library exists to enable. It is not a claim that the
+library owns the surrounding training topology, scheduler, training loop,
+optimizer, gradient reducer, or checkpoint system.
 
-The package should be as native as possible so it can leverage existing,
-robustly tested subsystems. PyTorch should remain responsible for distributed
-tensor operations, Lightning for training orchestration, and Ray for population
-scheduling and trial lifecycle. ClanBasedTuning should add the CBT-specific
-behavior and the hooks or overrides required to express it. The contracts must
-make authority and ordering explicit without creating a second implementation
-of a framework-owned paradigm.
+## Governing commitments
 
-Viability therefore means **narrow but complete, and extensible without being
-speculative**. The project should thoroughly support a deliberately simple,
-useful configuration. Users whose systems differ in known ways should have
-documented extension points or focused components to adopt. More demanding
-topologies should remain possible to investigate, but the package should not
-claim or prematurely abstract support that has not been designed and tested.
-
-The runtime product and the research product are related but distinct. The
-runtime supplies the public implementation and contracts. Reference experiments
-consume that public implementation to establish fidelity, characterize its
-engineering behavior, and support the new publication. The experiments must not
-contain a hidden second implementation of CBT.
-
-This produces three primary product units:
-
-1. **Supported integration:** one end-to-end Ray, Lightning, and PyTorch path
-   that an ordinary user can install and apply without designing distributed
-   lifecycle machinery.
-2. **Adoptable components:** focused CBT primitives and contracts for users who
-   already have bespoke training or tuning infrastructure.
-3. **Reference implementation:** maintained experiments and technical
-   documentation that make the algorithm, framework integration, and
-   publication claims inspectable and reproducible.
-
-Professional engineering quality applies to all three. The code should be
-written on the assumption that it will be reviewed, copied, and used to learn
-how to implement CBT; reference quality is part of the product, not a polishing
-stage after the features work.
-
-## Intended use and support levels
-
-Support is defined by use case, not by whether the user is an individual, a
-small lab, or a large organization. The same organization may use the package at
-several levels.
-
-| Use case | Concrete configuration or need | Intended support |
+| Principle | Project commitment | Design consequence |
 |---|---|---|
-| Simple optimizer adaptation | Each model and its training state fit on one device; one optimizer with one parameter group; compatible member topology; fixed, fully resident synchronous population; ordinary Lightning automatic optimization; Ray synchronous PBT | Complete supported path, initially on one GPU node |
-| Customized optimizer adaptation | The supported topology is retained, but optimizer mapping requires multiple groups, aliases, tuple-valued settings, transformations, or another explicit reconciliation policy | Supported through a documented optimizer hook and tested examples; not configuration inference |
-| Bespoke system integration | An engineer needs selected CBT strategy, coordination, or optimizer-adaptation behavior inside an existing system rather than the complete Ray-Lightning path | Documented component contracts and reference use; operational support limited to declared compositions |
-| Scientific replication | A researcher needs to reproduce established CBT behavior and evaluate the additional claims of this project | Maintained reference experiments using the public package |
-| Advanced distributed adoption | A model needs multiple devices, sharding, multi-node membership, elasticity, asynchronous populations, or other production-specific behavior | Not part of the initial support promise; preserve plausible extension paths and add support only from evidence |
+| Own only the Clan Tuning gap | Existing frameworks remain authoritative for training, population scheduling, distributed computation, optimization, and persistence. ClanBasedTuning implements only behavior and coordination that those owners do not provide. | Every custom component must identify the missing Clan Tuning requirement it owns and delegate the surrounding lifecycle. Reimplementing a framework-owned paradigm is a design failure. |
+| Build the primitives as the product | Coordination, optimizer-configuration application, lifecycle integration, and other Clan-specific capabilities will have narrow public contracts and be usable when a caller assembles its own pipeline. | The project will not bury essential behavior inside one turnkey integration or treat lower-level APIs as unsupported implementation debris. |
+| Keep convenience thin | Common-case utilities will compose the public primitives, supply sensible defaults, and remove repetitive wiring. They will not create a second execution model. | The convenient path and a custom pipeline use the same behavior. A helper that introduces its own training loop, configuration language, recovery system, or hidden policy is rejected or decomposed. |
+| Separate operational theory from library ownership | Documentation and APIs will distinguish what Clan Tuning requires from how a supported framework composition realizes it and from what this package owns. | Terms such as member, trial, worker, process, rank, and device are related explicitly rather than treated as synonyms. A framework mapping cannot silently become an algorithmic restriction. |
+| Preserve explicit user control | The user's scheduler, trainer, model, optimizer, configuration, and framework objects remain visible. Configuration is applied to live optimizers through an explicit, extensible operation. | Defaults may cover matching optimizer fields, while mappings may specialize by optimizer type and parameter group. The library will not reinterpret the user's complete experiment configuration as its own schema. |
+| Preserve extension paths without speculative systems | Contracts will avoid unnecessary assumptions that prevent a member from containing several workers or a later integration from using model sharding. | The initial release may support a narrow topology, but core identities and interfaces will not equate one member with one process or device. FSDP and other topologies are added only after their lifecycle is designed and tested. |
+| Make contracts teachable and auditable | Quickstarts will serve the common path; integration and primitive documentation will explain ownership, ordering, invariants, extension, and failure behavior. Theory will be presented separately from package responsibility. | A common user can start quickly, while a sophisticated user can build a pipeline without reverse-engineering the convenience layer. Documentation quality is part of feature completeness. |
+| Maintain one scientific implementation | Scientific examples and publication experiments will consume the released library rather than reproduce Clan Tuning inside a research harness. | Research use can exercise and validate the product without making experiment management a responsibility of the core package. |
 
-The first release is viable only if the simple optimizer-adaptation path is
-complete and useful. The customized and component paths prevent that narrow
-entry point from becoming the definition of CBT. They do not promise that every
-possible composition is already supported.
+These commitments are cumulative. Usability does not justify broad ownership;
+minimal ownership does not justify an incomplete common path; a working common
+path does not justify weak primitives.
 
-## Success conditions
+## Support targets
 
-The following conditions turn the product model into release gates. They are
-independent: a working training run cannot compensate for an unclear contract,
-weak documentation, or an unsubstantiated scientific claim.
+Support is stated in terms of what a user is trying to do. The initial release
+contains one primitive system and convenience utilities over it, not separate
+basic and advanced implementations.
 
-| Condition | What must be true | Reason |
+| User situation | Product target | Initial commitment |
 |---|---|---|
-| Framework-native implementation | Framework-owned mechanisms remain implemented by PyTorch, Lightning, Ray, or another established dependency; CBT code contains only its algorithmic delta and necessary integration hooks | Native reuse gives users one engineering truth and the benefit of mature framework testing and maintenance |
-| Complete simple path | The declared one-device-per-member, one-optimizer configuration installs, trains, exploits, checkpoints, restores, reports fitness, and fails intelligibly on a supported single-node GPU environment | A proof of concept becomes useful only when its common path is complete rather than selectively demonstrated |
-| Explicit cross-framework contracts | Authority, ordering, invariants, and unsupported combinations are clear at checkpoint, exploitation, restart, failure, topology, optimizer, metric, and data boundaries | The frameworks may own the behavior, but CBT must state what their composition requires |
-| Adoptable component boundaries | Advanced users can identify and use focused CBT behavior without accepting a package-owned Trainer, tuning frontend, distributed runtime, or configuration language | Existing systems usually need an improvement to their own pipeline, not a replacement framework |
-| Honest compatibility envelope | Supported framework versions, platforms, precision modes, optimizer layouts, and topologies are specific and backed by automated or reproducible evidence | Narrow verified support is more useful than broad ambiguous compatibility claims |
-| Reference-quality engineering | Public interfaces, source structure, documentation, tests, diagnostics, compatibility discipline, and release practice are suitable for code expected to be audited and copied | The implementation itself is part of the contribution and must earn long-term trust |
-| Publishable evidence | Public-package experiments establish prior-algorithm fidelity, measure overhead and scaling in the supported envelope, and demonstrate clearly stated additional capabilities | Robust software enables the research contribution but does not replace scientific evidence |
+| Add Clan Tuning to a conventional PBT and distributed-training job | Keep the existing training function and framework configuration, add the Clan-specific hooks, and run a complete population lifecycle | A thoroughly tested Ray Tune, Lightning, and PyTorch reference composition with thin setup utilities and an end-to-end quickstart |
+| Apply a changing configuration across ordinary or mixed optimizer layouts | Explicitly apply the current configuration to the relevant optimizers and parameter groups, including renamed fields and different rules for different groups | A reusable optimizer adapter with useful matching defaults and more-specific mappings by optimizer type and parameter group |
+| Integrate Clan Tuning into a pipeline that does not match the reference composition | Select and assemble the necessary Clan-specific capabilities while retaining the pipeline's existing owners | Public primitive contracts, direct usage examples, and tests that do not require adoption of a package-owned trainer or tuning frontend |
+| Understand, evaluate, or extend the implementation | Trace operational theory into concrete framework roles, ownership boundaries, lifecycle ordering, and evidence | Layered documentation: concepts, quickstart, integration guide, primitive reference, failure guidance, and worked examples |
+| Use the package for research | Build repeatable studies and inspect tuning behavior using the same public implementation users install | Maintained scientific examples and, once claims are fixed, reproducible publication configurations and artifacts |
+| Run sharded, multi-node, elastic, asynchronous, or otherwise advanced topologies | Preserve member isolation and Clan relationships under a different execution lifecycle | Not promised in the initial release. Candidate capabilities begin with an explicit topology, owner, contract, and verification plan; FSDP is a priority candidate after the reference path is sound. |
 
-The framework-native condition is a design gate rather than a product
-description. Any custom scheduler control, checkpoint manager, distributed
-runtime, recovery system, or training loop is presumptively wrong until a
-specific framework gap and the required CBT behavior are demonstrated. A
-subclass or plugin is not automatically native if its body reimplements the
-paradigm it extends.
+The first reference composition will use trials as the primary member-isolation
+boundary. This lets scheduling and checkpoint lifecycle remain with the tuning
+framework and leaves room for one member to contain several workers later. It
+does not define a population member as a Ray trial in the primitives or in the
+theory.
 
-## Preliminary capability view
+## Where the work is difficult
 
-These tables organize what must eventually be tracked. They are not support
-claims. **Observed** means that a current test or example exercises a behavior;
-it does not mean the design has passed the framework-native audit.
+The central engineering challenge is not exposing more configuration or
+connecting three APIs. It is expressing Clan Tuning while owning as little of
+the host system as possible.
 
-### Supported integration
+| Difficulty | Required outcome |
+|---|---|
+| Members must share gradients across boundaries that a tuning system normally treats as independent trials | Establish the required communication relationship without replacing the tuning or distributed framework |
+| Distributed trainers ordinarily assume replicas should remain identical, while Clan Tuning requires member trajectories to diverge | Reuse native gradient reduction while preventing unrelated synchronization from erasing intentional state |
+| Exploitation combines inherited training state with the receiving member's current configuration | Make restore authority and configuration-application order explicit without taking over framework checkpointing |
+| Real pipelines use multiple optimizer types, parameter groups, aliases, and structured fields | Provide a clear configuration-application primitive that scales by composition rather than a growing special-case function |
+| Fitness must be comparable and member-local at the same time | Coordinate data and reporting so selection is meaningful without synchronizing away the signal |
+| A failed participant can invalidate a live collective | Define failure and recovery contracts that cooperate with the host frameworks instead of inventing a competing controller |
+| A later member may span several workers or shards | Keep logical member identity separate from trials, processes, ranks, and devices from the beginning |
 
-| Capability | Present evidence | Next decision or evidence |
-|---|---|---|
-| Shared gradients with divergent optimizer application | Observed in a two-process CPU Lightning probe | Audit the strategy against current Lightning and PyTorch extension contracts |
-| Native Ray exploitation and member restart | Observed in a CPU Ray/PBT lifecycle test | Audit every Ray override and private dependency; verify complete job restoration separately |
-| Simple optimizer adaptation | A one-optimizer, one-group adapter exists | Define the exact initial optimizer fields and optimizers; test construction and post-restore reconciliation |
-| Single-node GPU execution | No current evidence | Verify the complete supported path with NCCL and the selected precision modes |
-| Comparable member fitness | A replicated evaluation sampler and local metric convention exist | Check ordinary Lightning data-module, sampler, validation, and metric compositions |
-| Checkpoint, restart, and failure composition | One exploit/restore cycle is observed | State framework authority and ordering, then add restoration and failure-injection coverage for the supported path |
-| Diagnostics and compatibility | Partial README guidance and pinned dependencies exist | Define required user-visible context and publish an evidence-linked compatibility matrix |
+The project will spend engineering effort on these boundaries even when the
+visible code is small. A thin library is the result of resolved ownership, not
+an excuse to leave lifecycle behavior implicit.
 
-### Components and extension paths
+## Definition of success
 
-| Capability | Present evidence | Next decision or evidence |
-|---|---|---|
-| Optimizer reconciliation hook | Callable injection is implemented and unit tested | Decide whether its current timing and inputs form a sufficient public contract for realistic custom layouts |
-| Lightning strategy and environment | Public concrete objects are returned by the factory | Determine whether each override is the smallest native hook and whether Ray details leak into reusable contracts |
-| Ray scheduler and rendezvous | Native trials retain Ray identity and lifecycle in the current design | Determine whether coordination is a focused CBT policy adapter or an alternate lifecycle controller |
-| Independent component adoption | Components are importable but only the complete composition is demonstrated | Identify supported standalone compositions from real use cases; do not invent generic interfaces during the audit |
-| Future topology growth | One process, device, and member are currently equivalent | Determine which contracts merely restrict the first adapter and which unnecessarily encode that equivalence into the conceptual core |
+The product has fulfilled this thesis when all of the following are true:
 
-### Reference implementation and research
+- A developer familiar with PBT and DDP can add Clan Tuning to the supported
+  reference pipeline, understand the few additional hooks, complete training,
+  exploitation, restoration, and evaluation, and diagnose failures from the
+  documentation.
+- The convenience layer is demonstrably orchestration over public primitives;
+  it contains no alternative implementation of their behavior.
+- A sophisticated user can understand and assemble the primitives without
+  adopting the reference integration or reading its private internals.
+- Optimizer configuration remains explicit and supports realistic differences
+  among optimizer types and parameter groups without imposing a package-wide
+  experiment schema.
+- Each custom integration point has one stated responsibility, an explicit
+  framework owner on either side, contract tests, and documented failure
+  behavior.
+- The implementation and documentation never confuse the theory's population
+  model with the current framework mapping.
+- Scientific examples and results use the public package, and support claims
+  are limited to configurations backed by direct evidence.
 
-| Capability | Present evidence | Next decision or evidence |
-|---|---|---|
-| Algorithm fidelity | Mechanism-level CPU tests exist | Define which established CBT results or behaviors must be reproduced |
-| Additional research contribution | Not yet consolidated | Write a claims-and-evidence matrix before selecting experiments |
-| Performance characterization | No current evidence | Measure overhead, throughput, memory, and scaling only after the supported architecture is settled |
-| Reproducible experiment package | One illustrative CPU example exists | Build maintained configurations, outputs, interpretation, and environment records around the public API |
+A successful demonstration is evidence toward these outcomes. It is not a
+substitute for them.
 
-## Preliminary documentation plan
+## Rollout
 
-Documentation should follow the same consolidated-to-detailed structure as the
-product. The exact file layout is not committed, but the user questions are
-already distinguishable.
+The rollout builds outward from the governing commitments. Later stages remain
+directional until evidence from the active stage fixes their detailed design.
 
-| Documentation unit | Question it answers | Primary use case |
-|---|---|---|
-| Overview and decision guide | What problem does CBT solve, when should I use it, and what is actually supported? | All users |
-| Supported-path quick start | How do I run the simple one-optimizer configuration correctly? | Simple optimizer adaptation |
-| Concepts and framework contracts | How do shared gradients, divergent optimizer state, PBT, checkpoints, fitness, and framework authority fit together? | Direct users and reviewers |
-| Support and compatibility matrix | Which versions, devices, precision modes, optimizers, topologies, and lifecycle features are verified? | Adopters and operators |
-| Extension guide | How do I customize optimizer reconciliation or consume a focused component without bypassing its invariants? | Customized and bespoke integration |
-| Troubleshooting and diagnostics | What does a hang or lifecycle failure mean, what context should I inspect, and which framework owns recovery? | Operators |
-| Reproduction guide | How do I reproduce each fidelity or publication result from the public package? | Scientific replication |
-| Maintainer and upstream notes | Which upstream contracts are relied upon, how are compatibility changes detected, and what belongs upstream? | Maintainers and framework reviewers |
+### 1. Reconcile the proof of concept with the thesis
 
-The current README, build contract, source ledger, probes, and example are source
-material for these documents. Their existence does not establish that this user
-journey is complete, and historical documents must be clearly separated from
-live contracts after the audit.
+Audit every current component and lifecycle seam. Retain, redesign, or remove it
+according to the ownership and primitive-first commitments. Resolve the core
+primitive inventory, optimizer-application model, framework authority, and the
+relationship between logical members and the initial trial-based composition.
 
-## Deeper concerns for the architecture audit
+Exit: every retained custom unit has a unique Clan-specific responsibility; the
+common path is expressible entirely by composing the proposed primitives; and
+no unresolved product decision is disguised as an implementation detail.
 
-These are unresolved questions, not accepted defects or planned features. They
-are recorded now because a favorable answer is necessary before the current
-proof of concept can be treated as the product nucleus.
+### 2. Establish the primitive foundation
 
-| Concern | Why it may matter | Audit question |
-|---|---|---|
-| Member/process/device equivalence | The current topology may make multi-device members or hierarchical groups difficult later | Is the equivalence confined to the first Ray-Lightning adapter, or embedded in lower-level CBT contracts? |
-| Ray lifecycle coupling | The implementation relies on native PBT behavior and some private lifecycle seams | Are the overrides minimal and sentinel-tested, and should any missing public hook be proposed upstream? |
-| Scheduler versus scientific scope | Ray can mutate arbitrary config values, while current CBT gradients may justify only optimizer adaptation | Does the public API distinguish technically accepted configuration from scientifically supported mutation? |
-| Optimizer mutation semantics | Construction, checkpoint restoration, scheduler state, precision scaling, and mutation can establish competing authorities | Is there one explicit ordering contract that delegates each operation to its framework owner? |
-| Data and fitness comparison | Distributed sampler and metric defaults assume equivalent replicas, while CBT intentionally preserves member differences | Can normal Lightning data and metric facilities express the required comparison without package-owned alternatives? |
-| Collective failure behavior | One member stopping or retrying independently can strand peers in collectives | Which Ray failure and restart modes naturally satisfy the CBT contract, and what must merely be rejected or documented? |
-| Precision and compiled execution | AMP scalers, BF16/FP16, compilation, and communication hooks can alter optimizer or synchronization ordering | Which modes compose through native hooks, and which require separate evidence or deferral? |
-| Component boundaries | Concrete objects are public, but importability alone does not make them independently useful | What are the smallest real adoption units, and what context do their contracts require? |
-| Documentation authority | Historical plans and ledgers describe superseded designs beside the live contract | Which artifacts remain evidence, which are authoritative, and which should be archived or rewritten? |
+Implement and document the accepted primitives for coordination, intentional
+divergence, optimizer configuration, exploit/restore integration, comparable
+fitness, and contract failures. Test them at their own boundaries before relying
+on the complete reference pipeline as proof.
 
-The audit should search current framework designs before preserving any custom
-machinery. Its output should classify existing units as retain, strengthen,
-redesign, remove, or defer and explain the framework evidence behind the call.
+Exit: each primitive has a stable purpose, explicit ownership and ordering,
+direct examples, contract and failure tests, and no duplicated framework
+machinery.
 
-## Rollout roadmap
+### 3. Complete the supported reference composition
 
-The stages are evidence gates rather than calendar promises. Later stages stay
-coarse until earlier work resolves their architecture.
+Build the Ray Tune, Lightning, and PyTorch path as thin orchestration over the
+same primitives. Complete an ordinary single-node GPU lifecycle, including
+training, evaluation, exploitation, restoration, diagnostics, and experiment
+recovery. Provide the quickstart and realistic optimizer-mapping examples.
 
-### 0. Product consolidation — current
+Exit: a user in the declared support envelope can add Clan Tuning to a familiar
+job and be operational without designing the cross-framework lifecycle, while
+the resulting code remains recognizably their Ray, Lightning, and PyTorch
+pipeline.
 
-Agree on the product model, use-case support levels, success conditions, and the
-questions the architecture audit must answer.
+### 4. Release a reference-quality library
 
-Exit condition: this document is accepted as a sound direction for the next
-pass. Preliminary capability rows and feature details may still change.
+Stabilize public APIs, packaging, compatibility evidence, diagnostics,
+documentation, and examples. Perform a fresh system review for duplicated
+ownership, convenience-layer drift, and accidental topology assumptions.
 
-### 1. Framework-native architecture audit
+Exit: the common path and primitive path both satisfy the definition of success
+on the published compatibility matrix, and the package is suitable for users to
+inspect, extend, and cite.
 
-Trace the current implementation and its framework dependencies end to end.
-Resolve ownership, duplication, extension-point choice, topology assumptions,
-public component boundaries, and stale documentation before extending the
-feature set.
+### 5. Establish the scientific release
 
-Exit condition: an evidence-backed architecture disposition and an issue-sized
-correction plan, with major design decisions returned for review before
-implementation.
+Define the claims and comparison plan, then run maintained experiments through
+the released package. Separate reproduction of established Clan Tuning behavior
+from evidence for new claims, and publish the configurations, accounting,
+artifacts, and results needed to interpret both.
 
-### 2. Supported single-node path
+Exit: every scientific claim maps to a reproducible public-package experiment;
+the research harness contains no second Clan Tuning implementation.
 
-Apply the audit corrections and make the declared simple optimizer-adaptation
-configuration complete on a supported GPU environment. Add the contract tests,
-compatibility evidence, diagnostics, packaging, and task-oriented documentation
-required by that path.
+### 6. Expand from demonstrated need
 
-Exit condition: a user inside the declared support envelope can install, adapt,
-run, restore, understand, and troubleshoot a useful experiment without reading
-the source or designing lifecycle machinery.
+Consider FSDP, multi-device members, multi-node execution, additional tuning
+systems, asynchronous populations, and other topologies individually. Expansion
+begins only after the user situation, host-framework owners, member topology,
+lifecycle contract, and verification method are concrete.
 
-### 3. Component and research release
-
-Stabilize the component contracts justified by real adoption cases. Build the
-reference experiments, fidelity evidence, performance characterization, and
-additional publication evidence on the public supported package.
-
-Exit condition: each public component has a defined adoption contract, and each
-publication claim maps to a reproducible artifact and result.
-
-### 4. Evidence-driven expansion
-
-Consider broader optimizer layouts, multi-node execution, multi-device members,
-sharded strategies, alternative population policies, or production-specific
-operation only when a concrete use case and the preceding evidence justify the
-work.
-
-Exit condition: any promoted capability has a defined use case, framework
-owner, contract, compatibility claim, documentation path, and automated or
-reproducible evidence. No item in this stage is part of the initial release
-commitment.
-
-## Tracking policy
-
-This document is the consolidated product and rollout view. Component contracts
-define detailed behavior; tests, examples, compatibility records, benchmarks,
-and experiments supply evidence.
-
-- Only the active stage should be decomposed into GitHub issues. Later stages
-  remain planning inputs until prior evidence determines their shape.
-- Each active issue should identify the supported use case, affected contract,
-  framework owner, acceptance evidence, and roadmap row it advances.
-- Observed behavior does not advance to supported behavior until its design,
-  documentation, compatibility envelope, and required evidence agree.
-- Scope changes that alter scientific meaning, framework authority, recovery,
-  or the public support promise require review before implementation.
-- At every stage exit, reread this document from the consolidated model downward.
-  A deeper item that cannot be traced to the model is misplaced, premature, or
-  evidence that the model itself needs revision.
-
-The only active engineering issue before this draft is accepted should remain
-the framework-native architecture audit. Detailed correction issues should come
-from its evidence rather than from guesses made during product planning.
+Exit: each added capability preserves the governing commitments and carries an
+honest, evidence-backed support boundary. No capability is admitted merely
+because the initial interfaces can be stretched to contain it.
