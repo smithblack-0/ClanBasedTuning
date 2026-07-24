@@ -6,82 +6,59 @@ Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
 ## Purpose
 
-This package completes the framework-alignment work required by Milestone 1 of
-the [product roadmap](../product_roadmap.md). It gives reviewers an auditable
-path from framework research to proposed decisions, a standing native-design
-review, and an actionable plan for the evolutionary subsystem.
+This package supplies the research and audit record required by Milestone 1 of
+the [product roadmap](../product_roadmap.md). It supports review of the proposed
+project decisions, standing framework-native review, milestone gate system, and
+Milestone 2 execution plan.
 
-The roadmap remains the governing project contract. These later, dated
-artifacts progressively resolve framework and implementation choices that the
-roadmap intentionally left open; they do not replace its product meaning,
-development criteria, or milestone sequence.
+The roadmap remains the governing project contract. The dated project decisions
+progressively resolve choices it intentionally left open. The milestone gate
+files assign completion obligations. This research package explains and audits
+those choices; it does not replace them.
 
 The package does not certify the current proof-of-concept implementation.
-Existing source and tests are evidence only. A current class or helper survives
-only when later design and verification show that its responsibility still
-belongs.
+Existing code and tests are evidence only.
 
-## Reader paths
+## Review path
 
-### Review Milestone 1
-
-1. Read the [research report](research_report.md) for the overall framework
-   model and the reasoning behind the proposed decisions.
-2. Review the [decision register](decision_register.md) for the choices that
-   later work may treat as settled after acceptance.
+1. Read the [research report](research_report.md) for the framework model and the
+   reasoning behind the proposed decisions.
+2. Review the [project decisions](../decisions/project_decisions.md) for the
+   cross-milestone choices later work may rely on after acceptance.
 3. Consult the [evidence ledger](evidence_ledger.md) where a decision needs
    source-level inspection.
-4. Apply the [framework-native engineering review](framework_native_review.md)
-   as the final standing go/no-go test.
-5. Review the [evolutionary-controller plan](../milestones/evolutionary_controller_plan.md)
-   to confirm that the next milestone is actionable.
-
-### Begin the evolutionary subsystem
-
-1. Start with the [decision register](decision_register.md).
-2. Use the [framework-native engineering review](framework_native_review.md)
-   throughout design and implementation.
-3. Execute the [evolutionary-controller plan](../milestones/evolutionary_controller_plan.md).
-4. Consult the evidence ledger only for the framework seams used by the current
-   work unit.
-
-### Prepare later Lightning integration
-
-Use the [integration research backlog](integration_research_backlog.md). It
-preserves questions about Lightning, DDP, checkpointing, data, precision,
-resources, and recovery without turning preliminary integration strategy into
-controller requirements or permanent project gates.
+4. Review the [standing framework-native review](../reviews/framework_native_review.md).
+5. Review the complete [milestone gate system](../milestones/README.md), beginning
+   with the [Milestone 1 closure gates](../milestones/gates/milestone_1_framework_alignment.md).
+6. Review the [evolutionary-controller plan](../milestones/evolutionary_controller_plan.md)
+   against the [Milestone 2 gates](../milestones/gates/milestone_2_evolutionary_subsystem.md).
+7. Record acceptance and corrections in the
+   [Milestone 1 human review record](review_record.md).
 
 ## Artifact authority
 
 | Artifact | Authority | Unique job |
 | --- | --- | --- |
 | [Product roadmap](../product_roadmap.md) | Governing | Defines product meaning, development criteria, and cumulative milestones. |
+| [Project decisions](../decisions/project_decisions.md) | Decisional after acceptance | Resolves dated cross-milestone technical choices left open by the roadmap. |
+| [Framework-native review](../reviews/framework_native_review.md) | Standing contractual review after acceptance | Tests every meaningful boundary for algorithmic fidelity, native ownership, narrow seams, and evidence. |
+| [Milestone gates](../milestones/README.md) | Milestone contractual after acceptance | State what each milestone must prove and where every deferral is owned. |
 | [Research report](research_report.md) | Explanatory | Builds the framework model and explains why the proposed decisions follow. |
-| [Decision register](decision_register.md) | Decisional after acceptance | States the framework-alignment choices later work may rely on. |
-| [Evidence ledger](evidence_ledger.md) | Referential | Traces material claims to upstream source, probes, inference, and remaining qualification. |
-| [Framework-native engineering review](framework_native_review.md) | Standing contractual review after acceptance | Tests later work for algorithmic fidelity, native ownership, narrow custom seams, and support evidence. |
-| [Integration research backlog](integration_research_backlog.md) | Advisory | Preserves later integration questions and preliminary directions without fixing their design. |
-| [Evolutionary-controller plan](../milestones/evolutionary_controller_plan.md) | Instructional | Sequences the next milestone and owns its detailed completion criteria. |
+| [Evidence ledger](evidence_ledger.md) | Audit record | Preserves sources, probes, inference, alternatives, and named qualification obligations. |
+| [Human review record](review_record.md) | Audit record | Records review outcomes without becoming a decision or gate source. |
+| [Evolutionary-controller plan](../milestones/evolutionary_controller_plan.md) | Instructional | Sequences the work required to satisfy Milestone 2. |
 
-Where artifacts differ, the roadmap governs product meaning, accepted dated
-decisions govern the questions they resolve, and direct framework evidence
-governs claims about upstream behavior. Research directions and backlog entries
-remain advisory until accepted by their owning decision or design.
+Where artifacts differ, the roadmap governs product meaning; accepted dated
+project decisions govern the questions they resolve; milestone gates govern
+completion; and direct framework evidence governs claims about upstream
+behavior.
 
-## Milestone 1 acceptance
+## Current closure status
 
-Milestone 1 is ready to close when human review has:
+Milestone 1 is not yet accepted. It is ready for closure review only when every
+item in the [Milestone 1 gate file](../milestones/gates/milestone_1_framework_alignment.md)
+has evidence and human acceptance.
 
-- accepted or corrected the proposed decisions;
-- accepted the standing framework-native review;
-- found the evidence path sufficient to inspect the material reasoning;
-- confirmed that unresolved questions are visible and assigned to the
-  milestone that must answer them;
-- accepted the evolutionary-controller plan as an actionable implementation
-  route.
-
-Executable qualification continues in the milestone that depends on each
-framework seam. Milestone 1 establishes the evidence-backed basis and
-responsibility structure; it does not pre-implement the controller or the later
-Lightning integration.
+The package must not be described as complete merely because the files exist.
+Human review may revise the decisions, gate ownership, evidence record, or next-
+milestone plan.

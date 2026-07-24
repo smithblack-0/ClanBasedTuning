@@ -11,16 +11,14 @@ ClanBasedTuning boundary. It answers one question:
 > Does this unit preserve the Clan mechanism while leaving ordinary framework
 > behavior with its native owner?
 
-This is not a design specification or milestone plan. Component-specific
-requirements and detailed support gates remain with the artifact that owns that
-work.
+This is not a design specification or milestone plan. Detailed requirements
+remain in the gate file and design artifacts for the milestone that owns them.
 
-## How to apply it
+## Application
 
-State the unit's purpose, inputs, outputs, lifecycle position, and owners. Then
-apply the checks in order. Stop at the first failure, repair the owning design,
-and repeat the review. Record implementation-specific findings outside this
-standing file.
+State the unit's purpose, inputs, outputs, lifecycle position, and owners. Apply
+the checks in order. Stop at the first failure, repair the owning design, and
+repeat the review.
 
 ```mermaid
 flowchart TD
@@ -32,7 +30,7 @@ flowchart TD
     D -- Yes --> E{Custom seam is narrow and single-authority?}
     C -- Yes --> E
     E -- No --> Z[Fail: repair the boundary]
-    E -- Yes --> F{Claimed support has evidence?}
+    E -- Yes --> F{Claimed support has direct evidence?}
     F -- No --> Q[Insufficient evidence: narrow or reject]
     F -- Yes --> P[Pass]
 ```
@@ -40,12 +38,12 @@ flowchart TD
 ## 1. Preserve the Clan mechanism
 
 Confirm that the unit preserves the algorithmic properties established by the
-roadmap and accepted decisions: live members contribute to shared-gradient
-training, variation remains optimizer-side during a round, fitness is
+roadmap and accepted project decisions: live members contribute to shared-
+gradient training, variation remains optimizer-side during a round, fitness is
 comparable, and one parent supplies the next generation.
 
 **Fail** when engineering convenience changes one of those properties. That is
-a product decision, not a local implementation choice.
+a project decision, not a local implementation choice.
 
 ## 2. Use the native owner
 
@@ -65,8 +63,8 @@ Custom behavior requires a concrete gap statement:
 - the native behavior that conflicts with or omits it;
 - the smallest seam capable of bridging the difference.
 
-**Fail** when the justification is symmetry, generality, possible future use,
-compatibility with the proof of concept, or preference for local control.
+**Fail** when the justification is symmetry, speculative generality, proof-of-
+concept compatibility, or preference for local control.
 
 ## 4. Keep one authority and a narrow seam
 
@@ -80,8 +78,8 @@ or custom machinery mainly exists to coordinate other custom machinery.
 ## 5. Match support to evidence
 
 For every version-sensitive, distributed, persistence, or failure boundary,
-identify the direct source or executable contract test and state the support
-envelope it establishes.
+identify the direct source or executable contract test and the support envelope
+it establishes.
 
 Return **insufficient evidence** when the ownership appears correct but the
 claimed behavior has not been qualified. Narrow the claim or reject the
@@ -93,11 +91,10 @@ configuration before expensive work begins.
 - **Fail:** the unit changes Clan meaning, duplicates a native owner, or creates
   conflicting authority.
 - **Insufficient evidence:** the boundary is plausible, but the support claim is
-  not yet established.
+  not established.
 
 ## Supporting documents
 
 - [Product roadmap](../product_roadmap.md)
-- [Decision register](decision_register.md)
-- [Evidence ledger](evidence_ledger.md)
-- [Integration research backlog](integration_research_backlog.md)
+- [Project decisions](../decisions/project_decisions.md)
+- [Milestone gates](../milestones/README.md)
