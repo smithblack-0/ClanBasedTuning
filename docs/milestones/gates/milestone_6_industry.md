@@ -30,9 +30,9 @@ Measurements state the named workload, hardware, topology, population, framework
 
 ## Test and qualification gates
 
-### M6.6 Every support claim has direct qualification
+### M6.6 Every published support row has direct qualification
 
-The qualification matrix exercises every claimed combination of framework version, accelerator/topology, DDP or sharding mode, precision, data/evaluation configuration, optimizer layout, and storage/recovery path. Untested combinations are not inferred into the supported envelope.
+Each support-matrix row identifies the concrete framework version, accelerator/topology, DDP or sharding mode, precision, data/evaluation configuration, optimizer layout, and storage/recovery path that was exercised. Untested configurations and combinations are absent from the supported envelope rather than inferred from nearby results.
 
 ### M6.7 Failure-injection and restoration tests cover operational boundaries
 
