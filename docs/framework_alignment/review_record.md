@@ -33,11 +33,10 @@ The decision register still mixed three different lifecycles:
 - milestone completion obligations;
 - Milestone 1 audit and process findings.
 
-The integration backlog used phrases such as “current direction” and support
-was deferred without assigning a milestone owner. Experiment restoration was
+The integration backlog used phrases such as “current direction” and support was
+deferred without assigning a milestone owner. Experiment restoration was
 prematurely treated as a later custom recovery problem even though native Ray
-checkpoint and experiment restoration may already provide the required
-behavior.
+checkpoint and experiment restoration may already provide the required behavior.
 
 **Correction:**
 
@@ -50,20 +49,51 @@ behavior.
   restoration qualification in Milestone 3, and production recovery
   qualification in Milestone 6.
 
+### Accountable milestone-gate package
+
+**Result:** accepted as a strong structural and technical foundation, but
+Milestone 1 did not clear.
+
+The milestone gate files contained substantial implementation and framework
+contracts, but did not consistently gate the complete project result. Tests were
+embedded unevenly inside technical clauses, documentation and examples were
+missing or compressed in several milestones, and the files did not consistently
+require project integration or handoff evidence. As a result, a milestone could
+plausibly pass because its central code worked even though the project lacked the
+tests, documentation, examples, or scientific and user-facing products required
+by the roadmap.
+
+**Correction:**
+
+- define required milestone dimensions for capability, tests, documentation,
+  examples and scientific work, evidence and review, project handoff, deferrals,
+  and closure;
+- preserve the existing technical gates while separating the tests that prove
+  them;
+- name the documentation products and reader tasks required at each milestone;
+- contract a progressive example path from isolated Ray mechanics through manual
+  integration, ordinary-user use, optimizer studies, and scaled operational
+  workloads;
+- require examples to use the evolving public implementation and tests to
+  exercise the boundary they claim;
+- update the Milestone 2 plan so implementation, tests, documentation, example,
+  review, and handoff develop together.
+
 ## Current artifact review status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
-| Product roadmap | Governing; unchanged | Not reopened by this documentation rebuild. |
-| Project decisions | Pending review | Contains only proposed cross-milestone technical choices. |
-| Framework-native review | Pending review | Standing review is separated from milestone gates. |
-| Milestone 1 gates | Pending review | Own the closure contract for the current research milestone. |
-| Milestone 2–6 gates | Pending review | Own detailed completion obligations and named deferrals. |
-| Research report | Pending review | Explanatory; no longer owns completion or deferral policy. |
-| Evidence ledger | Pending review | Audit record with named milestone qualification obligations. |
-| Evolutionary-controller plan | Pending review | Execution route governed by the Milestone 2 gate file. |
+| Product roadmap | Governing; accepted | Not reopened by the milestone-gate rebuild. |
+| Project decisions | Accepted with merged package | Contains cross-milestone technical choices only. |
+| Framework-native review | Accepted with merged package | Standing review remains separate from milestone gates. |
+| Milestone 1 gates | Pending revised review | Must establish the complete project-level closure contract. |
+| Milestone 2–6 gates | Pending revised review | Must gate tests, documentation, examples, evidence, and handoff as well as capability. |
+| Research report | Accepted as explanatory basis | Does not own completion or deferral policy. |
+| Evidence ledger | Accepted as Milestone 1 audit record | Named milestone qualification obligations remain authoritative only through their gate files. |
+| Evolutionary-controller plan | Pending revised review | Must sequence all Milestone 2 project products, not only controller implementation. |
 
 ## Closure
 
-Milestone 1 remains open until the current artifact set is reviewed and every
-Milestone 1 gate is accepted, corrected, or retained as an explicit blocker.
+Milestone 1 remains open until the revised project-complete milestone gates and
+Milestone 2 plan are reviewed and every Milestone 1 gate is accepted, corrected,
+or retained as an explicit blocker.
