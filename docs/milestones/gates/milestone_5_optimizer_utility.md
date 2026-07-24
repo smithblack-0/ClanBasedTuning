@@ -1,175 +1,73 @@
 # Milestone 5 gates — optimizer utility
 
-Status: proposed completion gates  
-Date: 2026-07-24
+Status: working rewrite for review
 
 ## Milestone result
 
-ClanBasedTuning applies evolved optimizer configurations predictably across
-realistic optimizer, parameter-group, multi-optimizer, and restoration layouts.
-The behavior is tested, documented, demonstrated through public examples, and
-useful for interpretable optimizer-policy studies.
+ClanBasedTuning applies evolved optimizer configurations predictably across realistic optimizer, parameter-group, and multi-optimizer layouts through one documented, tested, and inspectable resolution model.
 
-## Capability and design gates
+## Capability and responsibility gates
 
 ### M5.1 Configuration application has one explicit owner
 
-- The `OptimizerAdapter` system, or an accepted replacement, is the sole owner of
-  mapping evolved configuration values onto constructed optimizers.
-- It does not construct optimizers, reinterpret the complete Tune configuration,
-  or compete with Lightning's optimizer lifecycle.
+The OptimizerAdapter system, or an accepted replacement, is the sole owner of mapping evolved configuration values onto already constructed optimizers. It does not construct optimizers, reinterpret the complete Tune configuration, or compete with Lightning's optimizer lifecycle.
 
-### M5.2 Default behavior is direct and predictable
+### M5.2 Default and targeted mapping are predictable
 
-- By default, a declared value maps to the same-named optimizer hyperparameter.
-- Missing, unsupported, or inapplicable declarations fail clearly.
-- Declared values are never silently ignored.
+- A declared value maps to the same-named optimizer hyperparameter by default.
+- Documented rules may target optimizer type, optimizer instance/reference, parameter group, and explicit remapping.
+- One deterministic specificity order resolves multiple matches.
+- Equal-precedence ambiguity, unsupported values, or inapplicable declarations fail clearly.
+- Declared values are never silently ignored or leaked to unrelated optimizers/groups.
 
-### M5.3 Specific targeting has deterministic precedence
+### M5.3 The utility works in the real Clan lifecycle
 
-- Rules may target documented combinations of optimizer type, optimizer
-  instance/reference, parameter group, and explicit remapping.
-- When several rules match, one documented specificity order determines the
-  result.
-- Ambiguity at equal precedence fails rather than depending on iteration order.
+After the native parent-state transition proven in Milestone 3, the utility applies the receiving member's evolved values while preserving inherited optimizer history such as momentum, moments, and step counters. Supported LR-scheduler interactions are explicit; conflicting authority fails before training continues.
 
-### M5.4 Multiple optimizers and parameter groups are covered
+### M5.4 The abstraction remains concise and auditable
 
-- The system applies values to intended optimizers and groups without leaking to
-  unrelated ones.
-- Momentum, moments, step counters, scheduler interaction, and restored state
-  remain coherent with the checkpoint authority established by earlier
-  milestones.
-- Unsupported optimizer or scheduler authority fails before training continues.
-
-### M5.5 The utility remains concise and inspectable
-
-- Ordinary dictionaries or direct functions are preferred where they express the
-  contract without a new subsystem.
-- Every abstraction eliminates real repeated logic or establishes a necessary
-  public contract.
-- Resolution can be explained and audited without reading framework internals.
+Every type or rule establishes a necessary public contract or removes genuine repeated logic. A reader can predict the result without reading framework internals or learning a second experiment configuration language.
 
 ## Test gates
 
-### M5.6 Resolution-unit tests cover the complete rule model
+### M5.5 Focused tests cover the complete resolution model
 
-The focused suite covers:
+The suite covers same-name mapping, remapping, optimizer/group targeting, specificity, ambiguity, invalid values, deterministic ordering, unchanged unrelated targets, and clear failure for every unapplied declaration.
 
-- same-name default mapping;
-- explicit remapping;
-- optimizer type, optimizer reference, and parameter-group targeting;
-- specificity ordering and equal-precedence ambiguity;
-- missing, unsupported, duplicate, or inapplicable declarations;
-- values whose type or range the selected optimizer cannot accept;
-- deterministic resolution independent of dictionary or registration order;
-- confirmation that unrelated optimizers and groups remain unchanged.
+### M5.6 Integration tests cover realistic optimizer layouts
 
-### M5.7 Integration tests cover realistic optimizer lifecycles
+Using the public Clan workflow, tests cover representative optimizer types, multiple parameter groups, the supported multi-optimizer forms, ordinary and advanced construction paths, and application after parent-state inheritance with optimizer history preserved.
 
-Using the public Clan workflow, tests cover:
+### M5.7 Regression tests protect the public rule model
 
-- at least two realistic optimizer types;
-- multiple parameter groups with different target values;
-- multiple optimizers in one Lightning module where the supported optimization
-  lifecycle permits them;
-- checkpoint inheritance followed by target-configuration reconciliation;
-- preservation of optimizer history such as momentum, moments, and step counts;
-- documented interaction with Lightning LR schedulers or clear rejection where
-  authority would conflict;
-- ordinary and advanced construction paths from Milestone 4.
-
-### M5.8 Failure and regression tests prevent silent configuration drift
-
-- Every declared value is either applied to a uniquely identified target or
-  causes a clear failure.
-- Ambiguous or stale rules fail before an optimizer step.
-- Serialization and restoration reproduce the same resolution behavior.
-- Tests protect public precedence and failure semantics from accidental changes.
+Public precedence, failure semantics, mapping output, and lifecycle placement remain stable or change only through an explicit reviewed contract update.
 
 ## Documentation gates
 
-### M5.9 The optimizer-resolution model is fully documented
+### M5.8 The optimizer-resolution model is fully documented
 
-The milestone delivers:
-
-- a conceptual guide explaining when configuration is resolved and why
-  Lightning retains optimizer-construction authority;
-- a complete reference for default mapping, remapping, targeting dimensions,
-  specificity order, ambiguity, and failure behavior;
-- worked tables showing which rule wins for representative realistic layouts;
-- guidance for checkpoint restoration, inherited optimizer history, and
-  LR-scheduler interaction;
-- extension guidance for supporting an optimizer layout without bypassing the
-  public resolution contract;
-- an updated support reference and troubleshooting guide for ordinary users and
-  advanced integrators.
-
-A reader must be able to predict the destination of every declared value without
-reading implementation code.
+The milestone delivers a conceptual guide, complete mapping/targeting/precedence reference, worked resolution tables, lifecycle-order and scheduler guidance, extension guidance, support limits, and troubleshooting. A reader can determine the destination and effect of every declared value without source inspection.
 
 ## Example and scientific-work gates
 
-### M5.10 Public examples demonstrate realistic optimizer layouts
+### M5.9 Public examples demonstrate realistic layouts
 
-The milestone includes executable public-package examples for:
+Executable public-package examples cover distinct parameter groups, the broadest supported multi-optimizer layout, remapping/specificity, application after a normal parent-state transition, and at least one ambiguous or unsupported declaration with its failure explanation.
 
-- multiple parameter groups with distinct evolved values;
-- multiple optimizers or the broadest realistic multi-optimizer layout the
-  supported Lightning lifecycle permits;
-- explicit remapping and specificity;
-- checkpoint inheritance followed by configuration reconciliation;
-- at least one failure example that explains an ambiguous or unsupported rule.
+### M5.10 An optimizer-policy study uses the complete public system
 
-Each example explains expected resolution and how to inspect applied values and
-preserved optimizer state.
-
-### M5.11 An optimizer-policy study uses the complete public system
-
-At least one reproducible study:
-
-- uses the Milestone 4 ordinary path unless advanced composition is genuinely
-  required;
-- tunes realistic optimizer-side values over multiple rounds;
-- records candidate configurations, selected policy path, fitness, training
-  behavior, computation cost, and final outcome;
-- distinguishes the Clan method's behavior from workload and framework effects;
-- reports favorable, neutral, or unfavorable findings honestly;
-- produces artifacts suitable for comparison in later scaled studies.
-
-The gate requires an interpretable experiment, not a favorable result.
+At least one reproducible study tunes realistic optimizer-side values over multiple rounds, records candidate configurations, selected policy path, fitness, training behavior, computation cost, and limitations, and reports favorable, neutral, or unfavorable findings honestly.
 
 ## Evidence, review, and handoff gates
 
-### M5.12 The milestone products agree
+### M5.11 The utility products agree
 
-- Resolution code, focused tests, integration tests, references, troubleshooting,
-  examples, and study all use one public rule model.
-- Public examples are executable tests of the documented behavior rather than
-  separate demonstration logic.
-- Human review confirms that the utility has one owner and has not become a
-  package-wide experiment schema or optimizer factory.
+Resolution code, focused and integration tests, reference documentation, troubleshooting, examples, and study use one public rule model. Human review confirms that the utility has not become an optimizer factory or package-wide experiment schema.
 
-### M5.13 Milestone 6 receives a qualified utility envelope
+### M5.12 Milestone 6 receives a directly qualified optimizer envelope
 
-The handoff identifies:
-
-- optimizer types, parameter-group forms, scheduler interactions, precision
-  modes, and restoration paths directly tested;
-- emitted diagnostics required to explain resolution at production scale;
-- performance or state-size costs observed in realistic workloads;
-- unsupported layouts removed from the industry support envelope or assigned to
-  explicit Milestone 6 qualification.
-
-## Assigned deferrals
-
-| Capability | Destination | Why not required here | Destination obligation | Required evidence |
-| --- | --- | --- | --- | --- |
-| Production-scale optimizer diagnostics and support qualification | Milestone 6 | Milestone 5 establishes correct utility behavior in the declared integration envelope. | Expose useful diagnostics and qualify optimizer behavior under serious distributed workloads. | Industry readiness audit, scaled integration and restoration tests, support matrix, operator docs, and public workloads. |
+The handoff identifies the optimizer types, group forms, scheduler interactions, precision modes, lifecycle placement, diagnostics, and performance/state costs directly tested for later industry qualification.
 
 ## Closure evidence
 
-Milestone 5 closes with links to the accepted resolution design, focused and
-integration test results, optimizer reference and guides, realistic layout
-examples, optimizer-policy study and artifacts, human review, and Milestone 6
-support handoff.
+Milestone 5 closes with links to the accepted resolution design, focused and integration tests, guides and reference, realistic examples, optimizer-policy study and artifacts, human review, and Milestone 6 handoff.
