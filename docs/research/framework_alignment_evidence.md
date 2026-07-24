@@ -213,12 +213,12 @@ value to the first Clan topology.
 grid-expanded and alternate-search populations immediately.
 
 **Decision.** Both are rejected initially. Use Ray `num_samples`, require the
-default variant generator with no grid expansion, and defensively verify that
-`total_samples` matches before the collective forms, and require the Ray
-concurrency cap to equal that population.
+default variant generator with no grid expansion, require
+`max_concurrent_trials == num_samples`, and defensively verify that
+`total_samples` matches before the collective forms.
 
-**Remaining evidence.** Verify fresh-run and restore behavior through the public
-assembly path.
+**Remaining evidence.** Verify fresh-run behavior through the public assembly
+path.
 
 ## 11. Full residency must be validated before DDP begins
 
@@ -238,7 +238,7 @@ can inspect the generated population, concurrency, resource request, and
 available dedicated allocation before `Tuner.fit()`.
 
 **Remaining evidence.** Define and test the preflight against the supported
-single-node GPU topology.
+dedicated-device topology.
 
 ## 12. Fitness data is replicated and fitness remains member-local
 
