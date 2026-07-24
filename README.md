@@ -6,14 +6,18 @@ Lightning's native DDP strategy lifecycle.
 ## Project status
 
 This repository is pre-alpha proof-of-concept work. The current source and usage
-example demonstrate mechanics; they are not accepted architecture or a stable
-public API. New design and implementation work is governed by:
+example demonstrate mechanisms; they are not accepted architecture or a stable
+public API.
 
-- [`docs/product_roadmap.md`](docs/product_roadmap.md)
-- [`docs/research/framework_alignment_findings.md`](docs/research/framework_alignment_findings.md)
-- [`docs/research/framework_alignment_evidence.md`](docs/research/framework_alignment_evidence.md)
-- [`docs/gates/framework_alignment_gates.md`](docs/gates/framework_alignment_gates.md)
-- [`docs/plans/milestone_one_completion_plan.md`](docs/plans/milestone_one_completion_plan.md)
+The governing development path begins with the
+[product roadmap](docs/product_roadmap.md). The complete framework-alignment
+package, including its reader paths, decisions, evidence, standing review, and
+next-milestone plan, begins at
+[`docs/framework_alignment/README.md`](docs/framework_alignment/README.md).
+
+The sections below describe the current proof of concept. Future work may replace
+its classes, configuration surfaces, and composition where they do not satisfy
+the accepted framework-alignment decisions.
 
 Each Ray Tune trial remains an ordinary trial with its own model trajectory,
 optimizer state, configuration, checkpoint, and lineage. During training, the
@@ -21,7 +25,7 @@ trials join one PyTorch DDP process group. PyTorch performs its normal optimized
 gradient reduction; each member then applies the common gradient through its own
 optimizer state and hyperparameters.
 
-## Design
+## Proof-of-concept design
 
 The public API follows the two framework construction points directly:
 
@@ -44,7 +48,7 @@ the seams needed to make those native lifecycles describe one cross-trial clan.
 There is no package-owned `TuneConfig`, `RunConfig`, model wrapper, optimizer
 schema, or training facade.
 
-## Basic usage
+## Proof-of-concept usage
 
 ```python
 from lightning import Trainer
@@ -178,9 +182,10 @@ The proof-of-concept implementation requires:
 The built-in optimizer strategy has the narrower one-optimizer/one-group limit;
 that is not a fundamental restriction of Clan Based Training.
 
-The framework-alignment documents above supersede earlier engineering notes for
-future design work. The current implementation limits remain descriptive of the
-proof of concept, not promises about the accepted architecture.
+The [framework-alignment package](docs/framework_alignment/README.md)
+supersedes the proof-of-concept design as the authority for future work. The
+limits above describe the present implementation, not promises about the
+accepted architecture.
 
 ## Development
 
