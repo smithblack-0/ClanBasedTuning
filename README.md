@@ -3,6 +3,18 @@
 ClanBasedTuning connects synchronous Ray Population Based Training to
 Lightning's native DDP strategy lifecycle.
 
+## Project status
+
+This repository is pre-alpha proof-of-concept work. The current source and usage
+example demonstrate mechanics; they are not accepted architecture or a stable
+public API. New design and implementation work is governed by:
+
+- [`docs/product_roadmap.md`](docs/product_roadmap.md)
+- [`docs/research/framework_alignment_findings.md`](docs/research/framework_alignment_findings.md)
+- [`docs/research/framework_alignment_evidence.md`](docs/research/framework_alignment_evidence.md)
+- [`docs/gates/framework_alignment_gates.md`](docs/gates/framework_alignment_gates.md)
+- [`docs/plans/milestone_one_completion_plan.md`](docs/plans/milestone_one_completion_plan.md)
+
 Each Ray Tune trial remains an ordinary trial with its own model trajectory,
 optimizer state, configuration, checkpoint, and lineage. During training, the
 trials join one PyTorch DDP process group. PyTorch performs its normal optimized
@@ -152,7 +164,7 @@ that PBT needs to rank.
 
 ## Current limits
 
-The initial implementation requires:
+The proof-of-concept implementation requires:
 
 - synchronous PBT;
 - the complete population resident concurrently;
@@ -166,13 +178,9 @@ The initial implementation requires:
 The built-in optimizer strategy has the narrower one-optimizer/one-group limit;
 that is not a fundamental restriction of Clan Based Training.
 
-See [`docs/engineering/native_trial_build_contract.md`](docs/engineering/native_trial_build_contract.md)
-for the detailed ownership and lifecycle contract.
-
-The consolidated product model, intended support levels, and preliminary
-rollout are developed in
-[`docs/product_roadmap.md`](docs/product_roadmap.md). The document is a roadmap
-draft, not a certification of the current implementation.
+The framework-alignment documents above supersede earlier engineering notes for
+future design work. The current implementation limits remain descriptive of the
+proof of concept, not promises about the accepted architecture.
 
 ## Development
 
