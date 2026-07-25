@@ -33,20 +33,35 @@ The documentation layers have different jobs:
 2. The gate contracts the broadest acceptable solution space for that
    capability.
 3. An accepted design selects one solution inside that space.
-4. Current execution planning sequences construction and validation of that
-   design.
+4. An accepted plan may govern execution of that design within the active gate.
 5. Implementation, tests, documentation, and examples produce closure evidence.
 
 A design may be narrower than its gate because it chooses one acceptable
-solution. An execution route may be narrower still. Neither may flow upward and
-become a gate requirement merely because it is the current choice.
+solution. A plan may be narrower than the design because it sequences the route
+currently being executed. Neither may flow upward and become a gate requirement
+merely because it is current.
 
-Temporary planning is not project authority. It should normally remain in the
-current conversation, issue, or pull request rather than becoming a durable
-repository artifact. Do not place execution plans or scratch designs in
-`docs/milestones/`. The project currently maintains no persistent LLM
-scratch-planning directory; create one only after explicit human approval and
-with unmistakable preliminary status.
+A durable plan has authority only inside its declared active-milestone scope. It
+may state what must now be built, checked, or sequenced given the accepted design
+and current project state. It may not:
+
+- narrow or reinterpret the active gate;
+- prescribe acceptance conditions for later milestones;
+- choose later framework seams, APIs, or implementation forms;
+- become a second roadmap or cross-milestone contract; or
+- remain authoritative after its gate closes unless explicitly reassigned.
+
+When current work discovers a condition that a later milestone genuinely must
+satisfy, propose that condition as a reviewed amendment to the later gate. Do
+not preserve it as a forward promise hidden in the current plan.
+
+`docs/milestones/` contains this system description and the gate files only.
+Durable plans, when justified, must live in a clearly identified planning or
+design location, state their active-milestone scope and authority, and link back
+to the gate they serve. Exploratory scratch normally remains in the current
+conversation, issue, or pull request. The project currently maintains no
+persistent LLM scratch-planning directory; create one only after explicit human
+approval and with unmistakable preliminary status.
 
 ## Gate review tests
 
@@ -69,6 +84,20 @@ Before accepting or revising a gate, apply all of these tests:
 
 A failed test routes back to the gate contract or its governing authority. It is
 not fixed by adding explanatory prose around the leaked design.
+
+## Plan review tests
+
+Before accepting or revising a durable plan, verify that:
+
+- every planned result is necessary to satisfy the active gate or the accepted
+  design chosen within it;
+- the plan does not convert one implementation choice into a gate condition;
+- the plan stops at the active gate boundary;
+- any newly discovered future necessity is proposed to the owning future gate
+  rather than asserted by the plan;
+- deleting the plan would leave the roadmap, gates, and accepted decisions
+  complete; and
+- the plan can be retired when the gate closes without removing project truth.
 
 ## Activation rule
 
