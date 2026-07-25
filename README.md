@@ -12,7 +12,7 @@ public API.
 The governing development path begins with the
 [product roadmap](docs/product_roadmap.md). The complete framework-alignment
 package, including its reader paths, decisions, evidence, standing review, and
-next-milestone plan, begins at
+milestone gates, begins at
 [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md).
 
 The sections below describe the current proof of concept. Future work may replace
