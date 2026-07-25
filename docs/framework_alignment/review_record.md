@@ -1,9 +1,10 @@
 # Milestone 1 human review record
 
-Status: framework alignment accepted; final operating-context review open  
+Status: Milestone 1 accepted and closed  
 Date opened: 2026-07-24  
 Framework alignment accepted: 2026-07-24  
-Milestone closure reopened: 2026-07-24
+Operating context accepted: 2026-07-24  
+Milestone closed: 2026-07-24
 
 ## Purpose
 
@@ -76,7 +77,7 @@ then reuse prior text only when it survives those checks.
 The alignment pass preserved accepted decisions by default and reopened only
 clauses with demonstrated conflicts:
 
-- P3's fixed PBT-subclass choice conflicted with the roadmap's explicit
+- P3's fixed PBT-subclass choice conflicted with the roadmap's then-explicit
   Milestone 2 subclass-versus-direct-controller decision.
 - P4's assignment of source selection to Ray conflicted with the Clan
   controller's sole-parent policy responsibility.
@@ -100,8 +101,8 @@ Accepted corrections made in the owning artifacts:
   compatibility claims;
 - the milestone system uses roadmap activation rather than normal-progression
   deferral and preserves the roadmap rule that later milestones remain coarse;
-- the Milestone 2 gate and plan begin with the roadmap-mandated controller-form
-  choice and stop at the independently invokable controller handoff;
+- the Milestone 2 gate and plan stop at the independently invokable controller
+  handoff;
 - Milestone 3 contains the first complete normal checkpoint-driven Clan workflow;
 - Milestones 4 and 5 add usability and optimizer utility without creating new
   restoration contracts; and
@@ -110,17 +111,17 @@ Accepted corrections made in the owning artifacts:
 
 ### Operating-context reopening
 
-**Result:** final Milestone 1 closure reopened narrowly; review in progress.
+**Result:** accepted after refactoring.
 
 After accepting the framework-alignment package, review identified a remaining
 transferability gap. The repository described the project model and milestone
 work, but did not preserve enough of the working process that a fresh LLM session
 or new contributor could reliably apply it without conversational apprenticeship.
 
-The reopening does not revisit the accepted framework conclusions, decisions, or
+The reopening did not revisit the accepted framework conclusions, decisions, or
 milestone responsibility model.
 
-**Required addition:**
+Accepted additions:
 
 - a stable root entry point for coding agents;
 - a durable senior-engineering workflow;
@@ -137,28 +138,54 @@ milestone responsibility model.
 The first technical-writing draft combined standards and execution in one long
 manual. Review accepted the standards content but rejected the combined form
 because the iterative workflow and backward edges were obscured by evaluation
-detail. The correction separates the concise executable control loop from the
+detail. The correction separated the concise executable control loop from the
 standards used to judge each stage.
 
-## Current artifact review status
+### Milestone 2 activation correction
+
+**Result:** accepted as a narrow responsibility correction.
+
+When Milestone 2 began, review found that the controller-form language still
+combined two distinct questions:
+
+1. what the independently invokable Clan controller is; and
+2. how Ray Tune later invokes that controller and executes its decision.
+
+This caused framework-seam research to begin before the controller contract was
+defined. Human review moved Ray invocation-form selection to Milestone 3 and
+retained one Milestone 2 obligation: construct a controller surface that maps
+naturally to ordinary Ray identities, result values, and configuration mappings
+without importing Ray objects or adapter lifecycle.
+
+The correction was made in the owning roadmap, P3 decision, Milestone 2 gate and
+plan, Milestone 3 gate, and project status. It does not change the Clan mechanism,
+sole-parent authority, or native framework-ownership decisions.
+
+Review also found that `STATUS.md` repeated active-plan work-unit details. The
+status contract was tightened: status now exposes durable project-level
+capabilities and links to the owning gate, decision, plan, or design rather than
+duplicating subordinate detail. Internal plan or seam changes should not ripple
+to status unless the project-level meaning changes.
+
+## Final artifact status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
-| Product roadmap | Governing; trusted | Primary source for product meaning, milestone sequence, and development criteria. |
-| Documentation structure | Accepted | Distinct primary homes are retained. |
-| Project decisions | Accepted | Revised P3, P4, and P7 language accepted; P1, P2, P5, and P6 retained. |
-| Research report | Accepted explanatory basis | Explains the governing responsibility model without becoming decision authority. |
+| Product roadmap | Governing; trusted | Defines product meaning, milestone sequence, and the controller/integration boundary. |
+| Documentation structure | Accepted | Distinct primary homes and abstraction boundaries are retained. |
+| Project decisions | Accepted | P3 assigns the controller to M2 and Ray integration choice to M3; P4 and P7 remain accepted. |
+| Research report | Accepted explanatory basis | Explains the framework model without becoming current execution authority. |
 | Evidence ledger | Accepted audit record | Evidence and open questions are separated from gates and plans. |
 | Framework-native review | Accepted standing review | Component ownership and milestone activation are distinguished. |
-| Milestone gate system | Accepted with final M1 extension under review | Complete-project dimensions and roadmap activation govern milestone closure; M1 now includes operating-process transfer. |
-| Milestone 2 gate and plan | Accepted for execution after final M1 closure | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
-| Milestone 3–6 gates | Accepted as future milestone contracts | State roadmap results and major evidence without premature issue-level design. |
-| LLM operating context | Under review | Must transfer engineering workflow, technical-writing workflow and standards, authority discovery, change control, and status maintenance. |
-| `STATUS.md` | Under review | Must remain concise shared project status for humans and tools, not a session handoff artifact. |
+| Milestone gate system | Accepted | Complete-project dimensions and roadmap activation govern milestone closure. |
+| Milestone 2 gate and plan | Active and accepted for execution | Define the independent controller and integration-ready handoff without selecting a Ray seam. |
+| Milestone 3–6 gates | Accepted as future milestone contracts | Milestone 3 now owns Ray invocation-form selection and the complete manual workflow. |
+| LLM operating context | Accepted | Transfers engineering, writing, authority-discovery, change-control, and status-maintenance process. |
+| `STATUS.md` | Accepted shared status | Reports durable project abstractions without duplicating active-plan internals. |
 
 ## Closure
 
-The framework-alignment package is accepted and remains governing. Milestone 1
-closes after human review accepts the operating-context extension and confirms
-that a fresh contributor can discover both project authority and working process
-without prior conversation. No other Milestone 1 issue is reopened.
+Milestone 1 is accepted and closed. Milestone 2 is active under the corrected
+controller boundary. The framework-alignment evidence remains available for
+later integration research, but it does not pull Ray adapter design into the
+controller milestone.
