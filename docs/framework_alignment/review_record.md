@@ -5,7 +5,9 @@ Date opened: 2026-07-24
 
 ## Purpose
 
-This file records human review of the Milestone 1 package. It is an audit record, not a technical decision source or milestone gate. Accepted corrections must be made in the artifact that owns them.
+This file records human review of the Milestone 1 package. It is an audit record,
+not a technical decision source or milestone gate. Accepted corrections must be
+made in the artifact that owns them.
 
 ## Review history
 
@@ -13,63 +15,103 @@ This file records human review of the Milestone 1 package. It is an audit record
 
 **Result:** rejected for restructuring.
 
-The first package compressed research findings, implementation constraints, standing gates, and milestone planning into four files. In particular, the gate file was too detailed for regular use and attempted to explain and plan the implementation while acting as a go/no-go review.
+The first package compressed research findings, implementation constraints,
+standing gates, and milestone planning into too few artifacts. The main gate
+attempted to explain, plan, and review implementation at once.
 
-**Correction:** rebuild the documentation around distinct reader purposes and create a short standing framework-native review.
+**Correction:** separate artifacts by reader purpose and create a short standing
+framework-native review.
 
 ### First restructured package
 
 **Result:** improved but not accepted.
 
-The decision register still mixed cross-milestone project commitments, milestone completion obligations, and Milestone 1 audit findings. Later work was described with vague timing and without enforceable milestone placement.
+The decision register still mixed cross-milestone commitments, milestone
+completion obligations, and Milestone 1 audit findings. Later work used vague
+timing and unclear authority.
 
-**Correction:** separate project decisions, milestone gates, research evidence, plans, and review history; create one gate file per roadmap milestone.
+**Correction:** separate project decisions, milestone gates, research evidence,
+plans, and review history; create one gate file per roadmap milestone.
 
 ### Accountable milestone-gate package
 
-**Result:** accepted as a strong structural and technical foundation, but Milestone 1 did not clear.
+**Result:** accepted preliminarily as a strong structural and technical
+foundation, but Milestone 1 did not clear.
 
-The milestone files contained substantial implementation gates but did not consistently require the complete project result. Tests were embedded unevenly, documentation and examples were missing or compressed, and project integration/handoff was not consistently gated.
+The document separation and many implementation gates were useful. The milestone
+files did not consistently require the complete project result: tests were
+embedded unevenly, documentation and examples were missing or compressed, and
+project handoff was not consistently gated.
 
-**Correction:** make capability, tests, documentation, examples/scientific work, evidence/review, and handoff explicit milestone concerns.
+**Correction:** add explicit capability, tests, documentation, examples or
+scientific work, evidence/review, and handoff dimensions.
+
+Preliminary acceptance of this package did not make every proposed decision,
+research conclusion, or gate assignment authoritative.
 
 ### Project-complete gate iteration
 
-**Result:** rejected for responsibility reassignment.
+**Result:** rejected for responsibility leakage.
 
-The revision added the missing project products but derived them from a catalog of technical concerns rather than from the responsibility introduced by each roadmap milestone. This caused substantial leakage:
+The revision added the missing project products but distributed them from a
+catalog of technical concerns rather than from each roadmap milestone's
+responsibility. It pulled Ray checkpoint, pause/resume, trial restart, and
+experiment-restoration qualification into the controller milestone; split normal
+next-generation continuation from “recovery”; leaked restoration language into
+usability and optimizer utility; and represented ordinary cumulative progress as
+deferral.
 
-- Milestone 2's controller contract absorbed PBT checkpoint preparation, transfer, pause/resume, trial restart, and experiment-restoration qualification that belong to native execution or later integration.
-- Normal checkpoint-driven next-generation continuation in Milestone 3 was split artificially from “recovery,” despite being one native PBT/Lightning round transition.
-- Milestones 4 and 5 inherited restoration terminology and tests that were not new responsibilities of usability or optimizer utility.
-- Normal cumulative roadmap progression was represented as deferral, encouraging earlier gates to disclaim later capabilities rather than allowing those contracts to become enforceable at their natural milestone.
-- The Milestone 2 execution plan was consequently organized around lifecycle and restoration work the controller does not deliver.
+**Correction:** restart from the responsibility-assignment stage of the writing
+workflow. Derive milestone requirements from the roadmap Outcome, Work, and Exit;
+apply the senior-engineering main-idea, ownership, boundary, and reduction passes;
+then reuse prior text only when it survives those checks.
 
-**Correction:** restart from the responsibility-assignment stage of the writing workflow. Derive each milestone from its roadmap Outcome, Work, and Exit; apply the senior-engineering main-idea, ownership, boundary, and reduction passes; then use the existing gate text only as a source pool.
+### Full Milestone 1 alignment pass
 
-The resulting cumulative responsibility spine is:
+**Result:** corrected package prepared; human review still open.
 
-1. Milestone 1 accepts the framework-alignment basis and actionable controller plan.
-2. Milestone 2 delivers the independently invokable population-decision controller.
-3. Milestone 3 manually composes the complete native Ray/Lightning/DDP Clan workflow and repeated round transition.
-4. Milestone 4 removes ordinary-user assembly ceremony without changing that workflow.
-5. Milestone 5 generalizes optimizer-configuration application.
-6. Milestone 6 qualifies the operational support envelope, including observability, sharding, failure recovery, and scale.
+The alignment pass treated the product roadmap as the only presently trusted
+contract and reopened all subordinate technical material. The root README was
+excluded as stale routing.
+
+Corrections made in the owning artifacts:
+
+- project decisions no longer preselect a PBT subclass, give Ray the Clan parent-
+  selection policy, prescribe an uncontracted elite, or distribute “recovery
+  scopes” across milestones;
+- the research report now distinguishes durable responsibility conclusions from
+  the open Milestone 2 controller-form choice;
+- the evidence ledger records observations, probes, inference, alternatives, and
+  open questions without assigning milestone work;
+- the standing review distinguishes project activation from component/framework
+  ownership and clarifies exact test versions versus public compatibility claims;
+- the milestone system uses roadmap activation rather than normal-progression
+  deferral and preserves the roadmap rule that later milestones remain coarse;
+- the Milestone 2 plan begins by choosing between a narrow PBT specialization and
+  an independent controller with a thin adapter;
+- Milestone 3 owns the first complete normal checkpoint-driven Clan workflow;
+- Milestones 4 and 5 add usability and optimizer utility without creating new
+  restoration contracts;
+- Milestone 6 owns the declared operational recovery and industry support
+  envelope without precommitting to a final failure taxonomy.
 
 ## Current artifact review status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
-| Product roadmap | Governing; accepted | Unchanged and used as the primary responsibility source. |
-| Project decisions | Accepted; clarification risk noted | P7's broad “recovery” wording must be interpreted through the roadmap: controller persistence in M2, ordinary native round transition in M3, operational recovery in M6. No decision edit has been made. |
-| Framework-native review | Accepted | Remains the standing implementation review. |
-| Milestone gate-system contract | Rewritten; pending review | Uses activation rather than normal-progression deferral and requires complete project products at their natural milestone. |
-| Milestone 1 gate | Rewritten; pending review | Evaluates the research basis, responsibility-derived gate system, current-evidence classification, and corrected M2 plan. |
-| Milestone 2 gate | Replaced; pending review | Limited to controller policy, PBT decision-seam compatibility, controller docs/example, and M3 handoff. |
-| Milestone 3–6 gates | Substantially rewritten; pending review | Preserve strong technical material while relocating tests, documentation, examples, and operational recovery to their roadmap responsibilities. |
-| Research report and evidence ledger | Accepted basis | Remain explanatory/audit artifacts; later implementation qualification is governed by milestone gates. |
-| Evolutionary-controller plan | Replaced; pending review | Rebuilt around controller products rather than checkpoint/trial lifecycle qualification. |
+| Product roadmap | Governing; trusted | Primary source for product meaning, milestone sequence, and development criteria. |
+| Documentation structure | Preliminarily accepted | Distinct primary homes are retained; technical contents remain under review. |
+| Project decisions | Rewritten; pending review | Six proposed durable decisions; controller implementation form remains a Milestone 2 choice. |
+| Research report | Rewritten; pending review | Responsibility model aligned to roadmap; milestone planning removed from explanatory conclusions. |
+| Evidence ledger | Rewritten; pending review | Evidence and open questions separated from gates and plans. |
+| Framework-native review | Rewritten; pending review | Component ownership and milestone activation are distinguished. |
+| Milestone gate system | Rewritten; pending review | Complete-project dimensions plus roadmap activation and future-gate precision rules. |
+| Milestone 1 gate | Rewritten; pending review | Closure contract for the complete open alignment package. |
+| Milestone 2 gate and plan | Replaced; pending review | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
+| Milestone 3–6 gates | Re-derived; pending review | State roadmap results and major evidence without premature issue-level design. |
 
 ## Closure
 
-Milestone 1 remains open until the responsibility-derived gate system and controller plan are reviewed and every Milestone 1 gate is accepted, corrected, or retained as an explicit blocker.
+Milestone 1 remains open until human review accepts or corrects the complete
+aligned package and every Milestone 1 gate is satisfied or retained as an
+explicit blocker.
