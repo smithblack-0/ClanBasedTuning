@@ -43,8 +43,8 @@ required fields:
 | `maximum` | Inclusive upper bound. |
 
 Numeric fields must be finite real scalars. Strings and booleans are not accepted
-as numeric values. `mode` is `"min"` or `"max"`. `seed` must be an explicit
-non-`None` value and initializes the controller's reproducible random stream.
+as numeric values. `mode` is `"min"` or `"max"`. `seed` must be an integer and
+initializes the controller's reproducible random stream.
 
 ## `initial_configurations(population_size)`
 
