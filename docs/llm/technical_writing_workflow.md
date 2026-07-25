@@ -1,465 +1,221 @@
 # Business-technical writing workflow
 
-This guide defines the standing process for substantial ClanBasedTuning writing:
-roadmaps, decisions, designs, plans, reports, audits, READMEs, user guidance,
-reference documentation, docstrings, and technical explanations.
+Use this workflow for substantial ClanBasedTuning writing: roadmaps, decisions,
+designs, plans, reports, audits, READMEs, user guidance, reference documentation,
+docstrings, and technical explanations.
 
-It is a writing process, not a source of project authority. The roadmap,
-decisions, gates, plans, implementation, evidence, and review records retain
-their documented roles.
+This file defines the execution loop. The
+[technical-writing standards](technical_writing_standards.md) define how to judge
+the work. Begin here; consult only the standards relevant to the current stage or
+defect.
 
-## Core imperative
+The workflow is iterative. A review defect sends the work back to the stage that
+owns the problem. Do not force every correction through a local prose edit.
 
-Business-technical writing is the controlled transfer of a decision-relevant
-technical model.
+## Control flow
 
-Its governing objective is **transmission efficiency**:
+```mermaid
+flowchart TD
+    A[Identify task and governing authority] --> B[Inspect evidence and documentation system]
+    B --> C[Define artifact contract]
+    C --> D[Build content model and assign information homes]
+    D --> E[Draft the complete reader path]
+    E --> F[Run independent standards passes]
+    F --> G{Classify the defect}
+    G -- Evidence or technical model --> B
+    G -- Wrong role, authority, audience, or handoff --> C
+    G -- Missing, duplicated, or misplaced content --> D
+    G -- Sequence, explanation, layout, or prose --> E
+    G -- No material defect --> H[Run fresh-reader and delivery review]
+    H --> I{Reader path works without repair?}
+    I -- No --> G
+    I -- Yes --> J[Update owning artifacts and deliver]
+```
 
-> Give the reader the most accurate and useful understanding possible for the
-> least attention, inference, and rereading.
+## Stage 1 — identify the task and governing authority
 
-The relevant unit may be one artifact or a path through several artifacts. A
-participating document should be complete for its assigned job, not repeat the
-entire project until it can stand alone.
+**Purpose:** establish what writing result is requested and which artifacts may
+govern or be changed.
 
-Business relevance selects information. Technical substance establishes
-credibility. Information design controls how efficiently the reader builds the
-right model.
+**Inputs:** the user request, repository instructions, current project status, and
+known authoritative documents.
 
-Do not equate business writing with a shallow overview or technical writing with
-exhaustive detail. Select technical detail according to the work it performs for
-the reader.
+**Produce:** a short working statement of:
 
-## Establish the communication contract
+- the requested artifact or reader result;
+- the governing roadmap, decision, gate, plan, implementation, evidence, or
+  review material;
+- the artifact that owns the requested change; and
+- any authority or scope change requiring human consultation.
 
-Before drafting, determine:
+**Next edge:**
 
-1. **Transmission boundary:** Is this a standalone artifact or one part of a
-   larger documentation path?
-2. **Artifact role:** What unique job does this document perform? What may it
-   assume, what must it establish, and where should it hand the reader next?
-3. **Audience:** Who will use it, and how close are they to the subject?
-4. **Reader purpose:** What decision, evaluation, implementation, or task brings
-   the reader here?
-5. **Starting model:** What can the reader safely be expected to know?
-6. **Required result:** What should the reader understand, decide, or be able to
-   do afterward?
-7. **Authority:** Is the artifact descriptive, advisory, decisional,
-   contractual, instructional, referential, or an audit record?
-8. **Reading path:** Will the reader proceed in order, scan, compare options,
-   follow steps, consult a section during work, or move among linked artifacts?
+- proceed when the task and authority are clear;
+- inspect more repository state when the owning artifact is uncertain; or
+- ask the smallest necessary question when the user has not supplied the current
+  objective or a required authority decision.
 
-If these answers are unclear, writing prose is premature. Gather evidence,
-resolve the artifact's place in the larger documentation system, and construct
-its information model first.
+Consult the standards sections on artifact contracts and authority only when
+needed.
 
-## Standalone and participating artifacts
+## Stage 2 — inspect evidence and the documentation system
 
-A standalone artifact owns the complete reader model required for its purpose.
-It may cite supporting evidence, but its central task does not depend on an
-undocumented path through other files.
+**Purpose:** establish the real technical model and the relevant reader path
+before designing prose.
 
-A participating artifact owns one complete part of a larger reader path. It must
-not repeat neighboring documents merely to become locally self-contained.
-Participation does not excuse accidental incompleteness: prerequisites and
-handoffs must be real, explicit, and navigable.
+**Inputs:** governing artifacts, current document, implementation, tests,
+comments, public interfaces, neighboring documents, and direct technical
+evidence relevant to the task.
 
-Before adding material, inspect:
+**Produce:** a bounded evidence map containing:
 
-- relevant entry points and neighboring documents;
-- the public interfaces and behaviors the reader will encounter;
-- existing authoritative homes for the same concepts;
-- undocumented public behavior and stale or competing explanations;
-- whether a discovered gap is a writing problem, product problem, API problem,
-  ownership problem, or unresolved decision.
+- verified facts and direct sources;
+- inference, intent, commitment, hypothesis, candidate scope, and open questions;
+- relevant entry points, neighboring artifacts, and public surfaces;
+- existing authoritative homes for the concepts involved; and
+- discovered gaps classified as writing, product, API, implementation,
+  ownership, or unresolved-decision work.
 
-Do not let the current file absorb every gap discovered during research.
+Do not make the target document absorb every discovered gap.
 
-## Five simultaneous objectives
+**Backward edge:** return here whenever review finds an unsupported claim,
+incorrect mechanism, missing source, or unresolved technical contradiction.
 
-Review every substantial artifact against all five. Improving one does not
-justify silently damaging another.
+## Stage 3 — define the artifact contract
 
-### Useful
+**Purpose:** decide the artifact's unique transmission job before drafting it.
 
-- Does the artifact answer the questions that bring the reader there?
-- Can the reader make the intended decision or perform the intended task?
-- Does it cover the material consequences rather than merely describe nearby
-  technology?
-- Does it advance the larger reader path without rebuilding earlier material?
+**Inputs:** the task statement and evidence map.
 
-### Technically credible
+**Produce:** an explicit contract covering:
 
-- Are mechanisms, constraints, causal claims, and limitations correct?
-- Can a knowledgeable reader see where the system works and where it stops?
-- Are claims supported by evidence, precedent, or derivation?
-- Are unsupported aspirations clearly expressed as intent, hypothesis, or
-  candidate scope rather than current fact?
+- standalone or participating boundary;
+- artifact role and authority;
+- audience and assumed starting model;
+- reader purpose and required post-reading result;
+- prerequisites and handoffs; and
+- expected reading path.
 
-### Clear
+**Decision:**
 
-- Does the reader receive the right mental model without repairing vague terms,
-  hidden assumptions, or ambiguous references?
-- Are definitions, examples, contrasts, and sequence supplied where they prevent
-  material misunderstanding?
-- Are current fact, evidence, intent, commitment, hypothesis, and possibility
-  distinguishable?
+- continue when the artifact has one coherent job;
+- return to Stage 1 when the request belongs to another authority or artifact;
+- return to Stage 2 when the contract depends on unresolved evidence; or
+- consult the user before changing accepted authority, milestone meaning,
+  scientific interpretation, or material scope.
 
-### Efficient
+## Stage 4 — build the content model and assign information homes
 
-- Does every sentence add information, orientation, justified confidence, or a
-  useful relationship?
-- Is precision purchased only where its benefit exceeds its attention cost?
-- Have repetition, premature detail, empty emphasis, and defensive qualification
-  been removed?
+**Purpose:** design the reader's model and the cross-document allocation before
+writing finished prose.
 
-### Coherent
+**Inputs:** the accepted artifact contract and evidence map.
 
-- Does the artifact or documentation path build one usable model from beginning
-  to end?
-- Does each material fact have an appropriate primary home?
-- Do headings, prose, lists, tables, diagrams, transitions, and links expose the
-  actual hierarchy and relationships?
+**Produce:**
 
-## Select technical substance by reader work
+- the central claim, mechanism, or task flow;
+- the facts, limits, evidence, decisions, and dependencies the reader needs;
+- the order in which the reader must learn them;
+- one primary home for each material point;
+- links or brief orientation for information owned elsewhere; and
+- explicit follow-up work for uncovered gaps outside the current artifact.
 
-Include enough material for the intended reader to answer the relevant subset
-of these questions:
+Prefer causal relationships and meaningful contrasts over inventories of
+implementation detail.
 
-- What is this, in terms connected to familiar systems?
-- Why does it exist, and what becomes possible if it works?
-- How does it work at the level needed to evaluate the claim?
-- How would someone use it?
-- What does it own, support, or change?
-- What can it not do, and why?
-- What evidence or precedent exists?
-- What is true now, intended, committed, hypothetical, or merely possible?
-- What decision, risk, dependency, or next step follows?
+**Backward edge:** return here when review finds missing concepts, duplicated
+material, orphan facts, a wrong information home, or a broken cross-document
+path.
 
-These are selection questions, not a mandatory section template.
+## Stage 5 — draft the complete reader path
 
-Prefer details that perform several jobs at once. A precise contrast with a
-familiar system may define the mechanism, establish value, and expose a limit
-more efficiently than a list of internal classes.
+**Purpose:** turn the content model into one coherent working draft.
 
-### Explain causality, not merely sequence
+**Inputs:** the artifact contract and content model.
 
-Where the mechanism matters:
+**Produce:** a complete source-order draft, including necessary headings,
+transitions, links, tables, diagrams, examples, and references.
 
-1. establish the relevant lifecycle or data flow;
-2. identify what is shared and what differs;
-3. explain why the difference produces the claimed behavior; and
-4. derive the useful domain and hard boundary from the same mechanism.
+Write the whole argument or task flow before optimizing isolated passages. Keep
+enough connective tissue for each section to inherit the right model from the
+previous one.
 
-An operational list that omits causality may be accurate but still fail to
-transmit the design.
+**Backward edge:** remain here for defects limited to sequence, explanation,
+layout, terminology, sentence structure, or local precision. Return to an earlier
+stage when the prose defect exposes a deeper contract, evidence, or
+information-ownership problem.
 
-## Allocate precision deliberately
+## Stage 6 — run independent standards passes
 
-Precision is a cost-bearing resource.
+**Purpose:** evaluate the draft without allowing one concern to replace the whole
+quality model.
 
-Add precision when it:
+Run the relevant independent passes from the
+[standards](technical_writing_standards.md):
 
-- prevents a consequential misunderstanding;
-- defines a capability, boundary, responsibility, lifecycle, or commitment;
-- establishes mechanism or causality;
-- supports a decision or implementation;
-- distinguishes the system from a familiar alternative; or
-- provides necessary evidence.
+1. contract;
+2. technical credibility;
+3. information architecture;
+4. precision;
+5. status and register;
+6. compression; and
+7. fresh-reader behavior.
 
-Defer or omit precision when it:
+Record material defects before editing. For each defect, identify its owning
+stage.
 
-- explains a standard consequence the reader can safely infer;
-- answers a question the current section has not raised;
-- introduces implementation detail before its governing concept;
-- repeats a qualification already established by structure or authority;
-- narrows a deliberately broad and accurate statement without decision value; or
-- competes with a more important point for attention.
+### Defect routing
+
+| Defect | Return to |
+| --- | --- |
+| Unsupported claim, wrong mechanism, missing evidence | Stage 2 |
+| Wrong document type, authority, audience, prerequisite, or handoff | Stage 3 |
+| Missing concept, duplication, orphan, or wrong primary home | Stage 4 |
+| Poor order, explanation, layout, terminology, or prose | Stage 5 |
+| Proposed change to accepted project meaning or authority | Human consultation, then the owning stage |
+
+Do not resolve a Stage 2–4 defect by polishing Stage 5 prose around it.
+
+After correction, rerun all materially affected passes. Treat new criticism as
+evidence against the complete model, not as a replacement writing theory.
+
+## Stage 7 — run fresh-reader and delivery review
+
+**Purpose:** prove that the completed reader path works from its real entry point
+and that the changes landed in their proper homes.
+
+**Inputs:** the corrected artifact and every prerequisite or outward link needed
+for the promised path.
+
+**Produce:**
+
+- a source-order read from the likely entry point;
+- confirmation that the reader can build the intended model without repair;
+- confirmation that authority and status remain legible;
+- confirmation that links, examples, tables, and handoffs work;
+- updates to every owning artifact changed by the accepted correction; and
+- an explicit record of remaining work outside the current artifact.
 
 Ask:
 
-> What error, ambiguity, or decision would this added precision change, and is
-> this the place where the reader needs it?
-
-Define terms at the point of consequential ambiguity. Use one term consistently
-for one concept. Do not introduce vocabulary that saves the writer words while
-making the reader memorize unnecessary labels.
-
-## Give each fact a primary home
-
-Assign every material point to the artifact or section whose purpose requires
-its full precision.
-
-Elsewhere:
-
-- omit it when the reader does not need it;
-- name or summarize it briefly for orientation;
-- link to its primary home when the reader may need the detail; or
-- repeat it only when repetition saves more attention than it consumes.
-
-Cross-references are part of the design. They let early layers name important
-concepts without duplicating their complete contracts.
-
-### Detect orphans
-
-An orphan is an accurate fact whose purpose at its location is unclear. It often
-means:
-
-- the fact belongs elsewhere;
-- the document is missing the concept that gives it meaning; or
-- the fact is unnecessary for this reader task.
-
-During source-order review, ask why each paragraph appears at that exact point,
-what the reader can assume afterward, and whether another artifact is its better
-owner.
-
-## Design the reader path
-
-Organize around the reader's developing model, not discovery chronology, file
-tree order, or implementation structure.
-
-A common explanatory path is:
-
-1. familiar context and unmet need;
-2. specific contrast with existing approaches;
-3. mechanism and causal explanation;
-4. use and supported domain;
-5. limits and costs;
-6. evidence or precedent; and
-7. status, decision, or next step.
-
-Change the order when the reader task requires it. A decision memo normally
-begins with the decision. A troubleshooting guide begins with symptoms and
-recovery.
-
-Use layout as syntax:
-
-- paragraphs for reasoning and causal continuity;
-- lists for parallel items, steps, criteria, or options;
-- tables for exact repeated dimensions or mappings;
-- diagrams for topology, sequence, ownership, or state change when prose is
-  materially slower; and
-- descriptive links for movement among documentation layers.
-
-Do not turn relational arguments into stacks of bullets merely to appear
-scannable.
-
-## Keep authority and status legible
-
-Use wording and artifact context to distinguish:
-
-| Status | Meaning |
-| --- | --- |
-| Current fact | True of the present system or situation. |
-| Evidence | An observed result with a stated basis. |
-| Product intent | Direction the project is trying to make possible. |
-| Commitment | Capability or behavior a named scope must provide. |
-| Hypothesis | Claim that evidence is intended to test. |
-| Candidate | Possible future scope without present commitment. |
-
-Do not weaken intentions into evasive possibilities merely because they are not
-release promises. Do not promote aspirations into commitments through confident
-grammar. Do not burden every sentence with a status label when the section or
-artifact already establishes it.
-
-Accepted decisions remain accepted unless a specific clause is explicitly
-reopened. Do not flatten a mixed authority state into “everything accepted” or
-“everything provisional.”
-
-## Write efficient prose
-
-Every sentence should perform at least one job:
-
-- add a fact or claim;
-- establish scope, status, or authority;
-- explain mechanism, cause, consequence, or contrast;
-- orient the reader within the argument;
-- define a term or resolve an ambiguity;
-- support a decision or next action; or
-- derive a result not already stated.
-
-Remove empty emphasis and repeated conclusions. Preserve transitions that explain
-why the next topic follows, show a change in abstraction or authority, or connect
-mechanism to value or limitation.
-
-Use concrete, stable language. Keep actors visible when ownership matters. Keep
-terms consistent. Avoid vague pronouns, filler, stacked modifiers, and abstract
-nouns that hide the action.
-
-Concision means reducing total reader effort, not mechanically shortening every
-sentence or removing explanations.
-
-## Drafting workflow
-
-Treat the first coherent draft as a working implementation.
-
-### 1. Establish evidence and authority
-
-Read the governing sources, current artifact, relevant implementation, comments,
-and consumers. Separate verified fact from inference, intent, commitment, and
-open question. Do not reconstruct technical meaning from names or prior prose
-alone.
-
-### 2. Map the relevant documentation system and public surface
-
-Inspect the entry path, neighboring artifacts, public interfaces, existing
-concepts, stale claims, competing sources of truth, and undocumented behavior
-needed for the intended reader task.
-
-Restrict the map to the relevant boundary. This is not a demand to rewrite the
-entire repository.
-
-### 3. Define the artifact contract
-
-Record the artifact's role, prerequisites, handoffs, audience, assumed knowledge,
-reader task, required post-reading model, authority, and likely reading path.
-
-### 4. Build the content model before prose
-
-Gather candidate facts, mechanisms, limits, evidence, decisions, and dependencies
-in scratch form. For each, state why the reader needs it and whether another
-artifact already owns it. Resolve material technical gaps before polishing.
-
-### 5. Assign information homes
-
-Construct the local outline and cross-document path. Give each material fact one
-primary home. Record uncovered work explicitly rather than quietly making the
-current artifact absorb it.
-
-### 6. Draft in source order
-
-Write the whole argument or task flow. Do not optimize isolated paragraphs while
-the document model remains unstable. Preserve enough connective tissue for each
-section to inherit the correct model from the previous one.
-
-### 7. Run independent review passes
-
-#### Contract pass
-
-- Does the artifact fulfill its reader purpose and authority?
-- Is it complete for its assigned job without pretending to own the entire
-  documentation system?
-- Are prerequisites and handoffs explicit and usable?
-- Has another document type contaminated it?
-
-#### Technical pass
-
-- Are mechanisms, sequences, comparisons, limits, and causal claims correct?
-- Is the strongest wording supported?
-- Are central facts specific enough for the intended decision or implementation?
-
-#### Information-architecture pass
-
-- Does the reader receive the governing model before dependent detail?
-- Does each fact have one appropriate home?
-- Are there repetitions, missing transitions, or orphans?
-- Do cross-document moves preserve coverage and authority?
-
-#### Precision pass
-
-- Which important claims remain vague?
-- Which details are more precise than their purpose justifies?
-- Did a clarification narrow an intentionally broad claim?
-- Would a contrast, definition, example, or reference transmit the point better?
-
-#### Status and register pass
-
-- Are fact, evidence, intent, commitment, hypothesis, and candidate scope legible?
-- Does modest persuasion stop after establishing relevance?
-- Are limits candid without becoming generic defensive prose?
-
-#### Compression pass
-
-- What can be removed without losing information, orientation, or justified
-  confidence?
-- Can layout or a link replace repetition?
-- Does every remaining sentence improve the transmission?
-
-#### Fresh adversarial pass
-
-Enter through the path a technically literate reader would plausibly use. Reread
-from the beginning and ask:
-
-> Where would I build the wrong model, lose the thread, doubt the writer, or have
-> to reread?
-
-Follow prerequisite and outward links far enough to verify the promised reader
-path. Correct the artifact or its assigned path, then rerun all objectives.
-
-## Common failure patterns
-
-### Every document becomes standalone
-
-Each artifact repeats orientation, definitions, mechanism, limits, and reference
-detail. Local completeness creates global duplication and inconsistency.
-
-**Correction:** define each artifact's role, prerequisites, and handoffs. Keep it
-complete for that role.
-
-### The current file absorbs every discovered gap
-
-Research finds stale or missing material elsewhere, so the target file quietly
-becomes its home.
-
-**Correction:** classify each gap as local documentation, cross-document work,
-public-surface work, implementation work, or an unresolved decision.
-
-### Rigor means maximum precision
-
-Every claim accumulates qualifications and edge cases until the main point is one
-detail among many.
-
-**Correction:** require each precision increase to name the consequential
-ambiguity or decision it serves.
-
-### Concision means removing explanation
-
-Transitions, examples, comparisons, and causal links disappear while isolated
-facts remain.
-
-**Correction:** optimize total reader effort, not word count.
-
-### Tables replace synthesis
-
-Accurate rows appear without the governing relationship that makes them useful.
-
-**Correction:** state the relational model in prose, then use the table for exact
-comparison or reference.
-
-### Status is flattened
-
-Current facts, accepted decisions, proposals, intentions, and candidates use the
-same level of certainty.
-
-**Correction:** restore status through artifact authority, section role, and
-precise wording.
-
-### Revision chases the latest criticism
-
-The newest correction becomes the entire writing theory.
-
-**Correction:** treat feedback as evidence against the whole model. Apply the
-correction, then recheck all objectives for regressions.
-
-## Completion test
-
-Before delivery, answer from the finished artifact and reader path:
-
-1. What exact part of the transmission does this artifact own?
-2. What model should the intended reader now hold?
-3. What decision or action can the reader now take?
-4. Which technical details establish the central claims?
-5. Which major limitation prevents overgeneralization?
-6. Where is exact support, implementation, or reference detail located?
-7. Are prerequisites, handoffs, and authorities real and navigable?
-8. Is every material statement's status legible?
-9. Which sentence contributes the least, and why does it remain?
-10. Which detail received the most precision, and what consequence earns it?
-11. Does the path contain any orphan, repetition, coverage gap, or unexplained
-    transition?
-12. Did the final revision improve the whole transmission rather than optimize
-    one recent complaint?
-
-The artifact is complete only when its technical content is correct, its local
-contract is fulfilled, its place in the larger reader path is coherent, and
-further compression would cost more understanding than it saves.
+> Where would a technically literate reader build the wrong model, lose the
+> thread, doubt the writer, or have to reread?
+
+When the answer exposes a defect, classify it and follow the corresponding
+backward edge. Deliver only when no material defect remains and further
+compression would cost more understanding than it saves.
+
+## Completion condition
+
+Writing is complete when:
+
+- the requested artifact fulfills one clear contract;
+- the technical model and strongest claims are supported;
+- every material point has an appropriate primary home;
+- the reader path is coherent, efficient, and navigable;
+- status and authority are accurate;
+- the fresh-reader pass succeeds; and
+- all accepted corrections are made in the artifacts that own them.
+
+A polished draft is not complete when the underlying evidence, artifact role,
+information architecture, or authority remains wrong.
