@@ -1,6 +1,6 @@
 # Milestone 3 gates — integratable orchestration subsystems
 
-Status: proposed future milestone gate under review
+Status: future milestone gate
 
 ## Milestone result
 
