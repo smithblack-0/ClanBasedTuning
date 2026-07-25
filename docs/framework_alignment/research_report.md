@@ -1,6 +1,6 @@
 # Framework-alignment research report
 
-Status: supporting research under Milestone 1 alignment review  
+Status: accepted explanatory basis from Milestone 1  
 Date: 2026-07-24  
 Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
@@ -28,20 +28,22 @@ The accepted responsibility baseline is:
 The alignment review found three narrower conflicts in the previously accepted
 decision set:
 
-1. The earlier P3 fixed a PBT subclass even though the roadmap explicitly assigns
-   the subclass-versus-direct-controller choice to Milestone 2.
+1. The earlier P3 fixed a PBT subclass before the independent controller and its
+   later Ray invocation were separated into their proper milestones.
 2. The earlier P4 gave Ray the Clan parent-selection policy rather than only
    execution of the selected checkpoint/configuration transition.
 3. The earlier P7 turned one collective-validity rule into controller,
    integration, and production “recovery scopes.”
 
 P1, P2, P5, and the native-distributed core of P6 remain aligned. Revised P3,
-P4, and P7 language is proposed in the decision file; the conflicting clauses
-remain reopened until human review accepts replacements.
+P4, and P7 language was accepted by human review. P3 was later clarified when
+Milestone 2 activated: Milestone 2 defines and delivers the independent
+population controller; Milestone 3 chooses and implements the Ray invocation
+form.
 
 This report explains the framework model and the reason for those targeted
-reopenings. It does not certify the current proof-of-concept classes or replace
-milestone gates and implementation plans.
+corrections. It does not certify the current proof-of-concept classes, select the
+Milestone 2 controller design, or replace milestone gates.
 
 ## What the Clan mechanism requires
 
@@ -91,26 +93,29 @@ Exact cadence, supported loader and accumulation behavior, checkpoint hooks,
 resource admission, and process-group reformation are integration design work.
 They become enforceable when Milestone 3 builds the complete manual workflow.
 
-## Controller form remains a Milestone 2 design choice
+## Controller policy and Ray integration are separate milestones
 
-Ray's synchronous `PopulationBasedTraining` provides a relevant policy/executor
-split. Its scheduler receives trial results and decides exploit/explore actions,
-while Tune's runtime performs checkpoint preparation, assignment, pause, resume,
-and trial execution. A narrow PBT specialization may therefore express the Clan
-population decision without rebuilding the surrounding lifecycle.
+Ray's synchronous `PopulationBasedTraining` provides useful framework evidence.
+Its scheduler receives trial results and decides exploit/explore actions, while
+Tune's runtime performs checkpoint preparation, assignment, pause, resume, and
+trial execution. A narrow PBT specialization may therefore become a suitable Ray
+execution seam.
 
-That option must be compared with an independently invokable controller plus a
-thin Ray adapter, because the roadmap intentionally leaves this choice to
-Milestone 2. The likely selection seam in Ray 2.56 is version-sensitive and may
-be private. Neither conclusion follows automatically:
+That framework question is not the Milestone 2 controller design. Milestone 2
+first defines an independently invokable Clan population policy that is
+reasonably compatible with its expected consumer. The controller's exact public
+representations, state, policy mechanics, and implementation structure are
+selected within the broad Milestone 2 gate.
 
-- a private seam is not rejected merely because it is private;
-- an existing PBT class is not selected merely because it already provides some
-  nearby lifecycle behavior.
+Milestone 3 then uses direct Ray evidence to choose the narrowest coherent way to
+invoke that accepted controller and execute its result. The possible forms may
+include a PBT specialization, another scheduler boundary, or a thin adapter.
+The choice must preserve one policy authority, native Tune lifecycle ownership,
+the smallest justified version-sensitive surface, and auditable integration.
 
-The accepted design must preserve one policy authority, independent controller
-invocation, native Tune lifecycle ownership, the smallest justified
-version-sensitive surface, and auditable inputs, outputs, and state.
+This separation prevents framework-seam assumptions from fixing the policy API
+before the policy itself is understood. It also prevents the independent
+controller from absorbing Ray lifecycle merely to make later integration easier.
 
 ## State-transition authority
 
@@ -200,13 +205,13 @@ three separate recovery subsystems.
 | --- | --- |
 | P1 — one Tune trial per live member | Accepted; retained. |
 | P2 — Lightning round boundary | Accepted; retained. |
-| P3 — fixed PBT specialization | Reopened because the roadmap assigns the controller-form choice to Milestone 2. |
-| P4 — Ray source selection | Reopened because ClanBasedTuning must select the sole parent; Ray executes assignment. |
+| P3 — controller and Ray integration boundary | Accepted: M2 owns the independent controller; M3 owns the Ray invocation form. |
+| P4 — parent selection and state execution | Accepted: ClanBasedTuning selects; Ray assigns; Lightning restores. |
 | P5 — partitioned training/comparable fitness | Accepted; retained. |
 | P6 — native distributed ownership | Accepted core; clarified so later native sharding is not precluded. |
-| P7 — collective failure/completion | Accepted core; milestone-specific recovery allocation reopened. |
+| P7 — collective failure/completion | Accepted core; milestone-specific recovery allocation removed. |
 
-The accepted and revised decision text is in
+The accepted decision text is in
 [project decisions](../decisions/project_decisions.md). Source and probe support
 is preserved in the [evidence ledger](evidence_ledger.md). Completion obligations
 belong to the [milestone gate system](../milestones/README.md), and implementation
