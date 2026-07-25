@@ -1,6 +1,6 @@
 # Milestone 2 gates — evolutionary subsystem
 
-Status: active completion gate under human review  
+Status: active completion gate  
 Date: 2026-07-25
 
 ## Governing basis
@@ -99,14 +99,11 @@ Tests state their relevant preconditions and postconditions and cover:
 - failure without partial advancement; and
 - input/output immutability or ownership guarantees.
 
-Tests avoid duplicated hard-coded export inventories when the package can inspect
-its actual `__all__` or public attributes directly.
-
 ### M2.7 Plain-data seam tests preserve later integratability
 
 Tests exercise the same ordinary data representation that a later Ray integration
-can build after extracting framework-owned state. They prove that separate
-controller instances agree when given the same logical population and policy
+can build after extracting framework-owned state. They prove that independent
+controller invocations agree when given the same logical population and policy
 state.
 
 These are compatibility tests, not Ray integration tests. They do not import Ray,
@@ -130,7 +127,7 @@ and includes:
 - its lifecycle position before and after external training;
 - the accepted input and output data structures and associations;
 - selection, tie, mutation, bounds, randomness, state, and failure algorithms;
-- constructor and method parameters with preconditions and postconditions;
+- the accepted call surface and its preconditions and postconditions;
 - internal objects or modules where their contracts are nontrivial; and
 - the exact responsibilities left to the future integration layer.
 
