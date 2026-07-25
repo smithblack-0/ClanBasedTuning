@@ -19,7 +19,8 @@ The repository is adding:
 - a stable entry point for coding agents;
 - shared rules for discovering project authority and current work;
 - the senior-engineering workflow used for substantial implementation and review;
-- the business-technical writing workflow used for project documentation; and
+- a concise business-technical writing workflow with separate writing standards;
+  and
 - maintenance rules for this status file.
 
 This operating-context extension is under review.
