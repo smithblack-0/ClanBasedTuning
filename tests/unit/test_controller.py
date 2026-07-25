@@ -29,6 +29,12 @@ def test_initial_configurations_keep_rank_zero_at_defaults():
     assert len({id(configuration) for configuration in configurations}) == 3
 
 
+def test_initial_configurations_reject_boolean_population_size():
+    """Pre: bool masquerades as int. Post: population size is rejected explicitly."""
+    with pytest.raises(TypeError, match="must be an integer"):
+        _controller().initial_configurations(True)
+
+
 def test_equal_seed_and_calls_produce_equal_initial_configurations():
     """Pre: equal policies and seeds. Post: redundant controllers produce equal output."""
     first = _controller(seed=13)
@@ -162,6 +168,17 @@ def test_generation_rejects_nonfinite_fitness():
         )
 
 
+def test_generation_rejects_boolean_fitness():
+    """Pre: bool is numerically coercible. Post: it is rejected as a fitness scalar."""
+    controller = _controller()
+
+    with pytest.raises(TypeError, match="real scalar"):
+        controller.next_generation(
+            [1.0, True],
+            [{"lr": 1.0}, {"lr": 2.0}],
+        )
+
+
 def test_generation_rejects_wrong_hyperparameter_set():
     """Pre: one configuration omits a declared key. Post: the input is rejected."""
     controller = _controller()
@@ -215,6 +232,7 @@ def test_constructor_rejects_nondeterministic_none_seed():
         ("standard_deviation", 0.0, "must be positive"),
         ("geometry", "quadratic", "must be 'linear' or 'log'"),
         ("minimum", 2.0, "must be less than maximum"),
+        ("default", "1.0", "must be a real scalar"),
     ],
 )
 def test_constructor_rejects_invalid_hyperparameter_policy(field, value, message):
@@ -228,5 +246,5 @@ def test_constructor_rejects_invalid_hyperparameter_policy(field, value, message
     }
     specification[field] = value
 
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises((TypeError, ValueError), match=message):
         _controller(hyperparameters={"lr": specification})
