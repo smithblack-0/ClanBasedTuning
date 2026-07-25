@@ -6,9 +6,9 @@ Date: 2026-07-24
 ## Governing basis
 
 The roadmap and accepted project decisions govern this milestone. Milestone 1 is
-closed. The controller must preserve the accepted single-parent population
-policy while leaving Ray, Lightning, and PyTorch lifecycle execution to the
-integration milestone.
+closed. Milestone 2 delivers the independently invokable population policy;
+Milestone 3 chooses and implements the Ray-backed execution seam and complete
+training workflow.
 
 ## Milestone result
 
@@ -16,171 +16,149 @@ ClanBasedTuning has an independently invokable, tested, documented, and
 inspectable evolutionary controller that expresses the population-decision side
 of Clan Tuning with the narrowest coherent responsibility.
 
-The controller is designed for its immediate Ray Tune consumer without making
-Ray integration part of the controller product. Choosing and implementing the
-Ray invocation seam belongs to Milestone 3.
+The controller is reasonably compatible with its expected consumer without
+absorbing that consumer's framework lifecycle or preselecting its integration
+form.
 
 ## Capability and responsibility gates
 
-### M2.1 The controller owns one complete population decision
+### M2.1 The controller expresses the Clan population policy
 
-Given one complete population result, the controller:
+Given the information required to judge one population boundary, the controller:
 
-- compares member-local fitness under one explicit metric direction;
-- selects the sole winning member;
-- derives one legal optimizer configuration for every next-generation member;
-- records the member-to-parent relationship and policy information needed to
-  explain the transition; and
-- returns one complete decision for framework-owned execution.
+- compares the members' fitness under an explicit policy;
+- selects the sole winning member whose training state is the basis of the next
+  generation; and
+- emits the optimizer-configuration values required for the next generation.
 
-It does not collect live trial reports, choose when a round boundary occurs,
-transfer model or optimizer state, construct optimizers, run training, schedule
-resources, pause or resume trials, or manage checkpoints.
+The gate does not prescribe a class hierarchy, fixed membership model, record
+schema, tie algorithm, elite layout, perturbation mechanism, or state
+representation. The accepted design must justify those choices within this
+behavioral envelope.
 
-### M2.2 The public population and decision contracts are complete
+### M2.2 The controller owns policy, not execution
 
-The controller consumes one complete population result containing:
+The controller may own only the information and state needed to make its
+population decision. It does not:
 
-- stable member identity;
-- comparable fitness;
-- current optimizer configuration; and
-- only the additional policy state the accepted controller design requires.
+- collect live framework reports or choose when training reaches a boundary;
+- transfer or apply model or optimizer state;
+- mutate a live optimizer;
+- construct optimizers or run training;
+- schedule resources, trials, actors, or distributed workers; or
+- own checkpoints, pause/resume, restoration, or operational recovery.
 
-It produces one inspectable decision containing:
+It emits configuration values and a policy result for later execution by the
+appropriate owners.
 
-- the sole winning member whose model parameters, optimizer state, and optimizer
-  configuration become the basis of the next generation;
-- one legal optimizer configuration for every next-generation member;
-- an explicit parent identity for every resulting member; and
-- the policy information needed to explain and reproduce the transition.
+### M2.3 The variation surface remains optimizer-side
 
-The public model uses ordinary immutable or serialization-friendly values where
-those values express the contract clearly. Ray `Trial`, `TuneController`,
-checkpoint, actor, scheduler, and callback objects do not belong in it.
+The controller may vary only optimizer-side choices that operate after the
+shared gradient has been produced. Model, data, batch, augmentation, and other
+choices that alter the shared-gradient workload are outside this milestone's
+accepted policy surface.
 
-### M2.3 Selection and optimizer-configuration generation are deterministic and valid
+The exact supported optimizer-configuration domain is an accepted design and
+documentation question. Unsupported inputs must not be silently treated as valid
+policy output.
 
-- Metric direction and tie behavior are explicit.
-- Missing, duplicate, NaN, infinite, or incomplete population input fails
-  clearly.
-- Exactly one parent and one complete next-generation configuration set are
-  produced.
-- Repeated execution from the same controller state and input produces the same
-  decision.
-- Model, data, batch, augmentation, and other gradient-defining mutation choices
-  are outside the accepted controller surface.
+### M2.4 The public contract is independent and reasonably compatible
 
-The exact mutation and retention policy is documented and tested. The gate does
-not prescribe an elite unless the accepted controller design chooses and
-justifies one.
+The public controller can be invoked directly without Ray, Lightning, PyTorch
+distributed execution, or a running training job. Its input and output expose the
+policy information an ordinary consumer needs without requiring live framework
+objects or a second experiment framework.
 
-### M2.4 Controller state is limited to policy needs
+Reasonable compatibility is demonstrated through tests and examples. This gate
+does not prescribe the later adapter, scheduler hook, callback path, checkpoint
+mapping, or framework seam.
 
-The controller retains only state required to reproduce its accepted policy.
-That state is explicit, inspectable, and serializable when persistence is
-necessary. The controller does not mirror trial runtime, checkpoint contents,
-resource state, experiment persistence, or framework progress clocks.
+### M2.5 Invalid populations cannot become valid transitions
 
-### M2.5 Incomplete populations do not produce valid transitions
+Incomplete, contradictory, or otherwise invalid population information cannot
+produce a valid next-generation decision. The accepted design states its
+validity conditions, randomness or state contract, and failure behavior clearly
+enough that callers and tests can distinguish a valid transition from refusal.
 
-The controller refuses to manufacture a partial evolutionary decision from a
-missing or invalid population. Validation completes before any decision or
-policy-state transition is emitted.
-
-Process termination, checkpoint assignment, training restoration, and
-operational recovery are not controller subsystems.
+The gate requires reproducible and auditable behavior under the documented
+policy contract. It does not require one particular deterministic tie rule,
+serialization format, transaction object, or state machine.
 
 ## Test gates
 
-### M2.6 Focused tests prove the public policy contract
+### M2.6 Focused tests prove the policy contract
 
-The controller suite covers ranking modes, ties, invalid fitness, duplicate and
-incomplete populations, sole-parent selection, complete optimizer-configuration
-output, optimizer-only boundaries, determinism, intentional state persistence,
-no partial state transition after failure, and inspectable decision records.
+The focused suite exercises:
 
-### M2.7 The public contract is ready for native integration
+- sole-parent selection under the supported fitness policy;
+- complete next-generation optimizer-configuration output;
+- the optimizer-only variation boundary;
+- invalid and incomplete population behavior;
+- the accepted design's randomness, state, and repeatability claims; and
+- failure behavior that prevents an invalid result from being presented as a
+  valid transition.
 
-Focused contract tests and design review establish that:
+Tests target the chosen public contract without importing Milestone 3's Ray,
+Lightning, checkpoint, or distributed lifecycle.
 
-- member identities, fitness values, optimizer configurations, policy state, and
-  decisions can be supplied without framework objects;
-- one complete population input produces one complete decision through one
-  explicit invocation;
-- the decision exposes the parent and complete next-generation configurations
-  needed by a later execution layer;
-- no callback, report accumulator, trial registry, checkpoint abstraction, or
-  scheduler lifecycle is hidden inside the controller; and
-- the public structures can be translated directly from ordinary Ray trial
-  identities, result values, and configuration mappings without introducing a
-  second experiment schema.
+### M2.7 Compatibility is exercised without implementing integration
 
-This gate constrains the handoff; it does not choose or test the Ray scheduler or
-adapter seam. That work begins in Milestone 3.
-
-### M2.8 The controller remains independently invokable
-
-The public controller contract can be exercised directly from explicit
-population results and optimizer configurations without Ray installed or a
-training job running.
+Tests demonstrate that a representative ordinary caller can supply the policy
+input and consume the result without framework-owned runtime objects. They may
+use Ray-shaped values or other realistic consumer data where useful, but they do
+not select, implement, or qualify the Ray invocation seam.
 
 ## Documentation gates
 
-### M2.9 Controller documentation transfers the complete policy model
+### M2.8 Controller documentation transfers the accepted policy model
 
-The milestone delivers:
+The milestone documents:
 
-- the accepted controller design and responsibility boundary;
-- public API and configuration reference;
-- selection, tie, mutation, retention, state, and failure semantics;
-- the decision-record model and reproducibility behavior;
-- the integration obligations a later Ray path must satisfy; and
-- a clear boundary between population decision and framework-owned execution.
+- the controller's purpose and responsibility boundary;
+- its public input, output, and supported configuration surface;
+- selection and next-generation policy behavior;
+- any intentional state or randomness;
+- validity, failure, and limitation semantics; and
+- what remains for framework-owned execution in Milestone 3.
 
-A reader must not infer controller behavior from Ray internals or a later
-integration example.
+Documentation explains the accepted design without presenting its choices as the
+only gate-compliant architecture.
 
 ## Example gate
 
-### M2.10 A public example makes the evolutionary transition inspectable
+### M2.9 A public example makes the evolutionary decision inspectable
 
-A small reproducible example invokes the public controller with explicit
-population results and optimizer configurations. It makes the input population,
-selected winner, resulting configurations, and explanation record visible and
-explains how to read them.
+A small reproducible example invokes the public controller directly, shows the
+population information supplied, the selected winner, and the emitted
+next-generation optimizer configurations, and explains how to interpret the
+result.
 
 Synthetic population results are appropriate because this milestone demonstrates
-the decision subsystem. The complete training and checkpoint-driven transition
-example begins in Milestone 3.
+the policy itself. A complete checkpoint-driven training transition belongs to
+Milestone 3.
 
-## Evidence, review, and handoff gates
+## Review and downstream gate
 
-### M2.11 The controller products agree
+### M2.10 The delivered products agree
 
-Implementation, focused tests, design and API documentation, decision records,
-and example describe one public controller contract. Human review applies the
-standing framework-native review to the controller boundary and records any
-reopened assumption.
+Implementation, focused tests, design and API documentation, and the public
+example describe one controller contract and policy. Human review applies the
+standing framework-native and gate-boundary reviews and rejects design leakage
+into the gate.
 
-### M2.12 Milestone 3 receives a complete integration handoff
+### M2.11 Milestone 3 can rely on the public policy capability
 
-The handoff states:
+Milestone 3 receives a stable, independently exercised public controller and its
+documented behavior. The handoff is the public capability and evidence, not a
+predesigned Ray adapter or cross-milestone execution plan.
 
-- the population-result fields and completeness conditions the controller
-  consumes;
-- the transition decision it produces;
-- intentional controller state and persistence requirements;
-- the expected one-boundary, one-invocation semantics;
-- the ordinary Ray concepts that map naturally to the public input and output;
-- the framework responsibilities that remain outside the controller; and
-- the questions Milestone 3 must answer when choosing and implementing the Ray
-  invocation seam.
-
-The handoff does not preselect a scheduler subclass, adapter, or private Ray
-hook.
+Any integration necessity discovered during Milestone 2 that is not already
+covered by the Milestone 3 gate must be proposed explicitly to that gate for
+review rather than asserted by a Milestone 2 plan.
 
 ## Closure evidence
 
-Milestone 2 closes with links to the accepted controller design, controller API,
-focused policy and contract test results, public example and output,
-decision-record reference, integration-readiness handoff, and human review.
+Milestone 2 closes with the accepted controller design and implementation,
+focused policy and compatibility tests, public documentation, an independently
+runnable example and output, human review, and evidence that the public
+capability is sufficient for Milestone 3 without prescribing its implementation.
