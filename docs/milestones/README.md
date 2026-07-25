@@ -1,6 +1,6 @@
 # Milestone gate system
 
-Status: working Milestone 1 proposal under review  
+Status: accepted gate system; Milestone 2 active  
 Date: 2026-07-24
 
 ## Purpose
@@ -36,6 +36,11 @@ transfer, or predesign that capability.
 A requirement belongs in a milestone only when it is necessary to establish that
 milestone's roadmap Outcome, Work, or Exit. A framework behavior may be exercised
 as part of that proof without becoming a ClanBasedTuning-owned subsystem.
+
+The boundary between milestones should remain encapsulated. An earlier milestone
+may define the stable contract and handoff required by its immediate consumer;
+it must not choose the consumer's internal framework seam or duplicate the later
+milestone's execution design merely to appear complete.
 
 ## Complete-project dimensions
 
@@ -89,8 +94,8 @@ development.
 
 ## Gate files
 
-1. [Milestone 1 — framework-alignment research](gates/milestone_1_framework_alignment.md)
-2. [Milestone 2 — evolutionary subsystem](gates/milestone_2_evolutionary_subsystem.md)
+1. [Milestone 1 — framework-alignment research](gates/milestone_1_framework_alignment.md) — complete
+2. [Milestone 2 — evolutionary subsystem](gates/milestone_2_evolutionary_subsystem.md) — active
 3. [Milestone 3 — integratable orchestration](gates/milestone_3_integratable_orchestration.md)
 4. [Milestone 4 — usability](gates/milestone_4_usability.md)
 5. [Milestone 5 — optimizer utility](gates/milestone_5_optimizer_utility.md)
