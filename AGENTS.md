@@ -3,13 +3,20 @@
 For substantial engineering, design, review, or documentation work, read
 [`docs/llm/README.md`](docs/llm/README.md) before acting.
 
-[`STATUS.md`](STATUS.md) is shared project documentation written for both humans
-and tools. It describes the repository's latest durable position, but it is not
-an instruction queue and does not establish the user's current objective. When a
-request asks to continue earlier work without identifying the task, read
-`STATUS.md`, inspect live repository state, and ask the user to confirm what
-should be resumed.
+Before editing a documentation subtree, read its nearest `README.md`. In
+particular, read [`docs/milestones/README.md`](docs/milestones/README.md) before
+editing milestone gates or plans.
+
+[`STATUS.md`](STATUS.md) is shared project documentation written for humans and
+tools. It describes the repository's latest durable position, but it is not an
+instruction queue and does not establish the user's current objective.
+
+A pull request must be a self-contained, mergeable increment that performs one
+coherent task and leaves the repository in a stable state. Do not create a PR or
+persistent repository file solely to ask the user a design question. Preliminary
+reasoning belongs in scratchwork while it is useful; accepted decisions must be
+applied in the artifacts that own them.
 
 Follow the authority, change-control, engineering, and writing rules linked from
-`docs/llm/README.md`. Do not merge pull requests, alter the product roadmap, or
-modify CI/workflow files without explicit authorization.
+`docs/llm/README.md`. Do not merge pull requests, modify CI/workflow files, or
+change governing product meaning without explicit authorization.
