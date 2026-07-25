@@ -4,8 +4,8 @@
 
 This directory contains durable working-process instructions for LLMs that
 contribute to ClanBasedTuning. It does not summarize the project, identify the
-current assignment, or replace the roadmap, decisions, gates, plans, code,
-tests, or human review.
+current assignment, or replace the roadmap, decisions, gates, accepted designs,
+scoped plans, code, tests, or human review.
 
 The objective is transferability: a fresh session should be able to discover the
 relevant authority, understand how work is conducted, and begin a named task
@@ -28,9 +28,9 @@ Read only the process modules relevant to that work:
 - [Senior engineering workflow](senior_engineering_workflow.md) for substantial
   engineering, debugging, design, implementation, and review;
 - [Business-technical writing workflow](technical_writing_workflow.md) for the
-  executable writing loop used by roadmaps, decisions, designs, plans, reports,
-  audits, READMEs, user guidance, reference documentation, and substantial
-  technical explanations; and
+  executable writing loop used by roadmaps, decisions, gates, designs, plans,
+  reports, audits, READMEs, user guidance, reference documentation, and
+  substantial technical explanations; and
 - [Business-technical writing standards](technical_writing_standards.md) as the
   detailed evaluation reference consulted by the writing workflow when a stage
   or defect requires it.
@@ -55,20 +55,34 @@ Use the repository's authority system:
 2. Accepted [project decisions](../decisions/project_decisions.md) govern the
    cross-milestone questions they resolve unless a specific clause is explicitly
    reopened.
-3. [Milestone gates](../milestones/README.md) govern what must be demonstrated
-   before a milestone closes.
-4. Accepted designs and active plans govern implementation structure and work
-   sequence within those higher contracts.
-5. Research and evidence records support conclusions; they do not independently
+3. [Milestone gates](../milestones/README.md) govern the complete acceptable
+   result that must be demonstrated before a milestone closes.
+4. Accepted designs govern implementation structure inside their gate.
+5. A durable plan may govern execution sequence only inside its explicitly
+   declared active-milestone scope. It may not narrow the gate, become a second
+   roadmap, or predesign later milestones.
+6. Research and evidence records support conclusions; they do not independently
    assign work or supersede decisions.
-6. Code and tests establish current implementation behavior. Existing behavior
+7. Code and tests establish current implementation behavior. Existing behavior
    is evidence, not automatic architectural authority.
-7. Review records preserve audit history; they do not become technical decision
+8. Review records preserve audit history; they do not become technical decision
    sources.
 
 When two artifacts disagree, identify their roles and authority before editing
 one. Correct the artifact that owns the contradiction rather than patching the
 nearest file.
+
+A requirement discovered during current work may move forward only through the
+artifact that owns the future acceptance condition. Propose it to the relevant
+future gate for review; do not leave a cross-milestone promise hidden inside the
+active plan.
+
+`docs/milestones/` contains only the gate-system README and gate files. Do not
+place plans, designs, or scratchwork beside the gates. A durable plan, when
+justified, must state the active gate it serves and live in a clearly identified
+planning or design location. The repository has no persistent LLM scratch area;
+create one only after explicit human approval and with unmistakable preliminary
+status.
 
 ## Discover current work without inventing intent
 
@@ -81,8 +95,8 @@ governing material.
 what the user wants to do in the present conversation.
 
 When the user names a task, use that task and load only the relevant status,
-authority, plan, implementation, tests, and evidence. When the user asks to
-continue earlier work without identifying it:
+authority, accepted design or plan, implementation, tests, and evidence. When
+the user asks to continue earlier work without identifying it:
 
 1. read `STATUS.md`;
 2. inspect live branch, pull-request, issue, and CI state where relevant; and
@@ -106,16 +120,16 @@ contracts without reproducing their subordinate design or execution details.
 In particular:
 
 - milestone gates own completion criteria;
-- decisions own durable technical choices;
-- plans own work-unit order, option analysis, and execution sequence;
-- designs own component structure and detailed boundaries; and
+- decisions own durable cross-milestone technical choices;
+- accepted designs own component structure and detailed boundaries;
+- scoped durable plans own current execution order inside one active gate; and
 - live GitHub state owns current commits, checks, and pull-request mechanics.
 
 Do not copy those details into `STATUS.md` merely to make it locally complete.
 Use a project-level statement and a descriptive link to the owning artifact. A
-plan should usually be able to reorder work units, refine alternatives, or change
-an internal seam without requiring a status edit. Update status only when the
-project-level meaning exposed by that abstraction changes.
+plan should usually be able to reorder work or revise its route without requiring
+a status edit. Update status only when the project-level meaning exposed by that
+abstraction changes.
 
 Update it when durable project position changes materially, such as:
 
@@ -176,6 +190,7 @@ A fresh contributor should be able to state:
 
 - the requested task and expected result;
 - the governing authority and owning artifact;
+- the active gate and the scope of any accepted design or plan;
 - the relevant implementation boundary and consumers;
 - the evidence needed before choosing a design;
 - which changes are ordinary and which require consultation; and
