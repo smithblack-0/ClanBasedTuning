@@ -20,9 +20,7 @@ import math
 import random
 from collections.abc import Mapping, Sequence
 
-_SPEC_FIELDS = frozenset(
-    {"default", "standard_deviation", "geometry", "minimum", "maximum"}
-)
+_SPEC_FIELDS = frozenset({"default", "standard_deviation", "geometry", "minimum", "maximum"})
 
 
 class ClanController:
@@ -96,8 +94,7 @@ class ClanController:
             raise ValueError("population_size must be at least two")
 
         defaults = {
-            name: specification["default"]
-            for name, specification in self._hyperparameters.items()
+            name: specification["default"] for name, specification in self._hyperparameters.items()
         }
         configurations = [dict(defaults)]
         for _ in range(1, population_size):
@@ -186,9 +183,7 @@ class ClanController:
         ]
 
     def _normalize_configurations(self, configurations):
-        if isinstance(configurations, (str, bytes)) or not isinstance(
-            configurations, Sequence
-        ):
+        if isinstance(configurations, (str, bytes)) or not isinstance(configurations, Sequence):
             raise TypeError("configurations must be a rank-ordered sequence")
         return [
             self._normalize_configuration(configuration, rank)
