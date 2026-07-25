@@ -199,12 +199,33 @@ Corrective actions:
 No source code, tests, dependencies, or workflow files had been changed under the
 rejected plan.
 
+Human review later approved `docs/llm/scratchwork/` as a preliminary,
+non-authoritative home for framework research, source observations, option
+fragments, tentative ideas, and unresolved questions. It is not a durable plan
+and cannot assign work, narrow a gate, or predesign a later milestone.
+
+### Milestone 2 controller design
+
+**Result:** accepted for implementation; implementation and closure evidence remain
+under review.
+
+The accepted design is one stateless `ClanController` using plain Python input and
+output. It initializes a complete optimizer-configuration population from required
+defaults, selects the sole parent from one complete population, and emits the next
+complete population using linear or logarithmic perturbations within declared
+bounds. Explicit seeds provide reproducibility without controller persistence.
+
+The design does not import Ray runtime objects, communicate between workers,
+transfer checkpoints, apply live optimizer values, or choose the Milestone 3 Ray
+invocation seam. It also avoids one-use public record classes where mappings and a
+small tuple result express the contract directly.
+
 ## Final artifact status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
 | Product roadmap | Governing; trusted | Defines product meaning and milestone sequence. Only the accepted M2/M3 responsibility correction may change its current-status wording. |
-| Documentation structure | Corrected | Gates, accepted designs, scoped durable plans, status, evidence, and review history have distinct authority. `docs/milestones/` contains gates only. |
+| Documentation structure | Corrected | Gates, accepted designs, scoped durable plans, scratchwork, status, evidence, and review history have distinct authority. `docs/milestones/` contains gates only. |
 | Project decisions | Accepted | P3 assigns the independent controller to M2 and Ray integration choice to M3 without fixing the controller design. P4 and P7 remain accepted. |
 | Research report | Accepted explanatory basis | Explains the framework model without becoming current execution authority. |
 | Evidence ledger | Accepted audit record | Evidence and open questions are separated from gates and plans. |
@@ -212,8 +233,10 @@ rejected plan.
 | Milestone gate system | Corrected and active | Gates contract complete acceptable results without importing active-plan choices. |
 | Milestone 2 gate | Active | Defines the independent controller capability and reasonable compatibility without prescribing implementation. |
 | Milestone 3–6 gates | Future milestone contracts | Remain outcome-level and must be rechecked for design leakage before activation. |
-| Milestone 2 design and plan | Not yet accepted | Must be developed inside the corrected gate; no deleted artifact retains authority. |
-| LLM operating context | Corrected | Transfers engineering and writing process, including gate/design/plan separation. |
+| Milestone 2 design | Accepted | The stateless plain-data `ClanController` design is implemented on the review branch. |
+| Milestone 2 implementation | Under review | Source, focused tests, documentation, example, regression evidence, and human acceptance must agree before closure. |
+| LLM scratchwork | Approved preliminary context | Preserves research and options without durable authority. |
+| LLM operating context | Corrected | Transfers engineering and writing process, including gate/design/plan/scratchwork separation. |
 | `STATUS.md` | Accepted shared status | Reports durable project abstractions without linking to a shadow plan. |
 
 ## Closure
@@ -221,5 +244,5 @@ rejected plan.
 Milestone 1 remains accepted and closed because its framework research,
 responsibility decisions, gate system, and operating context remain valid after
 the shadow-plan correction. Milestone 2 is active under the corrected broad gate.
-Its design and any durable execution plan must now be developed from current
-evidence within that gate rather than recovered from the deleted plan.
+Its controller design is accepted; implementation, regression evidence, and
+Milestone 2 closure remain under review.
