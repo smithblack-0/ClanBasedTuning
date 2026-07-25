@@ -15,11 +15,10 @@ _REQUIRED_RESULT_KEYS = frozenset({"fitness", "config"})
 class ClanController:
     """Transform completed Clan populations into optimizer configurations.
 
-    The controller owns only evolutionary policy. It initializes a population
-    around required defaults, selects one sole parent from a completed population,
-    and emits the next optimizer configuration for every member. Callers supply
-    explicit seeds, so the controller has no hidden mutable state and requires no
-    persistence lifecycle.
+    The controller owns only evolutionary policy. It initializes one complete
+    optimizer-configuration population around required defaults, selects the sole
+    parent from one completed population, and emits the next complete population.
+    Explicit seeds provide reproducibility without hidden mutable state.
 
     Parameter specifications use ordinary mappings with five required fields:
     ``default``, ``std``, ``sampling`` (``"linear"`` or ``"log"``), ``lower``,
@@ -32,25 +31,20 @@ class ClanController:
     def __init__(
         self,
         *,
+        population_size: int,
         parameters: Mapping[str, Mapping[str, Any]],
         mode: Literal["min", "max"],
     ) -> None:
+        if isinstance(population_size, bool) or not isinstance(population_size, int):
+            raise TypeError("population_size must be an integer")
+        if population_size < 2:
+            raise ValueError("population_size must be at least two")
         if mode not in {"min", "max"}:
             raise ValueError("mode must be 'min' or 'max'")
+
+        self._population_size = population_size
         self._mode = mode
         self._parameters = self._validate_parameters(parameters)
-
-    @property
-    def mode(self) -> Literal["min", "max"]:
-        """Return whether lower or higher fitness wins."""
-
-        return self._mode
-
-    @property
-    def parameters(self) -> dict[str, dict[str, float | str]]:
-        """Return a copy of the normalized parameter policy."""
-
-        return {name: dict(spec) for name, spec in self._parameters.items()}
 
     def initialize(
         self,
@@ -140,8 +134,10 @@ class ClanController:
     ) -> dict[str, dict[str, Any]]:
         if not isinstance(population, Mapping):
             raise TypeError("population must be a mapping from member IDs to results")
-        if len(population) < 2:
-            raise ValueError("a Clan population must contain at least two members")
+        if len(population) != self._population_size:
+            raise ValueError(
+                f"population must contain exactly {self._population_size} members"
+            )
 
         validated: dict[str, dict[str, Any]] = {}
         expected_fields = set(self._parameters)
@@ -244,15 +240,16 @@ class ClanController:
             raise ValueError(f"{label} must be finite")
         return normalized
 
-    @classmethod
-    def _validate_member_ids(cls, member_ids: Sequence[str]) -> list[str]:
+    def _validate_member_ids(self, member_ids: Sequence[str]) -> list[str]:
         if isinstance(member_ids, str | bytes) or not isinstance(member_ids, Sequence):
             raise TypeError("member_ids must be a sequence of member IDs")
         members = list(member_ids)
-        if len(members) < 2:
-            raise ValueError("a Clan population must contain at least two members")
+        if len(members) != self._population_size:
+            raise ValueError(
+                f"member_ids must contain exactly {self._population_size} members"
+            )
         for member_id in members:
-            cls._validate_member_id(member_id)
+            self._validate_member_id(member_id)
         if len(set(members)) != len(members):
             raise ValueError("member IDs must be unique")
         return sorted(members)
