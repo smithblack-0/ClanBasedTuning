@@ -1,5 +1,3 @@
-# ruff: noqa
-
 """Inspect one framework-independent Clan population decision."""
 
 from pprint import pprint
