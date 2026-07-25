@@ -110,7 +110,7 @@ def test_decision_does_not_modify_input_configurations():
                 "b": MemberResult(1.0, {"lr": 0.2}),
             },
             ValueError,
-            r"fitness.*finite",
+            "must be finite",
         ),
     ],
 )
@@ -134,7 +134,7 @@ def test_missing_or_nonnumeric_parent_field_is_rejected():
 
     with pytest.raises(ValueError, match="missing field 'lr'"):
         policy.decide(missing, seed=1)
-    with pytest.raises(TypeError, match=r"field 'lr'.*real scalar"):
+    with pytest.raises(TypeError, match="must be a real scalar"):
         policy.decide(nonnumeric, seed=1)
 
 
@@ -145,7 +145,7 @@ def test_failure_does_not_change_later_decisions():
         "b": MemberResult(1.0, {"lr": 0.2}),
     }
 
-    with pytest.raises(ValueError, match=r"fitness.*finite"):
+    with pytest.raises(ValueError, match="must be finite"):
         policy.decide(invalid, seed=11)
 
     assert policy.decide(_population(), seed=11) == ClanPopulationPolicy(
