@@ -1,6 +1,6 @@
 # ClanBasedTuning project decisions
 
-Status: accepted project decisions under Milestone 1 alignment review  
+Status: accepted project decisions  
 Date: 2026-07-24
 
 ## Purpose
@@ -17,17 +17,10 @@ research, evidence, and planning artifacts for their actual jobs.
 
 ## Current alignment status
 
-- P1, P2, P5, and P6 remain accepted.
-- P3 is reopened because the roadmap explicitly leaves the choice between a PBT
-  specialization and a direct controller to Milestone 2.
-- P4 is reopened because its earlier wording gave Ray the Clan-specific parent
-  selection policy rather than only execution of the selected transition.
-- P7 is reopened only for its milestone-specific recovery sentence. Its
-  collective-validity and collective-completion rule remains accepted.
-
-The revised P3, P4, and P7 text below is proposed for human acceptance. Until
-then, the accepted portions named above continue to govern and the conflicting
-clauses may not be used as implementation authority.
+All seven decisions are accepted. P3, P4, and the allocation portion of P7 were
+revised during the Milestone 1 alignment pass and accepted by human review on
+2026-07-24. P1, P2, P5, and P6 retained their accepted authority throughout the
+pass.
 
 ## P1. One Ray Tune trial represents one live Clan member
 
@@ -66,8 +59,9 @@ checkpoint assignment, pause/resume, resource, and scheduler lifecycle behavior.
 It must not reproduce substantial Tune controller machinery merely to avoid an
 awkward or version-sensitive extension seam.
 
-**Status:** reopened; revised text proposed. The previous fixed PBT-subclass
-choice conflicts with the roadmap's explicit Milestone 2 design choice.
+**Status:** accepted; revised during Milestone 1 alignment because the previous
+fixed PBT-subclass choice conflicted with the roadmap's explicit Milestone 2
+design choice.
 
 ## P4. ClanBasedTuning selects the parent; Ray transfers state; Lightning restores it
 
@@ -81,8 +75,9 @@ only the receiving member's evolved optimizer configuration. This division does
 not create a separate Clan checkpoint scheduler, generation manifest, or
 optimizer-construction system.
 
-**Status:** reopened; revised text proposed. The previous wording incorrectly
-assigned parent/source selection to Ray rather than the Clan policy.
+**Status:** accepted; revised during Milestone 1 alignment because the previous
+wording incorrectly assigned parent/source selection to Ray rather than the Clan
+policy.
 
 ## P5. Training data is partitioned; fitness data is comparable
 
@@ -123,8 +118,8 @@ belongs in the integration and support contracts where those capabilities become
 enforceable. This decision states the collective validity rule; it does not
 create separate recovery subsystems or assign their detailed qualification.
 
-**Status:** collective rule accepted; revised removal of the milestone-specific
-recovery allocation proposed.
+**Status:** accepted; the milestone-specific recovery allocation was removed
+during Milestone 1 alignment while the collective rule remained unchanged.
 
 ## Supporting record
 
