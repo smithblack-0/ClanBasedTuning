@@ -14,12 +14,14 @@ accepted public architecture.
 ## Current work
 
 Milestone 2 is active. It delivers an independently invokable evolutionary
-controller that consumes one complete population result, selects the sole parent,
-and produces the next generation's optimizer configurations and decision record.
+controller that expresses the Clan population policy: compare one population,
+select the sole parent, and emit the next generation's optimizer-configuration
+values.
 
-The controller is designed for later native integration without owning Ray,
-Lightning, PyTorch, trial, checkpoint, or training lifecycle behavior. The active
-Milestone 2 plan owns the detailed work sequence.
+The controller must remain independently usable and reasonably compatible with
+its expected consumer without owning Ray, Lightning, PyTorch, trial, checkpoint,
+or training lifecycle behavior. Its accepted design and implementation will be
+developed within the Milestone 2 gate.
 
 ## Next capability
 
@@ -35,7 +37,6 @@ manual workflow.
 - [Framework-native engineering review](docs/reviews/framework_native_review.md)
 - [Milestone gate system](docs/milestones/README.md)
 - [Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
-- [Evolutionary-controller plan](docs/milestones/evolutionary_controller_plan.md)
 - [LLM operating context](docs/llm/README.md)
 
 ## Known limitations
