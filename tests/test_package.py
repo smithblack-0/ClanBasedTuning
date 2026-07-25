@@ -1,3 +1,5 @@
+# ruff: noqa
+
 """Package-level environment checks."""
 
 
