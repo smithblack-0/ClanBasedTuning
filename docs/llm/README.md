@@ -74,7 +74,7 @@ nearest file.
 
 [`STATUS.md`](../../STATUS.md) is a shared, human-readable description of the
 repository's latest durable position. It may identify recently completed work,
-work currently under review, the next planned milestone, blockers, and links to
+work currently under review, the next planned capability, blockers, and links to
 governing material.
 
 `STATUS.md` is not an autonomous work queue. Repository state cannot establish
@@ -98,16 +98,35 @@ Humans and LLMs maintain `STATUS.md` under the same writing standards. It must
 read like normal project documentation, not like a machine scratchpad or a
 message to a future model.
 
+`STATUS.md` owns the durable project-level abstraction: what capability is
+accepted, what capability is active, what capability comes next, what durable
+blocker exists, and where the owning contracts live. It summarizes those
+contracts without reproducing their subordinate design or execution details.
+
+In particular:
+
+- milestone gates own completion criteria;
+- decisions own durable technical choices;
+- plans own work-unit order, option analysis, and execution sequence;
+- designs own component structure and detailed boundaries; and
+- live GitHub state owns current commits, checks, and pull-request mechanics.
+
+Do not copy those details into `STATUS.md` merely to make it locally complete.
+Use a project-level statement and a descriptive link to the owning artifact. A
+plan should usually be able to reorder work units, refine alternatives, or change
+an internal seam without requiring a status edit. Update status only when the
+project-level meaning exposed by that abstraction changes.
+
 Update it when durable project position changes materially, such as:
 
 - a milestone or major review passes, reopens, or changes scope;
 - a governing decision is accepted, revised, or reopened;
-- the principal work under review changes;
-- a durable blocker appears or is resolved;
-- the next planned project capability changes; or
+- the active or next project capability changes;
+- a durable blocker appears or is resolved; or
 - an authoritative document moves or is replaced.
 
-Do not update it for every commit, test run, conversation, or speculative idea.
+Do not update it for every commit, test run, conversation, speculative idea,
+work-unit reorder, implementation alternative, or internal design refinement.
 Live GitHub details should be linked or queried rather than copied exhaustively.
 
 Write status in project terms. Avoid phrases such as:
@@ -120,12 +139,17 @@ Write status in project terms. Avoid phrases such as:
 - instructions addressed only to an agent.
 
 A status section should state the project condition directly: what is accepted,
-what is under review, what is next, what is blocked, and where the governing
-material lives.
+what is active, what is next, what is blocked, and where the governing material
+lives.
 
 Before changing `STATUS.md`, check the governing artifacts and live repository
-state. After changing it, verify that a human reader can understand the project
-position without knowing who wrote the file.
+state. After changing it, verify that:
+
+- a human reader can understand the project position without knowing who wrote
+  the file;
+- each detail appears at the abstraction level owned by status; and
+- an internal change to a linked plan or design would not make status stale unless
+  the durable project position also changed.
 
 ## Change control
 
