@@ -1,157 +1,135 @@
 # Milestone 1 gates — framework-alignment research
 
-Status: final operating-context extension under review  
-Date: 2026-07-24
+Status: historical gate with accepted products and active corrections in owning artifacts  
+Date: 2026-07-25
 
 ## Milestone result
 
-The project has an accepted, evidence-backed basis for designing and implementing
-ClanBasedTuning in a framework-native manner. The result is a coherent authority
-chain, inspectable research and evidence, accepted cross-milestone constraints,
-roadmap-derived milestone gates, an actionable Milestone 2 plan, and durable
-working-process context that a new contributor can use without prior
-conversation.
+The project has an evidence-backed basis for designing and implementing
+ClanBasedTuning in a framework-native manner. The result includes a coherent
+authority chain, inspectable research and evidence, accepted cross-milestone
+constraints, roadmap-derived milestone gates, and durable working-process context
+for new contributors.
+
+Milestone 1 does not select the Milestone 2 controller API or the Milestone 3 Ray
+integration seam.
 
 ## Authority and research gates
 
 ### M1.1 Status and authority are unambiguous
 
-- The product roadmap is the governing project contract.
-- Accepted project decisions remain governing unless a concrete conflict
-  explicitly reopens a specific clause.
-- Research, evidence, decisions, milestone gates, plans, implementation evidence,
-  status, and review history each have one stated role.
-- Preliminary structural acceptance, technical acceptance, and final milestone
-  closure are distinguishable.
+- The product roadmap governs product meaning and milestone sequence.
+- Accepted project decisions govern the questions they resolve.
+- Research, evidence, decisions, gates, designs, plans, status, acceptance records,
+  audit history, and scratchwork each have one stated role.
+- Preliminary proposals do not become authority through location or repetition.
 
 ### M1.2 The framework responsibility model is coherent
 
 The research report explains the relevant PyTorch, Lightning, and Ray Tune
-lifecycles and assigns each ordinary responsibility to its native owner. The
+lifecycles and assigns ordinary responsibilities to their native owners.
 ClanBasedTuning responsibilities follow from the Clan mechanism rather than from
 the current proof of concept.
-
-The report does not make a framework behavior into a ClanBasedTuning subsystem
-or assign it to a milestone merely because the behavior was investigated.
 
 ### M1.3 Decision corrections are narrow and accepted
 
 - P1, P2, P5, and P6 retain their accepted authority.
-- P3 leaves the PBT-specialization versus direct-controller choice to Milestone 2.
+- P3 separates the independent population policy from the later Ray invocation
+  decision.
 - P4 assigns sole-parent selection to ClanBasedTuning while Ray executes the
-  resulting checkpoint/configuration assignment and Lightning restores state.
-- P7 retains the collective validity and completion rule without inventing
-  milestone-specific recovery subsystems.
-- The accepted revisions remain concise, cross-milestone, and free of detailed
-  milestone planning or temporary support claims.
+  selected state/configuration assignment and Lightning restores state.
+- P7 retains collective validity without inventing milestone-specific recovery
+  subsystems.
 
 ## Evidence and test gates
 
 ### M1.4 Decisive framework claims are auditable
 
 Every material framework claim identifies direct source, documentation, a
-focused probe, or a clearly stated inference from those materials. Exact upstream
-revisions provide research reproducibility without becoming exact package pins.
-
-A reviewer can trace each accepted decision or correction to supporting evidence,
-see the alternative considered, and identify the remaining qualification
-question.
+focused probe, or a clearly stated inference. Exact upstream revisions provide
+research reproducibility without becoming unsupported public compatibility
+claims.
 
 ### M1.5 Evidence does not become hidden planning authority
 
 The evidence ledger records observations, probes, inference, alternatives, and
-open questions. It does not assign completion obligations; milestone gates and
-active plans determine when an answer becomes necessary.
+open questions. It does not assign completion obligations. Gates determine what
+must be true; accepted designs determine component contracts; active plans
+sequence work inside the current gate.
 
 ### M1.6 Current proof-of-concept evidence is scoped honestly
 
 Current code, tests, and examples are identified by the mechanism they actually
-demonstrate. Their record states which accepted conclusions they support and
-which milestone or support claims they do not establish.
-
-Milestone 1 does not require a new product example merely to manufacture one.
-Its example obligation is to make existing evidence legible, reproducible where
-practical, and correctly limited.
+demonstrate. They do not establish an accepted public architecture or satisfy a
+later milestone merely because they run.
 
 ## Documentation-system gates
 
-### M1.7 The reader path has one primary home for each question
+### M1.7 Each reader question has one primary home
 
-The roadmap, package index, research report, evidence ledger, project decisions,
-standing review, milestone gates, Milestone 2 plan, status file, LLM operating
-context, and human review record each perform one complete assigned job without
-competing authority or unnecessary repetition.
+The roadmap, decisions, research report, evidence ledger, standing review,
+milestone gates, active plans, status, working-process documents, acceptance
+record, review audit, and scratchwork each perform a distinct job without
+competing authority.
 
 ### M1.8 The standing engineering review is repeatedly usable
 
 The standing review tests algorithmic fidelity, native ownership, demonstrated
-framework gaps, narrow authority, and evidence. It routes detailed project
-requirements to the gate where they become enforceable and component behavior to
-the design artifact for its actual owner.
+framework gaps, narrow authority, and evidence. Detailed component behavior stays
+with the accepted design for its actual owner.
 
 ### M1.9 The repository transfers its working process
 
-A new contributor or fresh LLM session can discover and apply the working method
-without reconstructing it from prior conversation:
+A new contributor can discover and apply the working method without prior
+conversation:
 
-- a stable root entry point routes coding agents to the operating context;
-- the senior-engineering workflow is preserved as a durable executable process;
-- technical writing uses a concise backward-capable workflow and separate
-  standards reference rather than one combined manual;
-- the operating context explains authority discovery, targeted context loading,
-  change control, and consultation thresholds;
-- `STATUS.md` is maintained as ordinary shared project documentation for humans
-  and tools, not as an LLM scratchpad or autonomous work queue;
-- when the current assignment is not stated, repository status provides
-  orientation but the contributor asks the human what should be resumed; and
-- a reader can identify the governing artifact, task boundary, completion
-  standard, and changes requiring consultation before substantial action.
+- the root README dispatches project readers without claiming unaccepted APIs;
+- `AGENTS.md` routes coding agents to durable process instructions;
+- the senior-engineering workflow requires continuous contract, boundary,
+  documentation, adversarial, and review-unit passes;
+- the technical-writing workflow separates artifact role, information home,
+  reader path, and prose;
+- contributors read the nearest documentation `README.md` before editing a
+  subtree;
+- `STATUS.md` remains shared status rather than an LLM scratchpad or roadmap; and
+- PRs are self-contained mergeable increments rather than progress dumps or
+  substitutes for design discussion.
 
 ## Milestone-contract gates
 
-### M1.10 Later gates derive from the roadmap at the appropriate precision
+### M1.10 Later gates derive from the roadmap at appropriate precision
 
-- Every roadmap milestone has a gate covering its capability, tests,
-  documentation, examples or scientific work, evidence, and handoff.
+- Every roadmap milestone has a gate covering its capability and relevant
+  evidence.
 - Normal cumulative progression is represented as activation, not deferral.
-- Milestone 2 is detailed enough to execute next.
-- Milestones 3 through 6 state required results, major boundaries, and expected
-  evidence without pretending their final designs or test matrices are settled.
+- The active Milestone 2 gate is detailed enough to judge the independent
+  controller.
+- Later gates state required results and major boundaries without pretending their
+  final designs are settled.
 
-### M1.11 The Milestone 2 plan is actionable and responsibility-correct
+### M1.11 Milestone 2 can begin without a shadow contract
 
-The plan:
+The Milestone 2 gate establishes the independently invokable controller result.
+The active plan sequences design, implementation, and demonstration inside that
+gate without adding acceptance criteria or choosing the Milestone 3 Ray seam.
 
-- begins by resolving the roadmap's choice between a narrow PBT specialization
-  and a direct controller with a thin Ray adapter;
-- records and justifies the selected controller form before later work depends on
-  it;
-- develops the controller implementation, focused and framework-contract tests,
-  design and API documentation, inspectable example, and Milestone 3 handoff
-  together;
-- ends at an independently invokable population-decision subsystem; and
-- leaves complete Lightning/DDP training, checkpoint transition, data, resource,
-  and distributed lifecycle integration to Milestone 3.
+Tentative alternatives remain scratchwork until accepted. A plan stored beside
+gates does not acquire gate authority merely from its location.
 
-## Human acceptance gate
+## Human review gate
 
-### M1.12 Human review accepts the complete package
+### M1.12 Human review accepts the package products it relies on
 
-Human review:
+Human review records accepted framework conclusions and responsibility decisions
+in the acceptance record. Rejected iterations and process failures remain in the
+review audit. Technical corrections are applied in their owning artifacts.
 
-- accepts the framework-alignment conclusions, decisions, evidence
-  interpretation, standing review, milestone gate system, Milestone 2 plan, and
-  proof-of-concept evidence classification;
-- accepts the durable LLM operating context, technical-writing workflow and
-  standards split, and shared status contract;
-- confirms that the repository can transfer both project authority and working
-  process without prior conversational context; and
-- retains any unresolved question required to begin Milestone 2 as an explicit
-  blocker.
+This file contains no milestone-closure declaration. Closure depends on explicit
+human review of the gate and its cited evidence.
 
-## Closure evidence
+## Evidence
 
-Milestone 1 closes with links to the accepted research report, evidence ledger,
-project decisions, standing review, complete milestone gate system, Milestone 2
-plan, scoped current-evidence record, LLM operating context, shared project
-status, and human review decision.
+The Milestone 1 evidence set includes the research report, evidence ledger,
+project decisions, standing framework-native review, milestone gate system,
+durable working-process documents, shared status file, acceptance record, and
+review audit.
