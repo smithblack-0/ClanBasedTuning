@@ -72,9 +72,7 @@ def test_linear_mutation_is_additive_in_ordinary_coordinates():
     }
     expected = 0.5 + random.Random(3).gauss(0.0, 0.1)
 
-    configs = _controller(population_size=2, parameters=parameters).initialize(
-        ["a", "b"], seed=3
-    )
+    configs = _controller(population_size=2, parameters=parameters).initialize(["a", "b"], seed=3)
 
     assert configs["b"]["momentum"] == pytest.approx(expected)
 
@@ -91,9 +89,7 @@ def test_log_mutation_is_multiplicative_in_ordinary_coordinates():
     }
     displacement = random.Random(5).gauss(0.0, 0.2)
 
-    configs = _controller(population_size=2, parameters=parameters).initialize(
-        ["a", "b"], seed=5
-    )
+    configs = _controller(population_size=2, parameters=parameters).initialize(["a", "b"], seed=5)
 
     assert configs["b"]["lr"] == pytest.approx(0.01 * math.exp(displacement))
 
@@ -116,9 +112,7 @@ def test_mutations_are_constrained_to_declared_bounds():
         },
     }
 
-    configs = _controller(population_size=2, parameters=parameters).initialize(
-        ["a", "b"], seed=0
-    )
+    configs = _controller(population_size=2, parameters=parameters).initialize(["a", "b"], seed=0)
 
     assert 0.0 <= configs["b"]["linear"] <= 1.0
     assert 0.5 <= configs["b"]["log"] <= 2.0
@@ -140,9 +134,7 @@ def test_max_mode_and_ties_use_stable_member_identity():
         "trial-a": {"fitness": 1.0, "config": {"lr": 0.02, "weight_decay": 0.02}},
     }
 
-    parent_id, configs = _controller(mode="max", population_size=2).advance(
-        population, seed=3
-    )
+    parent_id, configs = _controller(mode="max", population_size=2).advance(population, seed=3)
 
     assert parent_id == "trial-a"
     assert configs["trial-a"] == {"lr": 0.02, "weight_decay": 0.02}
