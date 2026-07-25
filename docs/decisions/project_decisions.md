@@ -94,22 +94,22 @@ population.
 The integration milestone owns the concrete sampler, metric, and reporting
 contract.
 
-**Status:** accepted.
+**Status:** accepted. The comparison-owner wording is aligned with P3 and P4;
+the accepted data and fitness semantics are unchanged.
 
-## P6. Native PyTorch distributed execution owns shared-gradient mechanics
+## P6. Native PyTorch DDP owns shared-gradient execution
 
-PyTorch's qualified distributed strategy owns ordinary model wrapping, gradient
-bucketing, initial synchronization, and gradient collectives wherever its
-qualified behavior fits. ClanBasedTuning may configure or narrowly specialize
-the framework boundary, but it does not reimplement normal gradient reduction.
+PyTorch DDP owns ordinary model wrapping, gradient bucketing, initial
+synchronization, and gradient collectives wherever its qualified behavior fits.
+ClanBasedTuning may configure or narrowly specialize the framework boundary, but
+it does not reimplement normal all-reduce.
 
-Milestone 3 must prove the first supported DDP path does not erase intended
-member divergence. Later model-sharding support must preserve the same Clan
-semantics through its native PyTorch/Lightning strategy rather than creating a
-second distributed implementation.
+The integration milestone must prove that native synchronization does not erase
+intended member divergence.
 
-**Status:** accepted core with scope clarification for the roadmap's later
-model-sharding milestone.
+**Status:** accepted unchanged. Later model-sharding support is introduced and
+qualified by the roadmap's industry milestone rather than by rewriting this DDP
+contract in advance.
 
 ## P7. Failure and planned completion are collective
 
@@ -118,14 +118,13 @@ occurs only at a synchronized population boundary and ends the complete Clan.
 No supported path may silently continue one member independently, shrink the
 active population, or redefine a partial population as a valid Clan.
 
-The controller must reject incomplete population input. The complete integration
-must terminate or invalidate broken distributed execution clearly. Operational
-interruption recovery becomes enforceable when the industry milestone defines
-and qualifies its support envelope. These are applications of one collective
-validity rule, not separate controller, integration, and production recovery
-subsystems.
+Detailed termination, invalidation, diagnosis, and operational recovery behavior
+belongs in the integration and support contracts where those capabilities become
+enforceable. This decision states the collective validity rule; it does not
+create separate recovery subsystems or assign their detailed qualification.
 
-**Status:** collective rule accepted; revised milestone-allocation text proposed.
+**Status:** collective rule accepted; revised removal of the milestone-specific
+recovery allocation proposed.
 
 ## Supporting record
 
