@@ -5,8 +5,9 @@ training with member-local optimizer hyperparameters and population selection.
 
 ## Project status
 
-The current source and examples are proof-of-concept evidence. They are not an
-accepted architecture or stable public API.
+The framework-independent Clan controller is the first accepted implementation
+surface. Existing Ray/Lightning integration source and examples remain
+proof-of-concept evidence rather than an accepted construction API.
 
 Read [`STATUS.md`](STATUS.md) for the current durable project position.
 
@@ -18,15 +19,17 @@ Read [`STATUS.md`](STATUS.md) for the current durable project position.
   accepted cross-milestone technical decisions.
 - [`docs/milestones/README.md`](docs/milestones/README.md) — milestone-gate rules
   and links to the active gate.
+- [`docs/controller/README.md`](docs/controller/README.md) — controller lifecycle,
+  ownership, algorithms, and API reference.
 - [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
   framework research, evidence, and accepted responsibility model.
 - [`AGENTS.md`](AGENTS.md) — entry point for coding agents and contributors using
   the repository's durable engineering process.
 
-## [TODO] Accepted public API and usage
+## [TODO] Accepted construction and integration API
 
-The milestone that accepts a public construction and integration contract will
-publish the corresponding API reference and usage guide. Until then, existing
+The milestone that accepts a Ray/Lightning construction and integration contract
+will publish the corresponding usage guide. Until then, existing integration
 classes and examples should be read as implementation evidence rather than user
 contracts.
 
