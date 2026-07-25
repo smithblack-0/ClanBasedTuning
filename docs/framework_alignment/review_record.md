@@ -137,8 +137,8 @@ milestone responsibility model.
 The first technical-writing draft combined standards and execution in one long
 manual. Review accepted the standards content but rejected the combined form
 because the iterative workflow and backward edges were obscured by evaluation
-detail. The correction separates the executable control loop from the standards
-used to judge each stage.
+detail. The correction separates the concise executable control loop from the
+standards used to judge each stage.
 
 ## Current artifact review status
 
