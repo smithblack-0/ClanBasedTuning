@@ -42,7 +42,8 @@ required fields:
 | `minimum` | Inclusive lower bound. Must be positive for `log`. |
 | `maximum` | Inclusive upper bound. |
 
-`mode` is `"min"` or `"max"`. `seed` initializes the controller's random stream.
+`mode` is `"min"` or `"max"`. `seed` must be an explicit non-`None` value and
+initializes the controller's reproducible random stream.
 
 ## `initial_configurations(population_size)`
 
