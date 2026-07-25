@@ -1,6 +1,6 @@
 # Milestone 2 controller plan
 
-Status: active plan under human review  
+Status: active execution plan  
 Date: 2026-07-25
 
 ## Governing boundary
