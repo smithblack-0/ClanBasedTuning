@@ -7,7 +7,7 @@ import pytest
 from clan_based_tuning.controller import ClanPopulationPolicy, MemberResult
 
 
-def _population():
+def _population() -> dict[str, MemberResult]:
     return {
         "trial-c": MemberResult(0.8, {"lr": 0.03, "weight_decay": 0.003, "batch_size": 64}),
         "trial-a": MemberResult(0.2, {"lr": 0.01, "weight_decay": 0.001, "batch_size": 64}),
@@ -64,7 +64,7 @@ def test_same_input_and_seed_produce_same_decision_without_state():
     policy = ClanPopulationPolicy(mode="min", field_factors={"lr": (0.8, 1.2)})
 
     first = policy.decide(_population(), seed=41)
-    second = policy.decide(dict(reversed(list(_population().items()))), seed=41)
+    second = policy.decide(dict(reversed(_population().items())), seed=41)
 
     assert first == second
 
@@ -79,9 +79,11 @@ def test_decision_does_not_modify_input_configurations():
 
     policy.decide(population, seed=5)
 
-    assert {
-        member_id: dict(result.optimizer_config) for member_id, result in population.items()
-    } == original
+    current = {
+        member_id: dict(result.optimizer_config)
+        for member_id, result in population.items()
+    }
+    assert current == original
 
 
 @pytest.mark.parametrize(
@@ -99,7 +101,7 @@ def test_decision_does_not_modify_input_configurations():
                 "b": MemberResult(1.0, {"lr": 0.2}),
             },
             ValueError,
-            "fitness.*finite",
+            r"fitness.*finite",
         ),
     ],
 )
@@ -123,7 +125,7 @@ def test_missing_or_nonnumeric_parent_field_is_rejected():
 
     with pytest.raises(ValueError, match="missing field 'lr'"):
         policy.decide(missing, seed=1)
-    with pytest.raises(TypeError, match="field 'lr'.*real scalar"):
+    with pytest.raises(TypeError, match=r"field 'lr'.*real scalar"):
         policy.decide(nonnumeric, seed=1)
 
 
@@ -134,7 +136,7 @@ def test_failure_does_not_change_later_decisions():
         "b": MemberResult(1.0, {"lr": 0.2}),
     }
 
-    with pytest.raises(ValueError, match="fitness.*finite"):
+    with pytest.raises(ValueError, match=r"fitness.*finite"):
         policy.decide(invalid, seed=11)
 
     assert policy.decide(_population(), seed=11) == ClanPopulationPolicy(
