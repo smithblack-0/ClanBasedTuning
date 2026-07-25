@@ -1,5 +1,10 @@
 """Clan Based Training: synchronous PBT over shared-gradient native trials."""
 
+from clan_based_tuning.controller import (
+    ClanPopulationPolicy,
+    MemberResult,
+    PopulationDecision,
+)
 from clan_based_tuning.factory import (
     ClanLightningPlugins,
     make_clan_lightning_plugins,
@@ -18,6 +23,9 @@ __all__ = [
     "ClanDDPStrategy",
     "ClanLightningEnvironment",
     "ClanLightningPlugins",
+    "ClanPopulationPolicy",
+    "MemberResult",
+    "PopulationDecision",
     "apply_optimizer_strategy",
     "make_clan_lightning_plugins",
     "prepare_clan_trainer",
