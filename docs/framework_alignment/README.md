@@ -56,7 +56,7 @@ explicitly accepts them as product evidence.
 | [Evidence ledger](evidence_ledger.md) | Accepted audit record | Preserves source observations, probes, inference, alternatives, and open questions without assigning milestone work. |
 | [Framework-native review](../reviews/framework_native_review.md) | Accepted standing review | Tests meaningful boundaries for algorithmic fidelity, native ownership, narrow seams, and evidence. |
 | [Milestone gates](../milestones/README.md) | Milestone contracts | State the cumulative project result and evidence that become enforceable at each roadmap milestone. |
-| [LLM operating context](../llm/README.md) | Standing process material under final review | Transfers the engineering, writing, authority-discovery, change-control, and status-maintenance process. |
+| [LLM operating context](../llm/README.md) | Standing process material under final review | Transfers the engineering workflow, technical-writing workflow and standards, authority discovery, change control, and status maintenance. |
 | [`STATUS.md`](../../STATUS.md) | Shared project status | States the latest durable project position for humans and tools without determining current user intent. |
 | [Evolutionary-controller plan](../milestones/evolutionary_controller_plan.md) | Accepted Milestone 2 execution plan | Sequences Milestone 2 work without replacing its gate. |
 | [Human review record](review_record.md) | Audit record | Records review outcomes without becoming a technical decision or gate source. |
