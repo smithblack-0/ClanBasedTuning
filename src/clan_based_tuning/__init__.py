@@ -1,5 +1,6 @@
-"""Clan Based Training: synchronous PBT over shared-gradient native trials."""
+"""Clan Tuning policy and framework-integration research surfaces."""
 
+from clan_based_tuning.controller import ClanController
 from clan_based_tuning.factory import (
     ClanLightningPlugins,
     make_clan_lightning_plugins,
@@ -15,6 +16,7 @@ from clan_based_tuning.ray import ClanBasedTraining, tune_checkpoint_path
 
 __all__ = [
     "ClanBasedTraining",
+    "ClanController",
     "ClanDDPStrategy",
     "ClanLightningEnvironment",
     "ClanLightningPlugins",
