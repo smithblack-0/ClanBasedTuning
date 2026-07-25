@@ -1,6 +1,6 @@
 # Milestone 1 gates — framework-alignment research
 
-Status: historical gate with accepted products and active corrections in owning artifacts  
+Status: historical framework-alignment gate  
 Date: 2026-07-25
 
 ## Milestone result
