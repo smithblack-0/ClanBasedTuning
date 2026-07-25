@@ -22,7 +22,7 @@ The repository is adding:
 - the business-technical writing workflow used for project documentation; and
 - maintenance rules for this status file.
 
-This work is being reviewed in PR #9.
+This operating-context extension is under review.
 
 ## Next planned milestone
 
