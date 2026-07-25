@@ -248,7 +248,7 @@ def test_parameter_contract_rejects_invalid_policy():
 
     invalid = _parameters()
     invalid["lr"]["sampling"] = "uniform"
-    with pytest.raises(ValueError, match="linear.*log"):
+    with pytest.raises(ValueError, match="must be 'linear' or 'log'"):
         ClanController(parameters=invalid, mode="min")
 
     invalid = _parameters()
