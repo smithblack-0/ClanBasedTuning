@@ -1,6 +1,6 @@
 # Framework-native engineering review
 
-Status: standing go/no-go review under Milestone 1 alignment review  
+Status: accepted standing go/no-go review  
 Date: 2026-07-24
 
 ## Purpose
@@ -11,14 +11,15 @@ ClanBasedTuning boundary. It answers one question:
 > Does this unit preserve the Clan mechanism while leaving ordinary framework
 > behavior with its native owner?
 
-This is not a design specification or milestone plan. Detailed project
-requirements belong in the gate where the roadmap makes them enforceable;
-detailed component behavior belongs in the design artifact for the component
-that owns it.
+This is not a design specification, milestone gate, or execution plan. Detailed
+project requirements belong in the gate where the roadmap makes them enforceable;
+detailed component behavior belongs in the accepted design artifact for the
+component that owns it; execution sequence belongs only in a plan scoped to the
+active gate.
 
-Accepted project decisions remain governing inputs unless an explicit alignment
-record reopens a clause. A reopened clause may not be used as implementation
-authority until its replacement is accepted.
+Accepted project decisions remain governing inputs unless an explicit review
+reopens a clause. A reopened clause may not be used as implementation authority
+until its replacement is accepted.
 
 ## Application
 
@@ -112,6 +113,6 @@ configuration before expensive work begins.
 ## Supporting documents
 
 - [Product roadmap](../product_roadmap.md)
-- [Project decisions and reopened clauses](../decisions/project_decisions.md)
+- [Project decisions](../decisions/project_decisions.md)
 - [Milestone gates](../milestones/README.md)
 - [Framework evidence ledger](../framework_alignment/evidence_ledger.md)
