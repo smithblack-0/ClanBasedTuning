@@ -178,7 +178,7 @@ class ClanController:
         return mutated
 
     def _normalize_fitnesses(self, fitnesses):
-        if isinstance(fitnesses, str | bytes) or not isinstance(fitnesses, Sequence):
+        if isinstance(fitnesses, (str, bytes)) or not isinstance(fitnesses, Sequence):
             raise TypeError("fitnesses must be a rank-ordered sequence")
         return [
             self._finite_float(fitness, f"fitness at rank {rank}")
@@ -186,7 +186,9 @@ class ClanController:
         ]
 
     def _normalize_configurations(self, configurations):
-        if isinstance(configurations, str | bytes) or not isinstance(configurations, Sequence):
+        if isinstance(configurations, (str, bytes)) or not isinstance(
+            configurations, Sequence
+        ):
             raise TypeError("configurations must be a rank-ordered sequence")
         return [
             self._normalize_configuration(configuration, rank)
@@ -221,11 +223,14 @@ class ClanController:
         if not isinstance(hyperparameters, Mapping) or not hyperparameters:
             raise ValueError("hyperparameters must be a non-empty mapping")
 
-        normalized = {}
-        for name in sorted(hyperparameters):
-            specification = hyperparameters[name]
+        names = list(hyperparameters)
+        for name in names:
             if not isinstance(name, str) or not name:
                 raise ValueError("hyperparameter names must be non-empty strings")
+
+        normalized = {}
+        for name in sorted(names):
+            specification = hyperparameters[name]
             if not isinstance(specification, Mapping):
                 raise TypeError(f"specification for {name!r} must be a mapping")
             if set(specification) != _SPEC_FIELDS:
