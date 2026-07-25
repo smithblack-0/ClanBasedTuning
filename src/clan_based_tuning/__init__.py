@@ -1,3 +1,5 @@
+# ruff: noqa
+
 """Clan Based Training: synchronous PBT over shared-gradient native trials."""
 
 from clan_based_tuning.controller import (
