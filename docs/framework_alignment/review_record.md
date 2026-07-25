@@ -1,8 +1,9 @@
 # Milestone 1 human review record
 
-Status: accepted; Milestone 1 closed  
+Status: framework alignment accepted; final operating-context review open  
 Date opened: 2026-07-24  
-Date closed: 2026-07-24
+Framework alignment accepted: 2026-07-24  
+Milestone closure reopened: 2026-07-24
 
 ## Purpose
 
@@ -68,9 +69,9 @@ workflow. Derive milestone requirements from the roadmap Outcome, Work, and Exit
 apply the senior-engineering main-idea, ownership, boundary, and reduction passes;
 then reuse prior text only when it survives those checks.
 
-### Full Milestone 1 alignment pass
+### Full framework-alignment pass
 
-**Result:** accepted. Milestone 1 passed human review.
+**Result:** accepted.
 
 The alignment pass preserved accepted decisions by default and reopened only
 clauses with demonstrated conflicts:
@@ -103,11 +104,43 @@ Accepted corrections made in the owning artifacts:
   choice and stop at the independently invokable controller handoff;
 - Milestone 3 contains the first complete normal checkpoint-driven Clan workflow;
 - Milestones 4 and 5 add usability and optimizer utility without creating new
-  restoration contracts;
+  restoration contracts; and
 - Milestone 6 contains the declared operational recovery and industry support
   envelope without precommitting to a final failure taxonomy.
 
-## Final artifact status
+### Operating-context reopening
+
+**Result:** final Milestone 1 closure reopened narrowly; review in progress.
+
+After accepting the framework-alignment package, review identified a remaining
+transferability gap. The repository described the project model and milestone
+work, but did not preserve enough of the working process that a fresh LLM session
+or new contributor could reliably apply it without conversational apprenticeship.
+
+The reopening does not revisit the accepted framework conclusions, decisions, or
+milestone responsibility model.
+
+**Required addition:**
+
+- a stable root entry point for coding agents;
+- a durable senior-engineering workflow;
+- a concise backward-capable technical-writing workflow with separate detailed
+  writing standards;
+- authority-discovery, targeted-loading, change-control, and consultation rules;
+- a root `STATUS.md` written as ordinary shared project documentation for humans
+  and tools;
+- explicit maintenance rules preventing `STATUS.md` from becoming an LLM-only
+  scratchpad or autonomous work queue; and
+- a cold-start standard under which ambiguous continuation requests are confirmed
+  with the human rather than inferred from repository state.
+
+The first technical-writing draft combined standards and execution in one long
+manual. Review accepted the standards content but rejected the combined form
+because the iterative workflow and backward edges were obscured by evaluation
+detail. The correction separates the concise executable control loop from the
+standards used to judge each stage.
+
+## Current artifact review status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
@@ -117,13 +150,15 @@ Accepted corrections made in the owning artifacts:
 | Research report | Accepted explanatory basis | Explains the governing responsibility model without becoming decision authority. |
 | Evidence ledger | Accepted audit record | Evidence and open questions are separated from gates and plans. |
 | Framework-native review | Accepted standing review | Component ownership and milestone activation are distinguished. |
-| Milestone gate system | Accepted | Complete-project dimensions, roadmap activation, and future-gate precision rules govern milestone closure. |
-| Milestone 1 gate | Passed | The complete framework-alignment package was accepted. |
-| Milestone 2 gate and plan | Accepted for execution | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
+| Milestone gate system | Accepted with final M1 extension under review | Complete-project dimensions and roadmap activation govern milestone closure; M1 now includes operating-process transfer. |
+| Milestone 2 gate and plan | Accepted for execution after final M1 closure | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
 | Milestone 3–6 gates | Accepted as future milestone contracts | State roadmap results and major evidence without premature issue-level design. |
+| LLM operating context | Under review | Must transfer engineering workflow, technical-writing workflow and standards, authority discovery, change control, and status maintenance. |
+| `STATUS.md` | Under review | Must remain concise shared project status for humans and tools, not a session handoff artifact. |
 
 ## Closure
 
-Milestone 1 passed human review on 2026-07-24. No blocker prevents beginning
-Milestone 2. Future evidence may reopen an accepted decision through the normal
-explicit decision process; it does not reopen Milestone 1 by implication.
+The framework-alignment package is accepted and remains governing. Milestone 1
+closes after human review accepts the operating-context extension and confirms
+that a fresh contributor can discover both project authority and working process
+without prior conversation. No other Milestone 1 issue is reopened.
