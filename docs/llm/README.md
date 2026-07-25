@@ -51,16 +51,17 @@ Use artifacts for their assigned jobs:
    cross-milestone questions they resolve unless a specific clause is reopened.
 3. [Milestone gates](../milestones/README.md) state what must be true before a
    milestone closes.
-4. Accepted designs define component contracts. Active plans sequence work only
-   within the current gate and may not decide later milestones in advance.
+4. Accepted designs define component contracts. [Active plans](../plans/README.md)
+   sequence work only within the current gate and may not decide later milestones
+   in advance.
 5. Research and evidence support conclusions; they do not independently assign
    work or override accepted decisions.
 6. Code and tests establish current behavior. Existing behavior is evidence, not
    automatic architectural authority.
 7. Review records preserve accepted outcomes. Audit files preserve rejected
    iterations and failure history; neither substitutes for the owning artifact.
-8. Scratchwork stores tentative research, alternatives, and reasoning that has
-   not become project authority.
+8. [Scratchwork](../scratchwork/README.md) stores tentative research, alternatives,
+   and reasoning that has not become project authority.
 
 When artifacts disagree, identify their roles before editing. Correct the
 artifact that owns the contradiction rather than patching the nearest file or
