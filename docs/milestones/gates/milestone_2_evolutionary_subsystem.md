@@ -1,6 +1,14 @@
 # Milestone 2 gates — evolutionary subsystem
 
-Status: proposed completion gates pending Milestone 1 acceptance
+Status: proposed completion gates pending Milestone 1 closure  
+Date: 2026-07-24
+
+## Governing basis
+
+The roadmap and accepted project decisions govern this milestone. Milestone 1
+must accept replacements for the reopened P3 controller-form clause, P4
+parent-selection authority clause, and P7 recovery-allocation clause before this
+gate becomes executable. Unaffected accepted decisions remain governing.
 
 ## Milestone result
 
@@ -110,7 +118,7 @@ become the only route to policy testing, explanation, or reuse.
 
 The milestone delivers:
 
-- the accepted controller design and the option analysis behind it;
+- the accepted controller design and option analysis behind it;
 - public API and configuration reference;
 - selection, tie, mutation, retention, state, and failure semantics;
 - the chosen framework seam, version assumptions, and evidence that would reopen
