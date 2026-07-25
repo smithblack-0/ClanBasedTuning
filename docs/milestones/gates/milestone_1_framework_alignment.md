@@ -1,6 +1,6 @@
 # Milestone 1 gates — framework-alignment research
 
-Status: final operating-context extension under review  
+Status: complete  
 Date: 2026-07-24
 
 ## Milestone result
@@ -37,7 +37,8 @@ or assign it to a milestone merely because the behavior was investigated.
 ### M1.3 Decision corrections are narrow and accepted
 
 - P1, P2, P5, and P6 retain their accepted authority.
-- P3 leaves the PBT-specialization versus direct-controller choice to Milestone 2.
+- P3 separates the independently invokable controller delivered by Milestone 2
+  from the Ray invocation form selected and implemented by Milestone 3.
 - P4 assigns sole-parent selection to ClanBasedTuning while Ray executes the
   resulting checkpoint/configuration assignment and Lightning restores state.
 - P7 retains the collective validity and completion rule without inventing
@@ -102,6 +103,8 @@ without reconstructing it from prior conversation:
   change control, and consultation thresholds;
 - `STATUS.md` is maintained as ordinary shared project documentation for humans
   and tools, not as an LLM scratchpad or autonomous work queue;
+- status exposes durable project abstractions and links to owning contracts rather
+  than duplicating subordinate plan and design details;
 - when the current assignment is not stated, repository status provides
   orientation but the contributor asks the human what should be resumed; and
 - a reader can identify the governing artifact, task boundary, completion
@@ -122,16 +125,18 @@ without reconstructing it from prior conversation:
 
 The plan:
 
-- begins by resolving the roadmap's choice between a narrow PBT specialization
-  and a direct controller with a thin Ray adapter;
-- records and justifies the selected controller form before later work depends on
-  it;
-- develops the controller implementation, focused and framework-contract tests,
-  design and API documentation, inspectable example, and Milestone 3 handoff
+- begins by defining the independently invokable controller and public population
+  decision contract;
+- develops deterministic selection, optimizer-configuration policy, intentional
+  state, focused tests, design and API documentation, and an inspectable example
   together;
-- ends at an independently invokable population-decision subsystem; and
-- leaves complete Lightning/DDP training, checkpoint transition, data, resource,
-  and distributed lifecycle integration to Milestone 3.
+- tests that the public contract is ready for its immediate Ray consumer without
+  selecting a scheduler, adapter, or private hook;
+- ends at an independently invokable population-decision subsystem and a concrete
+  integration-readiness handoff; and
+- leaves Ray invocation-form selection, complete Lightning/DDP training,
+  checkpoint transition, data, resources, and distributed lifecycle integration
+  to Milestone 3.
 
 ## Human acceptance gate
 
@@ -143,7 +148,7 @@ Human review:
   interpretation, standing review, milestone gate system, Milestone 2 plan, and
   proof-of-concept evidence classification;
 - accepts the durable LLM operating context, technical-writing workflow and
-  standards split, and shared status contract;
+  standards split, shared status contract, and status abstraction rule;
 - confirms that the repository can transfer both project authority and working
   process without prior conversational context; and
 - retains any unresolved question required to begin Milestone 2 as an explicit
@@ -151,7 +156,7 @@ Human review:
 
 ## Closure evidence
 
-Milestone 1 closes with links to the accepted research report, evidence ledger,
-project decisions, standing review, complete milestone gate system, Milestone 2
-plan, scoped current-evidence record, LLM operating context, shared project
-status, and human review decision.
+Milestone 1 closed with the accepted research report, evidence ledger, project
+decisions, standing review, complete milestone gate system, Milestone 2 plan,
+scoped current-evidence record, LLM operating context, shared project status, and
+human review decision.
