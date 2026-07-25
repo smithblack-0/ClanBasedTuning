@@ -51,17 +51,22 @@ and current project state. It may not:
 - become a second roadmap or cross-milestone contract; or
 - remain authoritative after its gate closes unless explicitly reassigned.
 
-When current work discovers a condition that a later milestone genuinely must
-satisfy, propose that condition as a reviewed amendment to the later gate. Do
-not preserve it as a forward promise hidden in the current plan.
+When current work establishes a condition that a later milestone genuinely must
+satisfy, insert that condition directly into the owning future gate at the
+behavioral dependency level. State what current capability must be connected or
+preserved and what observable result must occur. Do not choose the future class,
+hook, adapter, framework seam, or strategy while recording that dependency.
 
 `docs/milestones/` contains this system description and the gate files only.
 Durable plans, when justified, must live in a clearly identified planning or
 design location, state their active-milestone scope and authority, and link back
-to the gate they serve. Exploratory scratch normally remains in the current
-conversation, issue, or pull request. The project currently maintains no
-persistent LLM scratch-planning directory; create one only after explicit human
-approval and with unmistakable preliminary status.
+to the gate they serve.
+
+Preliminary implementation ideas, option fragments, and unresolved possibilities
+may be preserved in [`docs/llm/scratchwork/`](../llm/scratchwork/README.md). That
+material is explicitly non-authoritative and disposable. It may inform later
+design work, but it cannot assign requirements, narrow gates, or preselect later
+implementation choices.
 
 ## Gate review tests
 
@@ -93,8 +98,9 @@ Before accepting or revising a durable plan, verify that:
   design chosen within it;
 - the plan does not convert one implementation choice into a gate condition;
 - the plan stops at the active gate boundary;
-- any newly discovered future necessity is proposed to the owning future gate
-  rather than asserted by the plan;
+- any established future dependency is inserted into the owning future gate at
+  the behavioral level rather than asserted by the plan;
+- speculative future implementation ideas remain non-authoritative scratchwork;
 - deleting the plan would leave the roadmap, gates, and accepted decisions
   complete; and
 - the plan can be retired when the gate closes without removing project truth.
