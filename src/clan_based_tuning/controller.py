@@ -67,9 +67,16 @@ class ClanPopulationPolicy:
                 raise ValueError("optimizer field names must be non-empty strings")
             normalized = tuple(float(factor) for factor in factors)
             if not normalized:
-                raise ValueError(f"field {field!r} must provide at least one scale factor")
-            if any(not math.isfinite(factor) or factor <= 0.0 for factor in normalized):
-                raise ValueError(f"field {field!r} scale factors must be finite and positive")
+                raise ValueError(
+                    f"field {field!r} must provide at least one scale factor"
+                )
+            if any(
+                not math.isfinite(factor) or factor <= 0.0
+                for factor in normalized
+            ):
+                raise ValueError(
+                    f"field {field!r} scale factors must be finite and positive"
+                )
             if any(factor == 1.0 for factor in normalized):
                 raise ValueError(
                     f"field {field!r} scale factors must change the value; "
@@ -110,7 +117,9 @@ class ClanPopulationPolicy:
         self._validate_parent_fields(parent_config)
 
         member_ids = sorted(validated)
-        challenger_ids = [member_id for member_id in member_ids if member_id != parent_id]
+        challenger_ids = [
+            member_id for member_id in member_ids if member_id != parent_id
+        ]
         assignments = self._factor_assignments(challenger_ids, seed=seed)
 
         optimizer_configs: dict[str, dict[str, Any]] = {}
@@ -143,20 +152,36 @@ class ClanPopulationPolicy:
             ordered_factors = list(factors)
             generator.shuffle(ordered_factors)
             for index, member_id in enumerate(challenger_ids):
-                assignments[member_id][field] = ordered_factors[index % len(ordered_factors)]
+                assignments[member_id][field] = ordered_factors[
+                    index % len(ordered_factors)
+                ]
         return assignments
 
     def _select_parent(self, population: Mapping[str, MemberResult]) -> str:
         if self._mode == "min":
-            return min(population, key=lambda member_id: (population[member_id].fitness, member_id))
-        return min(population, key=lambda member_id: (-population[member_id].fitness, member_id))
+            return min(
+                population,
+                key=lambda member_id: (
+                    population[member_id].fitness,
+                    member_id,
+                ),
+            )
+        return min(
+            population,
+            key=lambda member_id: (
+                -population[member_id].fitness,
+                member_id,
+            ),
+        )
 
     def _validate_population(
         self,
         population: Mapping[str, MemberResult],
     ) -> dict[str, MemberResult]:
         if not isinstance(population, Mapping):
-            raise TypeError("population must be a mapping from member IDs to MemberResult")
+            raise TypeError(
+                "population must be a mapping from member IDs to MemberResult"
+            )
         if len(population) < 2:
             raise ValueError("a Clan population must contain at least two members")
 
@@ -167,9 +192,13 @@ class ClanPopulationPolicy:
             if not isinstance(result, MemberResult):
                 raise TypeError("every population value must be a MemberResult")
             if isinstance(result.fitness, bool) or not isinstance(result.fitness, Real):
-                raise TypeError(f"fitness for member {member_id!r} must be a real scalar")
+                raise TypeError(
+                    f"fitness for member {member_id!r} must be a real scalar"
+                )
             if not math.isfinite(float(result.fitness)):
-                raise ValueError(f"fitness for member {member_id!r} must be finite")
+                raise ValueError(
+                    f"fitness for member {member_id!r} must be finite"
+                )
             if not isinstance(result.optimizer_config, Mapping):
                 raise TypeError(
                     f"optimizer_config for member {member_id!r} must be a mapping"
@@ -183,7 +212,9 @@ class ClanPopulationPolicy:
     def _validate_parent_fields(self, parent_config: Mapping[str, Any]) -> None:
         for field in self._field_factors:
             if field not in parent_config:
-                raise ValueError(f"selected parent optimizer config is missing field {field!r}")
+                raise ValueError(
+                    f"selected parent optimizer config is missing field {field!r}"
+                )
             value = parent_config[field]
             if isinstance(value, bool) or not isinstance(value, Real):
                 raise TypeError(
