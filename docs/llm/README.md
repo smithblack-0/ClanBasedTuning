@@ -27,12 +27,21 @@ Read only the process modules relevant to that work:
 
 - [Senior engineering workflow](senior_engineering_workflow.md) for substantial
   engineering, debugging, design, implementation, and review;
-- [Business-technical writing workflow](technical_writing_workflow.md) for
-  roadmaps, decisions, designs, plans, reports, audits, READMEs, user guidance,
-  reference documentation, and substantial technical explanations.
+- [Business-technical writing workflow](technical_writing_workflow.md) for the
+  executable writing loop used by roadmaps, decisions, designs, plans, reports,
+  audits, READMEs, user guidance, reference documentation, and substantial
+  technical explanations; and
+- [Business-technical writing standards](technical_writing_standards.md) as the
+  detailed evaluation reference consulted by the writing workflow when a stage
+  or defect requires it.
 
-Many tasks require both. A design document that governs implementation, for
-example, must survive both the engineering and writing workflows.
+For writing work, enter through the workflow. Do not preload the complete
+standards file merely because writing is involved; consult the sections relevant
+to the current workflow stage or defect.
+
+Many tasks require both the engineering and writing processes. A design document
+that governs implementation, for example, must survive the engineering workflow
+and the technical-writing workflow, with standards consulted as needed.
 
 ## Discover project authority
 
