@@ -9,9 +9,18 @@ from clan_based_tuning.controller import ClanPopulationPolicy, MemberResult
 
 def _population() -> dict[str, MemberResult]:
     return {
-        "trial-c": MemberResult(0.8, {"lr": 0.03, "weight_decay": 0.003, "batch_size": 64}),
-        "trial-a": MemberResult(0.2, {"lr": 0.01, "weight_decay": 0.001, "batch_size": 64}),
-        "trial-b": MemberResult(0.5, {"lr": 0.02, "weight_decay": 0.002, "batch_size": 64}),
+        "trial-c": MemberResult(
+            0.8,
+            {"lr": 0.03, "weight_decay": 0.003, "batch_size": 64},
+        ),
+        "trial-a": MemberResult(
+            0.2,
+            {"lr": 0.01, "weight_decay": 0.001, "batch_size": 64},
+        ),
+        "trial-b": MemberResult(
+            0.5,
+            {"lr": 0.02, "weight_decay": 0.002, "batch_size": 64},
+        ),
     }
 
 
