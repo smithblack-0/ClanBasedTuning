@@ -5,9 +5,9 @@ training with member-local optimizer hyperparameters and population selection.
 
 ## Project status
 
-The framework-independent Clan controller is the first implementation surface
-under Milestone 2 review. Existing Ray/Lightning integration source and examples
-remain proof-of-concept evidence rather than an accepted construction API.
+The framework-independent Clan controller is the first accepted implementation
+surface. Existing Ray/Lightning integration source and examples remain
+proof-of-concept evidence rather than an accepted construction API.
 
 Read [`STATUS.md`](STATUS.md) for the current durable project position.
 
