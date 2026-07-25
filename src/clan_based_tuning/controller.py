@@ -60,9 +60,7 @@ class ClanController:
 
         members = self._validate_member_ids(member_ids)
         generator = self._generator(seed)
-        defaults = {
-            name: float(spec["default"]) for name, spec in self._parameters.items()
-        }
+        defaults = {name: float(spec["default"]) for name, spec in self._parameters.items()}
 
         configurations = {members[0]: dict(defaults)}
         for member_id in members[1:]:
@@ -135,9 +133,7 @@ class ClanController:
         if not isinstance(population, Mapping):
             raise TypeError("population must be a mapping from member IDs to results")
         if len(population) != self._population_size:
-            raise ValueError(
-                f"population must contain exactly {self._population_size} members"
-            )
+            raise ValueError(f"population must contain exactly {self._population_size} members")
 
         validated: dict[str, dict[str, Any]] = {}
         expected_fields = set(self._parameters)
@@ -147,13 +143,10 @@ class ClanController:
                 raise TypeError(f"result for member {member_id!r} must be a mapping")
             if set(result) != _REQUIRED_RESULT_KEYS:
                 raise ValueError(
-                    f"result for member {member_id!r} must contain exactly "
-                    "'fitness' and 'config'"
+                    f"result for member {member_id!r} must contain exactly 'fitness' and 'config'"
                 )
 
-            fitness = self._finite_real(
-                result["fitness"], f"fitness for member {member_id!r}"
-            )
+            fitness = self._finite_real(result["fitness"], f"fitness for member {member_id!r}")
             config = result["config"]
             if not isinstance(config, Mapping):
                 raise TypeError(f"config for member {member_id!r} must be a mapping")
@@ -245,9 +238,7 @@ class ClanController:
             raise TypeError("member_ids must be a sequence of member IDs")
         members = list(member_ids)
         if len(members) != self._population_size:
-            raise ValueError(
-                f"member_ids must contain exactly {self._population_size} members"
-            )
+            raise ValueError(f"member_ids must contain exactly {self._population_size} members")
         for member_id in members:
             self._validate_member_id(member_id)
         if len(set(members)) != len(members):
