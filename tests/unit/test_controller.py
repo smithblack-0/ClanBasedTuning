@@ -42,9 +42,7 @@ def test_next_generation_minimizes_fitness_and_retains_parent():
     controller = _controller()
     configurations = [{"lr": 1.0}, {"lr": 2.0}, {"lr": 3.0}]
 
-    parent_rank, next_configurations = controller.next_generation(
-        [4.0, 1.0, 2.0], configurations
-    )
+    parent_rank, next_configurations = controller.next_generation([4.0, 1.0, 2.0], configurations)
 
     assert parent_rank == 1
     assert next_configurations[1] == {"lr": 2.0}
