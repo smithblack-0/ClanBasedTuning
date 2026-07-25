@@ -2,7 +2,7 @@
 
 This guide defines the standing process for serious ClanBasedTuning engineering
 work. It is not a milestone checklist and does not replace the governing roadmap,
-decisions, gates, or active design.
+decisions, gates, or accepted design.
 
 ## Core imperative
 
@@ -17,10 +17,11 @@ or materially expands scope must be discussed before implementation.
 
 ## Before coding
 
-1. Read the authoritative plan, current artifact, relevant comments, and nearby
-   consumers. Do not reconstruct intent from names alone.
+1. Read the authoritative gate, accepted design or plan, current artifact,
+   relevant comments, and nearby consumers. Do not reconstruct intent from names
+   alone.
 2. State the success criteria and current implementation boundary. Distinguish
-   “this unit is complete” from “the whole plan is complete.”
+   “this unit is complete” from “the whole milestone is complete.”
 3. Identify each proposed class or function’s main idea: why it exists, what it
    owns, and what it explicitly does not own.
 4. Search across the whole relevant system for existing implementations,
@@ -68,12 +69,13 @@ For every awkward part, ask:
 
 - A blind reader must understand why every nontrivial class exists from its
   docstring.
-- Document what a calculation tells the user, not merely which tensor operations
-  it performs.
-- Explain lifecycle boundaries, authority, intentional state, approximations,
-  and surprising framework constraints where they occur.
-- Preserve useful comments during rewrites. Concision never justifies making
-  code unauditable.
+- Document what a calculation tells the user, not merely which operations it
+  performs.
+- Explain lifecycle boundaries, authority, intentional state, data structures,
+  algorithms, approximations, and surprising framework constraints where they
+  occur.
+- Preserve useful comments during rewrites. Concision never justifies making code
+  unauditable.
 
 ### 5. Fresh adversarial pass
 
@@ -97,10 +99,10 @@ When a unit becomes hard to reason about:
 2. Add up to five supporting details only when needed.
 3. Compare the summaries. Repeated work, overlapping ownership, and incompatible
    stages become candidate design defects.
-4. Walk the code again. Anything substantial that did not fit its owner’s
-   summary is a potential responsibility leak.
-5. For each mismatch, decide whether the contract is wrong, the artifact is
-   wrong, or the component should be removed or redesigned.
+4. Walk the code again. Anything substantial that did not fit its owner’s summary
+   is a potential responsibility leak.
+5. For each mismatch, decide whether the contract is wrong, the artifact is wrong,
+   or the component should be removed or redesigned.
 
 This method requires concrete and abstract reasoning together: follow the real
 classes and data flow, then judge whether their responsibilities form a coherent
@@ -143,6 +145,26 @@ another.
 - Does every abstraction eliminate repetition or establish a necessary contract?
 - Could ordinary language structures express the same idea more clearly?
 
+## Review-unit rule
+
+A pull request is a reviewable engineering unit, not a progress dump or a request
+for design consultation.
+
+- It performs one coherent small-to-medium task.
+- It leaves the repository in a stable, mergeable intermediate state.
+- Its code, tests, and documentation agree on the contract introduced by that
+  unit.
+- It does not bundle unrelated authority repair, design selection, implementation,
+  integration, and cleanup merely because they belong to the same milestone.
+- A proposal or scratch note is not a sufficient PR unless the repository needs
+  that durable artifact independently of the conversation.
+- Large work is split at real stable boundaries, such as accepted design,
+  implementation, framework integration, and usability.
+
+Before opening a PR, perform a review-cost pass: identify what a human must
+understand, whether the diff answers one review question, and whether any subset
+should be accepted first.
+
 ## Verification and completion
 
 - Compilation is only a syntax gate.
@@ -150,10 +172,10 @@ another.
 - Verify persistence, resume, and authority in the order they actually occur.
 - Regenerate derived artifacts and check that regeneration is deterministic.
 - Perform one final source-order adversarial read after all fixes.
-- Report design deviations, deliberate approximations, remaining integration
-  gates, and downstream work explicitly.
-- Never say a wave, unit, or plan is complete when only its first runnable draft
-  exists.
+- Report design deviations, deliberate approximations, temporary lint or test
+  exclusions, remaining integration gates, and downstream work explicitly.
+- Never say a wave, unit, plan, or milestone is complete when only its first
+  runnable draft exists.
 
 ## Communication and feedback
 
@@ -167,5 +189,5 @@ Identify the underlying contract, responsibility, or reader-model problem;
 correct the owning artifact; then rerun the independent review passes to ensure
 the latest correction did not damage the rest of the system.
 
-The objective is maximum quality under the five criteria, not preservation of
-the first implementation or original plan.
+The objective is maximum quality under the five criteria, not preservation of the
+first implementation or original plan.
