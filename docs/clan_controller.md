@@ -10,9 +10,10 @@ It does not collect live reports, communicate between devices, transfer checkpoi
 apply configurations to optimizers, or own Ray, Lightning, or training lifecycle.
 Those remain execution responsibilities for later integration.
 
-## Parameter policy
+## Policy setup
 
-The constructor receives a mapping from optimizer field name to five required values:
+The constructor receives the expected `population_size`, fitness `mode`, and a mapping
+from optimizer field name to five required values:
 
 - `default`: the viable starting value;
 - `std`: the standard deviation of local perturbation;
@@ -35,6 +36,7 @@ accepted variation surface.
 from clan_based_tuning import ClanController
 
 controller = ClanController(
+    population_size=2,
     parameters={
         "lr": {
             "default": 3e-4,
@@ -58,13 +60,14 @@ parent_id, next_configs = controller.advance(
 )
 ```
 
-`initialize()` returns one complete configuration mapping. The lexicographically
-first member retains the exact defaults; the remaining members receive local
-mutations around them.
+`initialize()` requires exactly the configured number of unique member IDs and returns
+one complete configuration mapping. The lexicographically first member retains the
+exact defaults; the remaining members receive local mutations around them.
 
-`advance()` validates a complete population, selects the best fitness under `min` or
-`max` mode, retains that member's exact configuration, and mutates copies for every
-other member. Equal fitness is resolved by lexicographically smaller member ID.
+`advance()` requires exactly the configured population size, validates every result,
+selects the best fitness under `min` or `max` mode, retains that member's exact
+configuration, and mutates copies for every other member. Equal fitness is resolved by
+lexicographically smaller member ID.
 
 The controller has no hidden mutable state. Explicit seeds make redundant controller
 instances produce the same result from the same logical inputs, independent of input
