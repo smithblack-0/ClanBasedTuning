@@ -62,13 +62,15 @@ class ClanController:
             ``"min"`` selects the lowest fitness; ``"max"`` selects the highest.
             Equal fitness values select the lowest rank.
         seed:
-            Seed used to initialize the controller's random stream. Controllers
-            constructed with the same policy and seed remain identical when they
-            receive the same valid calls in the same order.
+            Explicit non-``None`` seed used to initialize the controller's random
+            stream. Controllers constructed with the same policy and seed remain
+            identical when they receive the same valid calls in the same order.
         """
 
         if mode not in {"min", "max"}:
             raise ValueError("mode must be 'min' or 'max'")
+        if seed is None:
+            raise ValueError("seed must be explicit")
 
         self._hyperparameters = self._normalize_hyperparameters(hyperparameters)
         self._mode = mode
