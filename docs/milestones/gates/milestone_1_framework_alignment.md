@@ -1,59 +1,63 @@
 # Milestone 1 gates — framework-alignment research
 
-Status: working closure proposal under review
+Status: working closure proposal under review  
+Date: 2026-07-24
 
 ## Milestone result
 
 The project has an accepted, evidence-backed basis for designing and implementing
 ClanBasedTuning in a framework-native manner. The result is a coherent authority
-chain, an inspectable research and evidence record, accepted cross-milestone
-constraints, roadmap-derived milestone gates, and an actionable Milestone 2
-plan.
+chain, inspectable research and evidence, accepted cross-milestone constraints,
+roadmap-derived milestone gates, and an actionable Milestone 2 plan.
 
 ## Authority and research gates
 
 ### M1.1 Status and authority are unambiguous
 
-- The product roadmap is the governing contract.
+- The product roadmap is the governing project contract.
+- Previously accepted project decisions remain governing unless a concrete
+  conflict explicitly reopens a clause.
+- The current alignment pass identifies the exact reopened clauses and does not
+  demote unrelated accepted decisions.
+- Research, evidence, decisions, milestone gates, plans, implementation evidence,
+  and review history each have one stated role.
 - The preliminary acceptance of the documentation structure is distinguished
-  from acceptance of its technical conclusions.
-- Research, evidence, proposed decisions, milestone gates, plans, implementation
-  evidence, and review history each have one stated role.
-- No subordinate artifact describes an open conclusion as accepted.
+  from final Milestone 1 closure.
 
 ### M1.2 The framework responsibility model is coherent
 
 The research report explains the relevant PyTorch, Lightning, and Ray Tune
 lifecycles and assigns each ordinary responsibility to its native owner. The
-proposed ClanBasedTuning responsibilities follow from the Clan mechanism rather
-than from the current proof of concept.
+ClanBasedTuning responsibilities follow from the Clan mechanism rather than from
+the current proof of concept.
 
 The report does not make a framework behavior into a ClanBasedTuning subsystem
 or assign it to a milestone merely because the behavior was investigated.
 
-### M1.3 Proposed project decisions are durable and roadmap-aligned
+### M1.3 Accepted decisions and reopened clauses are handled conservatively
 
-- Each proposed decision resolves a genuine cross-milestone question left open by
-  the roadmap.
-- Decisions do not contain milestone work plans, temporary support limits, or
-  premature detailed design.
-- ClanBasedTuning retains parent-selection policy while native frameworks retain
-  trial, checkpoint, restoration, and distributed execution responsibilities.
-- The Milestone 2 choice between a PBT specialization and a direct controller
-  remains open for evidence-backed resolution inside that milestone.
-- Collective population validity is separated from later operational recovery
-  qualification.
+- P1, P2, P5, and P6 remain accepted unless human review identifies a new
+  concrete conflict.
+- P3 is reopened only because the roadmap explicitly assigns the controller-form
+  choice to Milestone 2.
+- P4 is reopened only because parent selection belongs to the Clan population
+  policy while Ray executes the resulting state/configuration assignment.
+- P7's collective validity rule remains accepted; only its milestone-specific
+  recovery allocation is reopened.
+- Revised clauses are concise, cross-milestone, and free of detailed milestone
+  planning or temporary support claims.
 
 ## Evidence and test gates
 
 ### M1.4 Decisive framework claims are auditable
 
-Every material framework claim identifies direct source, documentation, a focused
-probe, or a clearly stated inference from those materials. Exact upstream
+Every material framework claim identifies direct source, documentation, a
+focused probe, or a clearly stated inference from those materials. Exact upstream
 revisions provide research reproducibility without becoming exact package pins.
 
-A reviewer can trace each proposed decision to supporting evidence, see the
-alternative considered, and identify the remaining qualification question.
+A reviewer can trace each accepted decision or proposed revision to supporting
+evidence, see the alternative considered, and identify the remaining
+qualification question.
 
 ### M1.5 Evidence does not become hidden planning authority
 
@@ -64,7 +68,7 @@ active plans determine when an answer becomes necessary.
 ### M1.6 Current proof-of-concept evidence is scoped honestly
 
 Current code, tests, and examples are identified by the mechanism they actually
-demonstrate. Their record states which proposed conclusions they support and
+demonstrate. Their record states which accepted conclusions they support and
 which milestone or support claims they do not establish.
 
 Milestone 1 does not require a new product example merely to manufacture one.
@@ -75,7 +79,7 @@ practical, and correctly limited.
 
 ### M1.7 The reader path has one primary home for each question
 
-The roadmap, package index, research report, evidence ledger, proposed decisions,
+The roadmap, package index, research report, evidence ledger, project decisions,
 standing review, milestone gates, Milestone 2 plan, and human review record each
 perform one complete assigned job without competing authority or unnecessary
 repetition.
@@ -98,13 +102,14 @@ the design artifact for its actual owner.
 - Milestones 3 through 6 state required results, major boundaries, and expected
   evidence without pretending their final designs or test matrices are settled.
 
-### M1.10 The Milestone 2 plan is actionable without predeciding its architecture
+### M1.10 The Milestone 2 plan is actionable and responsibility-correct
 
 The plan:
 
-- begins by comparing the narrow PBT-specialization and direct-controller options
-  against real framework evidence;
-- records and justifies the selected controller form before building around it;
+- begins by resolving the roadmap's choice between a narrow PBT specialization
+  and a direct controller with a thin Ray adapter;
+- records and justifies the selected controller form before later work depends on
+  it;
 - develops the controller implementation, focused and framework-contract tests,
   design and API documentation, inspectable example, and Milestone 3 handoff
   together;
@@ -116,13 +121,20 @@ The plan:
 
 ### M1.11 Human review accepts the complete package
 
-Human review accepts or corrects the research conclusions, evidence
-interpretation, proposed decisions, standing review, gate system, Milestone 2
-plan, and proof-of-concept evidence classification. Any unresolved question
-required to begin Milestone 2 remains an explicit blocker.
+Human review:
+
+- accepts or corrects the proposed P3, P4, and P7 replacement clauses;
+- confirms the unchanged authority of the accepted decisions that survived the
+  alignment pass;
+- accepts or corrects the research conclusions, evidence interpretation,
+  standing review, milestone gate system, Milestone 2 plan, and proof-of-concept
+  evidence classification;
+- retains any unresolved question required to begin Milestone 2 as an explicit
+  blocker.
 
 ## Closure evidence
 
 Milestone 1 closes with links to the accepted research report, evidence ledger,
-project decisions, standing review, complete milestone gate system, Milestone 2
-plan, scoped current-evidence record, and human review decision.
+project decisions and reopened-clause resolutions, standing review, complete
+milestone gate system, Milestone 2 plan, scoped current-evidence record, and human
+review decision.
