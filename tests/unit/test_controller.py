@@ -43,10 +43,10 @@ def test_min_policy_selects_parent_and_emits_complete_configs():
     for member_id in ("trial-b", "trial-c"):
         config = decision.optimizer_configs[member_id]
         lr_factor = config["lr"] / 0.01
-        assert lr_factor == pytest.approx(0.8) or lr_factor == pytest.approx(1.2)
-        assert (
-            config["weight_decay"] / 0.001 == pytest.approx(0.5)
-            or config["weight_decay"] / 0.001 == pytest.approx(2.0)
+        assert any(lr_factor == pytest.approx(value) for value in (0.8, 1.2))
+        weight_decay_factor = config["weight_decay"] / 0.001
+        assert any(
+            weight_decay_factor == pytest.approx(value) for value in (0.5, 2.0)
         )
         assert config["batch_size"] == 64
     lr_factors = sorted(
