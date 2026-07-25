@@ -246,7 +246,7 @@ class ClanController:
 
     @classmethod
     def _validate_member_ids(cls, member_ids: Sequence[str]) -> list[str]:
-        if isinstance(member_ids, (str, bytes)) or not isinstance(member_ids, Sequence):
+        if isinstance(member_ids, str | bytes) or not isinstance(member_ids, Sequence):
             raise TypeError("member_ids must be a sequence of member IDs")
         members = list(member_ids)
         if len(members) < 2:
