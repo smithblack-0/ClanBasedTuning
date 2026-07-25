@@ -52,9 +52,6 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# Ruff 0.16 expanded formatter discovery to Markdown. Documentation is reviewed
-# through the writing workflow; Ruff remains the Python source formatter.
-extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
