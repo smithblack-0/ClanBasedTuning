@@ -2,7 +2,7 @@
 
 This guide defines the standing process for serious ClanBasedTuning engineering
 work. It is not a milestone checklist and does not replace the governing roadmap,
-decisions, gates, or active design.
+decisions, gates, or accepted design.
 
 ## Core imperative
 
@@ -15,12 +15,48 @@ Minor design corrections may be made and reported afterward. A change that
 unlocks new behavior, changes scientific meaning, alters authority or recovery,
 or materially expands scope must be discussed before implementation.
 
+## Preserve the authority layers
+
+Engineering work moves through distinct abstraction layers:
+
+1. The roadmap defines the project capability and development sequence.
+2. The milestone gate defines the complete acceptable solution space needed to
+   make that capability safe and sufficient downstream.
+3. An accepted design selects one solution within the gate.
+4. Current execution planning sequences construction and validation of that
+   design.
+5. Implementation and evidence establish whether the gate is actually satisfied.
+
+A design may narrow the gate by choosing one solution for implementation. A plan
+may narrow the design into the next executable steps. Neither may narrow the
+gate contract or acquire upward authority merely because it is current.
+
+Before accepting a design assumption as a requirement, ask:
+
+- Could another materially different design satisfy the gate?
+- Could the roadmap result be fully achieved without this assumption?
+- Would deleting the current plan leave the gate complete?
+- Can downstream work rely on the gate result without knowing this detail?
+- Is this detail present only because the current implementation makes it
+  convenient?
+
+If a current route fails, revise the route or design first. Reopen a gate only
+when evidence shows the acceptance envelope itself is wrong or incomplete, and
+consult the user before changing it.
+
+Temporary planning normally belongs in the current conversation, issue, or pull
+request. Do not create durable shadow plans beside milestone gates. The
+repository currently has no persistent LLM scratch-planning area; create one
+only with explicit human approval and unmistakable preliminary status.
+
 ## Before coding
 
-1. Read the authoritative plan, current artifact, relevant comments, and nearby
-   consumers. Do not reconstruct intent from names alone.
+1. Read the roadmap requirement, active milestone gate, accepted decisions,
+   current artifact, relevant comments, and nearby consumers. Read an accepted
+   design when one exists. Do not reconstruct intent from names or from a
+   temporary plan alone.
 2. State the success criteria and current implementation boundary. Distinguish
-   “this unit is complete” from “the whole plan is complete.”
+   “this unit is complete” from “the milestone gate is satisfied.”
 3. Identify each proposed class or function’s main idea: why it exists, what it
    owns, and what it explicitly does not own.
 4. Search across the whole relevant system for existing implementations,
@@ -41,6 +77,8 @@ perform these passes before calling it done.
 - Is orchestration performing calculation, reduction, storage, or policy that
   belongs to another owner?
 - Does data leave a component in the form promised by its contract?
+- Does the implementation satisfy the gate without pretending its design choices
+  are gate requirements?
 
 ### 2. DRY and boundary pass
 
@@ -63,6 +101,8 @@ For every awkward part, ask:
   subsystem used in one place?
 - Is generality being purchased at the expense of correctness,
   maintainability, speed, or concision?
+- Is this awkwardness evidence against the design, or merely pressure to corrupt
+  the gate around it?
 
 ### 4. Documentation pass
 
@@ -74,6 +114,8 @@ For every awkward part, ask:
   and surprising framework constraints where they occur.
 - Preserve useful comments during rewrites. Concision never justifies making
   code unauditable.
+- Keep gate conditions, accepted design, and temporary execution sequence in
+  their proper homes.
 
 ### 5. Fresh adversarial pass
 
@@ -84,8 +126,9 @@ time. Do not ask “can I prove the whole system correct?” Ask:
 
 Look especially for misleading names, missing explanations, accidental second
 sources of truth, hot-path validation, hidden recomputation, pending-state
-machinery, one-use abstractions, stale development terminology, and behavior
-that exists only to compensate for an earlier design mistake.
+machinery, one-use abstractions, stale development terminology, behavior that
+exists only to compensate for an earlier design mistake, and design assumptions
+that have leaked upward into acceptance criteria.
 
 ## Technical reduction method
 
@@ -99,8 +142,8 @@ When a unit becomes hard to reason about:
    stages become candidate design defects.
 4. Walk the code again. Anything substantial that did not fit its owner’s
    summary is a potential responsibility leak.
-5. For each mismatch, decide whether the contract is wrong, the artifact is
-   wrong, or the component should be removed or redesigned.
+5. For each mismatch, decide whether the gate, design, artifact, or component is
+   wrong, or whether the component should be removed or redesigned.
 
 This method requires concrete and abstract reasoning together: follow the real
 classes and data flow, then judge whether their responsibilities form a coherent
@@ -152,8 +195,11 @@ another.
 - Perform one final source-order adversarial read after all fixes.
 - Report design deviations, deliberate approximations, remaining integration
   gates, and downstream work explicitly.
-- Never say a wave, unit, or plan is complete when only its first runnable draft
-  exists.
+- Never say a wave, unit, plan, or milestone is complete when only its first
+  runnable draft exists.
+- Before milestone closure, rerun the gate review tests against the delivered
+  solution and verify that no current implementation detail has become a hidden
+  acceptance clause.
 
 ## Communication and feedback
 
