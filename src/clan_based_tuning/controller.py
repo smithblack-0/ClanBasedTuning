@@ -167,7 +167,10 @@ class ClanController:
             if specification["geometry"] == "linear":
                 candidate = value + displacement
             else:
-                candidate = value * math.exp(displacement)
+                try:
+                    candidate = value * math.exp(displacement)
+                except OverflowError:
+                    candidate = math.inf
             mutated[name] = min(
                 max(candidate, specification["minimum"]),
                 specification["maximum"],
