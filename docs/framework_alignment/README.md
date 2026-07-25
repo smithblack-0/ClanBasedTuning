@@ -1,6 +1,6 @@
 # Framework-alignment research package
 
-Status: accepted explanatory and evidence package with active corrections in owning artifacts  
+Status: accepted explanatory and evidence package  
 Date: 2026-07-25  
 Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
@@ -32,8 +32,10 @@ accepts them as product evidence.
 8. Consult the [acceptance record](review_record.md) for accepted human outcomes
    and the [review audit](review_audit.md) for rejected iterations and process
    failures.
-9. Use the [LLM operating context](../llm/README.md) and root
-   [`STATUS.md`](../../STATUS.md) for working process and current durable status.
+9. Use [scratchwork](../scratchwork/README.md) only for tentative reasoning that
+   has not become project authority.
+10. Use the [LLM operating context](../llm/README.md) and root
+    [`STATUS.md`](../../STATUS.md) for working process and current durable status.
 
 ## Artifact authority
 
@@ -48,6 +50,7 @@ accepts them as product evidence.
 | [Active plans](../plans/README.md) | Subordinate execution authority | Sequence work inside the active gate without adding acceptance criteria. |
 | [Acceptance record](review_record.md) | Human decision record | Records accepted outcomes without becoming technical authority. |
 | [Review audit](review_audit.md) | Audit history | Preserves rejected iterations and what failed without polluting acceptance status. |
+| [Scratchwork](../scratchwork/README.md) | Non-authoritative working material | Stores tentative research, alternatives, and reasoning until accepted elsewhere. |
 | [LLM operating context](../llm/README.md) | Standing process | Routes contributors through engineering, writing, authority, and PR rules. |
 | [`STATUS.md`](../../STATUS.md) | Shared project status | States the latest durable position without becoming a work queue or roadmap. |
 
