@@ -8,9 +8,8 @@ Date: 2026-07-24
 The project has an accepted, evidence-backed basis for designing and implementing
 ClanBasedTuning in a framework-native manner. The result is a coherent authority
 chain, inspectable research and evidence, accepted cross-milestone constraints,
-roadmap-derived milestone gates, an actionable Milestone 2 plan, and durable
-working-process context that a new contributor can use without prior
-conversation.
+roadmap-derived milestone gates, and durable working-process context that a new
+contributor can use without prior conversation.
 
 ## Authority and research gates
 
@@ -19,8 +18,8 @@ conversation.
 - The product roadmap is the governing project contract.
 - Accepted project decisions remain governing unless a concrete conflict
   explicitly reopens a specific clause.
-- Research, evidence, decisions, milestone gates, plans, implementation evidence,
-  status, and review history each have one stated role.
+- Research, evidence, decisions, milestone gates, accepted designs, scoped plans,
+  implementation evidence, status, and review history each have one stated role.
 - Preliminary structural acceptance, technical acceptance, and final milestone
   closure are distinguishable.
 
@@ -61,17 +60,18 @@ question.
 ### M1.5 Evidence does not become hidden planning authority
 
 The evidence ledger records observations, probes, inference, alternatives, and
-open questions. It does not assign completion obligations; milestone gates and
-active plans determine when an answer becomes necessary.
+open questions. It does not assign completion obligations or choose an
+implementation merely because one framework path was investigated.
 
 ### M1.6 Current proof-of-concept evidence is scoped honestly
 
-Current code, tests, and examples are identified by the mechanism they actually
-demonstrate. Their record states which accepted conclusions they support and
-which milestone or support claims they do not establish.
+Current code, tests, examples, and historical engineering artifacts are
+identified by the mechanism they actually demonstrate. Their record states which
+accepted conclusions they support and which milestone or support claims they do
+not establish.
 
-Milestone 1 does not require a new product example merely to manufacture one.
-Its example obligation is to make existing evidence legible, reproducible where
+Milestone 1 does not require a new product example merely to manufacture one. Its
+example obligation is to make existing evidence legible, reproducible where
 practical, and correctly limited.
 
 ## Documentation-system gates
@@ -79,9 +79,13 @@ practical, and correctly limited.
 ### M1.7 The reader path has one primary home for each question
 
 The roadmap, package index, research report, evidence ledger, project decisions,
-standing review, milestone gates, Milestone 2 plan, status file, LLM operating
-context, and human review record each perform one complete assigned job without
-competing authority or unnecessary repetition.
+standing review, milestone gates, status file, LLM operating context, and human
+review record each perform one complete assigned job without competing authority
+or unnecessary repetition.
+
+Accepted designs and durable plans may be added when their active gate needs
+them. They must be clearly scoped and cannot become shadow roadmap or gate
+artifacts.
 
 ### M1.8 The standing engineering review is repeatedly usable
 
@@ -104,7 +108,9 @@ without reconstructing it from prior conversation:
 - `STATUS.md` is maintained as ordinary shared project documentation for humans
   and tools, not as an LLM scratchpad or autonomous work queue;
 - status exposes durable project abstractions and links to owning contracts rather
-  than duplicating subordinate plan and design details;
+  than duplicating subordinate design or plan details;
+- gates preserve all acceptable solutions while designs select one and plans
+  sequence work only inside the active gate;
 - when the current assignment is not stated, repository status provides
   orientation but the contributor asks the human what should be resumed; and
 - a reader can identify the governing artifact, task boundary, completion
@@ -115,28 +121,27 @@ without reconstructing it from prior conversation:
 ### M1.10 Later gates derive from the roadmap at the appropriate precision
 
 - Every roadmap milestone has a gate covering its capability, tests,
-  documentation, examples or scientific work, evidence, and handoff.
+  documentation, examples or scientific work, evidence, and downstream result.
+- Each gate states the broadest acceptable solution envelope necessary for safe
+  downstream progress.
 - Normal cumulative progression is represented as activation, not deferral.
-- Milestone 2 is detailed enough to execute next.
+- Milestone 2 is detailed enough to judge the next capability without prescribing
+  its implementation.
 - Milestones 3 through 6 state required results, major boundaries, and expected
   evidence without pretending their final designs or test matrices are settled.
+- Any later requirement discovered during current work is proposed to the future
+  gate that owns it rather than embedded in a cross-milestone plan.
 
-### M1.11 The Milestone 2 plan is actionable and responsibility-correct
+### M1.11 Gate, design, and plan authority remain distinct
 
-The plan:
-
-- begins by defining the independently invokable controller and public population
-  decision contract;
-- develops deterministic selection, optimizer-configuration policy, intentional
-  state, focused tests, design and API documentation, and an inspectable example
-  together;
-- tests that the public contract is ready for its immediate Ray consumer without
-  selecting a scheduler, adapter, or private hook;
-- ends at an independently invokable population-decision subsystem and a concrete
-  integration-readiness handoff; and
-- leaves Ray invocation-form selection, complete Lightning/DDP training,
-  checkpoint transition, data, resources, and distributed lifecycle integration
-  to Milestone 3.
+- Gates state what must be true and admit every acceptable implementation.
+- Accepted designs choose one gate-compliant architecture.
+- Durable plans may govern execution only inside their declared active gate.
+- Plans do not narrow gates, become second roadmaps, or choose later milestone
+  designs.
+- `docs/milestones/` contains only the gate-system README and gate files.
+- Scratch reasoning does not become durable project authority without explicit
+  review and promotion.
 
 ## Human acceptance gate
 
@@ -145,10 +150,9 @@ The plan:
 Human review:
 
 - accepts the framework-alignment conclusions, decisions, evidence
-  interpretation, standing review, milestone gate system, Milestone 2 plan, and
-  proof-of-concept evidence classification;
+  interpretation, standing review, and milestone gate system;
 - accepts the durable LLM operating context, technical-writing workflow and
-  standards split, shared status contract, and status abstraction rule;
+  standards split, shared status contract, and abstraction rules;
 - confirms that the repository can transfer both project authority and working
   process without prior conversational context; and
 - retains any unresolved question required to begin Milestone 2 as an explicit
@@ -157,6 +161,9 @@ Human review:
 ## Closure evidence
 
 Milestone 1 closed with the accepted research report, evidence ledger, project
-decisions, standing review, complete milestone gate system, Milestone 2 plan,
-scoped current-evidence record, LLM operating context, shared project status, and
-human review decision.
+decisions, standing review, milestone gate system, scoped current-evidence
+record, LLM operating context, shared project status, and human review decision.
+
+Later discovery and removal of an overreaching Milestone 2 plan corrected the
+documentation process without invalidating the accepted framework evidence,
+responsibility model, or gate system on which Milestone 1 closure depends.
