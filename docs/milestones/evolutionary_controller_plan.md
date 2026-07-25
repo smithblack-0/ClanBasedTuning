@@ -1,216 +1,258 @@
 # Evolutionary-controller milestone plan
 
-Status: proposed Milestone 2 execution plan  
-Date: 2026-07-24  
-Governing inputs:
-[product roadmap](../product_roadmap.md),
-[project decisions](../decisions/project_decisions.md),
-[Milestone 2 gates](gates/milestone_2_evolutionary_subsystem.md),
-[framework-native review](../reviews/framework_native_review.md)
+Status: proposed Milestone 2 execution plan pending Milestone 1 closure  
+Date: 2026-07-24
 
-## Milestone result
+## Governing inputs
 
-Deliver an independently invokable evolutionary controller that expresses the
-population-decision side of Clan Tuning through the narrowest viable
-specialization of synchronous Ray PBT.
+This plan is governed by:
 
-The controller receives a complete population boundary, selects one parent,
-retains one elite optimizer configuration, makes the parent state the sole
-basis of the next generation, produces optimizer-only target configurations,
-and either continues or completes the entire population.
+- the [product roadmap](../product_roadmap.md);
+- the accepted [project decisions](../decisions/project_decisions.md), except for
+  the explicitly reopened P3, P4, and P7 clauses until their replacements are
+  accepted;
+- the [Milestone 2 gate](gates/milestone_2_evolutionary_subsystem.md);
+- the [framework-native review](../reviews/framework_native_review.md).
 
-This milestone does not build the Lightning or DDP integration that produces
-real training reports and checkpoints.
+The plan is an execution route, not a second acceptance contract. Reopening a
+specific clause does not suspend unrelated accepted decisions.
 
-## Controller boundary
+## Purpose
 
-The controller owns:
+Produce the Milestone 2 result: an independently invokable evolutionary
+controller that owns only the population decision required by Clan Tuning and
+uses the narrowest justified PBT-like framework responsibility.
 
-- fitness direction and deterministic ranking policy;
-- sole-parent selection;
-- elite handling;
-- optimizer-only mutation policy;
-- validation of the configuration surface it mutates;
-- collective continue or planned-completion decision;
-- policy state required by the selected Ray PBT seam.
+## Products developed together
 
-It does not own:
+Milestone 2 develops one coherent controller product consisting of:
 
-- training or validation cadence;
-- metric computation;
-- model or optimizer construction;
-- checkpoint contents;
-- DDP setup or collectives;
-- dataloaders;
-- resource admission;
-- member-local Lightning checkpoint generation;
-- general optimizer mapping.
+- an accepted controller-form design decision;
+- the public population input and transition-decision contract;
+- deterministic selection and optimizer-configuration policy;
+- focused policy, invalid-input, state, and failure-ordering tests;
+- version-specific framework-contract tests for the chosen seam;
+- controller design, API/reference, limitation, and failure documentation;
+- an independently runnable example with inspectable input and output;
+- the Milestone 3 integration handoff.
 
-## Execution method
+Implementation, tests, documentation, example, and handoff evolve with each work
+unit. They are not postponed until the code is otherwise complete.
 
-Work proceeds one contract at a time. Each implemented unit is tested, reviewed
-against the standing framework-native review, and allowed to revise the local
-design before the next unit begins.
+## Controller main idea
+
+> Given one complete population result, select the sole parent and produce one
+> legal optimizer configuration for every member of the next generation.
+
+The controller owns population policy and only the state required to reproduce
+that policy. It emits a decision for native framework execution. It does not run
+training, transfer model state, construct optimizers, manage trial resources, or
+own checkpoint contents.
+
+## Work loop
+
+Each work unit follows the same backward-capable loop:
 
 ```mermaid
 flowchart TD
-    A[Probe current Ray behavior] --> B[State the smallest controller contract]
-    B --> C[Implement one policy or lifecycle behavior]
-    C --> D[Test success, persistence, and failure ordering]
-    D --> E[Review ownership and duplicated lifecycle]
-    E --> F{Contract stable?}
-    F -- No --> A
-    F -- Yes --> G{Milestone 2 gates all satisfied?}
-    G -- No --> C
-    G -- Yes --> H[Complete example, docs, and handoff]
+    A[Inspect roadmap, governing decisions, framework source, and current unit] --> B[State unit purpose and owners]
+    B --> C[Implement or revise the smallest complete unit]
+    C --> D[Test contract, state, and failure ordering]
+    D --> E[Update design, API docs, and example]
+    E --> F[Run ownership, reduction, and adversarial reviews]
+    F --> G{Contract and evidence agree?}
+    G -- No --> A
+    G -- Yes --> H{Milestone gate satisfied?}
+    H -- No --> B
+    H -- Yes --> I[Complete review and Milestone 3 handoff]
 ```
 
-## Work unit 1: qualify the synchronous PBT seam
+A work unit may reopen an earlier unit when evidence changes the controller form,
+public contract, or policy. Do not preserve an earlier draft with compensating
+state or adapter machinery.
+
+## Work unit 1 — choose the controller form
 
 ### Purpose
 
-Establish the exact Ray behavior the controller will specialize before private
-methods or state become design assumptions.
+Resolve the roadmap's explicit choice between specializing Ray's synchronous PBT
+scheduler and using an independent controller with a thin Ray adapter. Do not
+make later implementation depend on one option before this choice is reviewed.
 
-### Work
+### Evidence work
 
-Build the smallest native Tune test that demonstrates:
+Inspect the qualified Ray source and build the smallest executable probes needed
+to compare:
 
-- at least three trials in synchronous PBT;
-- one report from every live trial at a population boundary;
-- source checkpoint preparation before exploitation;
-- checkpoint and configuration assignment to targets;
-- pause and resume ordering;
-- two consecutive population decisions.
+1. **Narrow PBT specialization**
+   - where the complete population decision is invoked;
+   - what member identities, metrics, configurations, and scheduler state are
+     available;
+   - whether the Clan parent and next configurations can be expressed without
+     reproducing Tune controller behavior;
+   - how much private or version-sensitive surface is required.
 
-Then specialize the population partition so one deterministic winner is the
-only source candidate and every other live trial is a target.
+2. **Independent controller plus thin adapter**
+   - what plain controller input/output can remain framework-neutral;
+   - what adapter translation is required to reach Tune's native execution path;
+   - whether the adapter would duplicate ranking, report accumulation,
+     checkpoint, pause/resume, resource, or trial lifecycle behavior;
+   - what policy state must be persisted and by whom.
 
-### Repair condition
+### Decision criteria
 
-If this requires reproducing substantial Tune controller behavior or
-coordinating trials outside PBT, stop and reopen project decision P3 with the
-observed evidence.
+Select the option that best preserves:
 
-### Exit evidence
+- one population-policy authority;
+- independent controller invocation;
+- native Tune lifecycle ownership;
+- the smallest version-sensitive seam;
+- auditable inputs, outputs, and state;
+- maintainability and concision without sacrificing correctness.
 
-A version-pinned executable contract test states the exact upstream assumptions
-and fails clearly when they change.
+### Exit products
 
-## Work unit 2: qualify native experiment restoration
+- dated controller-form design decision;
+- source/probe evidence and alternative analysis;
+- selected seam contract and version assumptions;
+- updated public-contract constraints;
+- explicit evidence that would reopen the choice.
 
-### Purpose
-
-Determine whether Ray already preserves the specialized scheduler and trial
-population across interruption before considering any Clan-specific recovery
-state.
-
-### Work
-
-Using synthetic trainables and checkpoints, interrupt and restore:
-
-- immediately after a completed population decision;
-- while a synchronous population boundary is partially assembled;
-- after a target has received a source checkpoint but before the next complete
-  population report, when the native lifecycle exposes that state.
-
-Use `Tuner.restore` and native persistent experiment state. Inspect restored
-scheduler state, trial configuration, checkpoint lineage, pause status, and the
-next population decision.
-
-### Repair condition
-
-Do not add a generation manifest or custom transaction merely because the state
-is difficult to inspect. Add recovery machinery only after direct evidence shows
-that native Ray restoration cannot recover or explicitly reject an incoherent
-population state.
-
-### Exit evidence
-
-The restored run either continues from one coherent population state or fails
-explicitly in every tested interruption location.
-
-## Work unit 3: implement deterministic parent selection
+## Work unit 2 — define the public population and decision contracts
 
 ### Purpose
 
-Make the sole-parent population transition explicit and independently testable.
+Make the policy independently invokable and keep framework objects out of the
+public model where they add no contract value.
 
 ### Work
 
-Define and test:
+Define the smallest representation for:
 
-- metric and direction;
-- complete population input;
+- a complete member population result;
+- member identity and comparable fitness;
+- current optimizer configurations;
+- intentional policy state, when required;
+- the sole parent and complete next-generation optimizer configurations;
+- an inspectable explanation or decision record.
+
+Prefer plain immutable structures where they express the contract clearly. Do
+not introduce a package-wide experiment schema, checkpoint model, or framework
+object wrapper.
+
+### Exit products
+
+- reviewed public input/output contract;
+- validation and serialization tests for intentional state and records;
+- API/reference draft;
+- example skeleton showing the proposed reader model.
+
+## Work unit 3 — implement deterministic parent selection
+
+### Purpose
+
+Produce one valid and explainable parent decision from one complete population.
+
+### Work
+
+Implement and test:
+
+- metric direction;
 - stable tie behavior;
-- missing, NaN, infinite, duplicate-member, and incomplete population handling;
-- deterministic handling of equal fitness values;
-- winner identity and target set;
-- one unmutated elite configuration.
+- missing, duplicate, NaN, infinite, and incomplete population handling;
+- deterministic winner identity;
+- complete next-generation member coverage;
+- the decision explanation required for audit and example output.
 
-Keep the policy limited to information already present at a Ray population
-boundary. Do not introduce a second report accumulator, generation coordinator,
-or checkpoint manager.
+Keep the policy limited to information available in the accepted public
+population contract. Do not add a report accumulator, progress clock, trial
+registry, or checkpoint manager.
 
-## Work unit 4: constrain optimizer-only mutation
+### Exit products
 
-### Purpose
+- focused selection and validation tests;
+- visible winner reasoning in the decision record and example;
+- updated policy and failure documentation.
 
-Prevent Ray's general trial-configuration mutation surface from changing values
-that define the shared-gradient workload.
-
-### Work
-
-Choose the smallest configuration contract that identifies mutable optimizer
-values without becoming a second experiment schema. Reject model, data, batch,
-augmentation, and other gradient-defining mutation during setup.
-
-Use native Ray mutation behavior where it expresses the accepted policy. Add
-custom mutation logic only for a demonstrated Clan-specific gap.
-
-## Work unit 5: implement collective completion and invalid-population behavior
+## Work unit 4 — implement optimizer-only configuration generation
 
 ### Purpose
 
-Ensure the controller cannot independently complete, continue, or repair one
-member.
+Generate the next optimizer population without changing the shared-gradient
+workload.
 
 ### Work
 
-Find the narrowest Ray-native seam that can decide at a complete boundary to:
+Define and test the smallest policy surface that:
 
-- select a parent and continue the whole population; or
-- identify the final best member and complete the whole population.
+- derives every next-generation optimizer configuration from the selected
+  parent's optimizer configuration and accepted policy state;
+- produces legal values for every member;
+- rejects model, data, batch, augmentation, and other gradient-defining choices;
+- documents any retention, mutation, resampling, or boundary behavior chosen by
+  the controller design.
 
-Reject ordinary per-trial stopping for the supported path. Define how missing
-results, trial errors, and population-size changes invalidate the current
-population decision.
+Use native Ray mutation facilities only where they match the public controller
+contract. Do not create a second general experiment-configuration language.
 
-The controller need not terminate DDP processes; Milestone 3 owns distributed
-termination behavior.
+### Exit products
 
-## Work unit 6: public contract, auditability, and example
+- configuration-policy and invalid-surface tests;
+- public configuration reference;
+- inspectable example output;
+- justification for every policy abstraction added.
+
+## Work unit 5 — complete state and failure ordering
 
 ### Purpose
 
-Make the subsystem usable and inspectable without constructing Lightning or DDP.
+Retain only the controller state required by the accepted policy and chosen
+framework seam, and ensure incomplete populations cannot produce valid
+transitions.
 
 ### Work
 
-- Persist only policy state the selected PBT seam requires.
-- Document parent selection, elite behavior, mutation boundary, tie behavior,
-  restoration assumptions, and failure semantics.
-- Expose enough transition information to inspect source, targets, checkpoint
-  lineage, and resulting optimizer configuration.
-- Build a small native Ray example whose trainables report synthetic fitness and
-  real checkpoints through Tune.
+Implement and test:
 
-## Milestone closure
+- deterministic policy state and random-state handling, where applicable;
+- persistence/restore only for state the chosen seam genuinely requires;
+- refusal of incomplete or invalid populations;
+- no partial decision emission after a policy failure;
+- clear distinction between controller failure and framework-owned execution
+  failure.
 
-Close Milestone 2 only through the
-[Milestone 2 gate file](gates/milestone_2_evolutionary_subsystem.md). The plan is
-an execution route, not a substitute for gate evidence.
+Trial termination, checkpoint assignment, training restoration, and operational
+recovery remain outside this controller unit.
 
-The handoff to Milestone 3 consists only of the public controller contract and
-native Ray outputs: trial configuration, selected source checkpoint, population
-result, restoration behavior, and collective scheduling outcome.
+### Exit products
+
+- state round-trip and failure-ordering tests;
+- failure and limitation documentation;
+- final decision-record contract.
+
+## Work unit 6 — finish the public controller product
+
+### Purpose
+
+Make the subsystem independently usable, reviewable, and ready for manual
+integration.
+
+### Work
+
+- complete the controller design and option-decision record;
+- complete public API, configuration, decision-record, limitation, and failure
+  documentation;
+- complete focused tests and the selected framework-seam contract suite;
+- build the standalone public example with explicit population input and
+  inspectable decision output;
+- explain how to run the example and interpret the result;
+- produce the Milestone 3 handoff containing the public inputs, outputs, state,
+  selected seam, framework assumptions, and responsibilities that remain outside
+  the controller.
+
+### Exit condition
+
+Implementation, tests, documentation, example, design decision, and handoff agree
+on one controller contract and satisfy the Milestone 2 gate. Any unresolved
+framework question required for manual integration is recorded in the handoff,
+not silently absorbed into the controller.

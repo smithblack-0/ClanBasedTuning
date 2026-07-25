@@ -1,108 +1,127 @@
 # Milestone 3 gates — integratable orchestration subsystems
 
-Status: proposed completion gates  
-Date: 2026-07-24
+Status: proposed future milestone gate under Milestone 1 review
 
 ## Milestone result
 
-The evolutionary controller and Clan-specific training primitives can be
-manually composed into a real distributed Lightning workflow in which Clan
-Tuning completes multiple rounds end to end.
+The accepted evolutionary controller and Clan-specific integration primitives can
+be manually composed into a real distributed Lightning workflow in which Clan
+Tuning completes multiple rounds end to end through native Ray Tune, Lightning,
+and PyTorch behavior.
 
-## Gates
+This gate states the required result and major evidence. The detailed integration
+design and test matrix are produced when Milestone 3 becomes active.
 
-### M3.1 Manual composition preserves framework ownership
+## Capability and responsibility gates
 
-- The example explicitly composes Ray trials, Lightning Trainer behavior,
-  PyTorch DDP, model wrapping, data configuration, and Clan-specific primitives.
-- ClanBasedTuning adds only the seams required by the accepted project decisions.
-- Package-managed convenience is not required, but no second training loop,
-  scheduler, checkpoint system, or collective implementation is introduced.
+### M3.1 The manual workflow preserves native ownership
 
-### M3.2 Population admission is coherent
+The workflow explicitly composes the accepted controller, Ray trial execution,
+Lightning training and validation, PyTorch distributed execution, model and
+optimizer construction, data configuration, and only the Clan-specific seams
+shown necessary by evidence.
 
-- One Tune trial maps to one DDP member and one dedicated device or declared
-  supported resource unit.
-- The complete population is concurrently resident before any member enters the
-  collective.
-- Population count, concurrency, rank, world size, and rendezvous information
-  agree or setup fails before distributed work begins.
+It introduces no second training loop, population runtime, checkpoint system,
+data framework, or gradient-collective implementation.
 
-### M3.3 Native DDP produces shared gradients and member divergence
+### M3.2 One coherent live population performs shared-gradient training
 
-- Members begin each round from the inherited common state.
-- Native DDP produces common reduced gradients from independently partitioned
-  training batches.
-- Member-local optimizer state/configuration produces observable parameter
-  divergence after the shared gradient.
-- Runtime synchronization, including buffer behavior, does not erase intended
-  divergence.
+The manual composition verifies that the complete trial population, concurrent
+resources, Clan membership, and distributed ranks describe one live Clan before
+training begins. Native distributed execution produces a common gradient from
+independently partitioned training batches while member-local optimizer state and
+configuration produce observable divergence.
 
-### M3.4 Lightning produces coherent round boundaries
+### M3.3 Lightning produces comparable round results
 
-- A documented Lightning validation cadence causes every member to enter the
-  qualifying boundary at the same training-loop position.
-- Sanity checks, unrelated validation, and intermediate logging do not trigger
-  evolution.
-- The supported loader and accumulation configurations resume at the documented
-  next training position after pause or trial recreation.
+The integration defines the qualifying Lightning validation-and-checkpoint event.
+Every live member reaches the same logical boundary, evaluates the same held-out
+workload under equivalent conditions, and reports one member-local fitness value
+without candidate scores being reduced together.
 
-### M3.5 Fitness is comparable and member-local
+### M3.4 The chosen Ray integration executes the sole-parent transition
 
-- Training data is partitioned normally.
-- Every member evaluates the same held-out examples with equivalent transforms,
-  ordering, and loader length.
-- Each member reports one local fitness value; DDP metric reduction does not
-  combine candidate scores before Ray comparison.
+At a qualifying boundary, each candidate can provide the native trial-local
+checkpoint and report required by the accepted Ray path. The accepted controller
+selects one parent and next optimizer configurations; native Ray execution
+assigns the resulting state/configuration; Lightning restores inherited model,
+optimizer, and progress state; ClanBasedTuning reapplies receiving optimizer
+values; and the next live distributed population continues training.
 
-### M3.6 Every member can supply a native Lightning checkpoint
+This is the ordinary Clan round transition, not an operational interruption-
+recovery subsystem.
 
-- Every divergent member can produce a trial-local Lightning checkpoint at the
-  qualifying boundary, including a member whose DDP rank is not global rank
-  zero.
-- Ray's normal Lightning report/checkpoint path remains the transfer mechanism.
-- The implementation uses the narrowest Lightning seam necessary to overcome
-  ordinary replica-equivalence assumptions.
+### M3.5 A broken active population fails collectively and clearly
 
-### M3.7 Winner state reload and optimizer reconciliation are correct
+A missing or failed member cannot be silently removed while the remaining
+members continue as the same Clan. The supported manual workflow terminates or
+invalidates the run without indefinite collective waits and exposes enough
+member and lifecycle context for engineering diagnosis.
 
-- Ray assigns the selected parent checkpoint to every target trial.
-- Lightning restores model and optimizer state through its normal lifecycle.
-- ClanBasedTuning then reapplies only the receiving member's evolved optimizer
-  values.
-- Momentum, moments, step counters, and other inherited optimizer history remain
-  from the parent.
-- Competing LR scheduler authority is either integrated explicitly or rejected
-  by the supported configuration.
+## Test and evidence gates
 
-### M3.8 Functional interruption and restoration work end to end
+### M3.6 Direct and framework-contract tests protect the integration seams
 
-- A completed-round interruption restores the current generation and continues
-  through another full round.
-- An interruption during a partially assembled synchronous boundary follows the
-  Ray behavior qualified in Milestone 2 and restores compatible Lightning trial
-  states or fails explicitly.
-- No custom generation manifest is added unless direct evidence demonstrates a
-  native gap and the design is approved.
+Focused tests cover each Clan-specific primitive's contract, lifecycle position,
+state ordering, and failure behavior. Version-specific framework-contract tests
+cover only the PyTorch, Lightning, and Ray assumptions material to the supported
+manual workflow.
 
-### M3.9 Failure is collective and diagnosable
+### M3.7 End-to-end evidence proves repeated real rounds
 
-- Failure of one member terminates or invalidates the complete active Clan.
-- No surviving member continues indefinitely in a broken collective.
-- The error identifies the failed member and lifecycle boundary sufficiently for
-  an engineer to diagnose the integration.
+A public manual composition with a real multi-member population completes
+multiple round transitions and demonstrates shared gradients, optimizer-driven
+divergence, comparable local fitness, sole-parent selection, native state
+inheritance, post-restore optimizer reconciliation, distributed reformation, and
+continued training.
 
-### M3.10 The example is technically and scientifically meaningful
+Any accelerator or topology claim requires direct evidence on that accelerator
+or topology. CPU evidence qualifies only the CPU path it exercises.
 
-The public manual composition completes multiple rounds, shows shared gradients,
-member divergence, comparable fitness, sole-parent selection, checkpoint
-inheritance, and continued training on a workload capable of illustrating the
-method rather than only mocked control flow.
+## Documentation gates
 
-## Assigned deferrals
+### M3.8 Engineering documentation enables manual composition and audit
 
-| Capability | Destination | Why not required here | Destination obligation | Required evidence |
-| --- | --- | --- | --- | --- |
-| Short package-managed setup | Milestone 4 | This milestone proves composability through explicit manual assembly. | Remove user-facing DDP, wrapping, data, and plugin construction ceremony. | Complete simple-path integration test and user guide. |
-| Broad optimizer and parameter-group mapping | Milestone 5 | A narrow documented optimizer layout is sufficient to prove end-to-end mechanics. | Support realistic optimizer layouts predictably. | Utility gate suite. |
-| Production observability, model sharding, and cluster recovery | Milestone 6 | Milestone 3 proves functional behavior in its declared test topology. | Qualify serious workloads, persistent storage, cluster failure, restoration, and diagnosis. | Industry readiness audit on declared hardware/framework envelopes. |
+The milestone delivers the integration design and ownership map, manual
+composition guide, reference for the Clan-specific primitives and required
+framework settings, tested support and limitation statement, and failure-boundary
+guidance. A project engineer can follow one complete round from training through
+the next generation without reconstructing the design from source code.
+
+## Example and scientific-work gates
+
+### M3.9 A public mechanics example exposes the complete workflow
+
+A reproducible example uses the public manual path, completes multiple real
+rounds, and makes gradients, divergence, fitness, selected parent, resulting
+optimizer configurations, state inheritance, and continued training inspectable.
+
+### M3.10 An initial scientific workload begins evaluating the method
+
+A public-package experiment uses a real task capable of illustrating optimizer-
+policy adaptation, records its workload, round policy, fitness, compute cost,
+and limitations, and reports favorable, neutral, or unfavorable results honestly.
+It proves that the integrated product can investigate the method; it need not
+prove that the method is valuable.
+
+## Review and handoff gates
+
+### M3.11 The complete manual workflow is internally consistent
+
+Implementation, tests, framework evidence, documentation, and examples describe
+one supported manual workflow. Human review applies the standing framework-native
+review to every custom seam.
+
+### M3.12 Milestone 4 receives the proven manual sequence
+
+The handoff identifies the user-facing assembly steps that the usability
+frontend may remove, the lower-level public primitives it must continue to use,
+the support boundary it must preserve, and the advanced manual path that remains
+available.
+
+## Closure evidence
+
+Milestone 3 closes with the accepted integration design, direct and framework-
+contract tests, multi-round end-to-end evidence, manual integration and support
+documentation, mechanics example, initial scientific workload and results, human
+review, and Milestone 4 handoff.

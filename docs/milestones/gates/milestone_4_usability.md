@@ -1,63 +1,101 @@
 # Milestone 4 gates — usability
 
-Status: proposed completion gates  
-Date: 2026-07-24
+Status: proposed future milestone gate under Milestone 1 review
 
 ## Milestone result
 
 A Lightning user can attach ClanBasedTuning through a short, documented
-construction path without manually assembling the surrounding DDP, model, data,
-and plugin lifecycle.
+construction path without manually assembling the surrounding DDP, model,
+distributed-data, rendezvous, reporting, and plugin lifecycle proven in
+Milestone 3. Advanced users retain the lower-level manual path.
 
-## Gates
+This gate states the required user result and major evidence. The final frontend
+shape is designed when Milestone 4 becomes active.
 
-### M4.1 The ideal user path is designed before the frontend is fixed
+## Capability and responsibility gates
 
-- The intended user sequence is written and reviewed before its manufacturing
-  API becomes contractual.
-- User-owned choices remain with Lightning, Ray Tune, PyTorch, and the user's
-  model rather than being absorbed into a package configuration language.
+### M4.1 The ideal user path is designed before the API is fixed
 
-### M4.2 The construction path returns concrete framework components
+The intended sequence states what the user supplies, what ClanBasedTuning
+assembles, which decisions remain with Lightning, Ray Tune, PyTorch, and the
+user's model, and which unsupported situations fail before training.
 
-- The frontend returns the concrete Lightning strategies, plugins, callbacks,
-  samplers, or other objects the caller supplies to native framework entry
-  points.
-- It does not return another factory, own a Trainer, or create a parallel launch
-  system.
+### M4.2 The frontend returns concrete native components
 
-### M4.3 DDP, model, data, and rendezvous setup are package-managed
+The manufacturing frontend returns the actual strategies, plugins, callbacks,
+samplers, adapters, or focused helpers supplied to native framework entry
+points. It does not return another factory, own a Trainer, or introduce a
+parallel launch or training system.
 
-- The simple path configures the accepted DDP behavior, model wrapping, rank and
-  rendezvous information, training partitioning, comparable evaluation, and
-  member-local checkpoint behavior.
-- Invalid population or resource composition fails before training begins.
+### M4.3 Convenience remains auditable composition
 
-### M4.4 Convenience remains auditable composition
+The short path assembles the same lower-level public primitives and lifecycle
+proven in Milestone 3. Invalid population, resources, devices, or unsupported
+framework combinations fail before training begins. The advanced manual path
+remains documented and usable.
 
-- Each convenience operation delegates to the same lower-level primitives proven
-  in Milestone 3.
-- The manual path remains documented and usable for advanced integration.
-- No convenience-only implementation diverges from the composable path.
+## Test and evidence gates
 
-### M4.5 The supported user envelope is explicit
+### M4.4 Construction and preflight tests prove the frontend contract
 
-- Supported Lightning, Ray, PyTorch, topology, loader, precision, optimizer, and
-  stopping assumptions are stated in user-facing documentation.
-- Unsupported configurations fail clearly rather than silently degrading Clan
-  semantics.
+Tests establish that the frontend returns and configures the intended native
+components, preserves user-owned choices, and rejects invalid setup before
+expensive distributed work begins.
 
-### M4.6 Documentation and examples are sufficient for a new user
+### M4.5 The documented short path completes the proven workflow
 
-- A user guide explains the short construction path, required framework setup,
-  lifecycle, limitations, and failure messages.
-- A complete example runs through the supported round lifecycle without hidden
-  manual setup.
-- Documentation agrees with the public implementation.
+An end-to-end test using only the public ordinary path completes the supported
+multi-round lifecycle and produces behavior equivalent to the accepted manual
+composition. The usability layer does not create a second round-transition
+implementation.
 
-## Assigned deferrals
+### M4.6 A fresh-user walkthrough proves practical usability
 
-| Capability | Destination | Why not required here | Destination obligation | Required evidence |
-| --- | --- | --- | --- | --- |
-| General optimizer resolution | Milestone 5 | The usability path may support the narrow optimizer contract already proven. | Make evolved configuration application predictable across realistic layouts. | Utility tests and reference docs. |
-| Production-scale observability, sharding, and cluster recovery | Milestone 6 | The simple path is qualified for its declared non-industry envelope. | Qualify serious operating environments and failure modes. | Industry readiness audit. |
+A technically competent Lightning user can install the package in a clean
+environment, complete the first supported run, interpret its output, and resolve
+common setup failures using only published material.
+
+## Documentation gates
+
+### M4.7 User documentation enables ordinary and advanced use
+
+The milestone delivers a getting-started guide, concise quickstart,
+construction API and configuration reference, support and limitations reference,
+troubleshooting guidance, and the retained advanced manual-composition guide.
+The documentation explains expected output and the responsibilities an advanced
+user assumes when choosing the manual path.
+
+## Example gates
+
+### M4.8 The ordinary quickstart is complete and public
+
+The quickstart uses the manufacturing frontend and native Lightning/Ray entry
+points, contains no hidden manual distributed setup, completes the supported
+round lifecycle, and explains the minimum user choices and observable result.
+
+### M4.9 The advanced example remains valid
+
+The Milestone 3 manual example continues to run against the same public
+primitives. The ordinary and advanced examples teach one lifecycle and support
+boundary at different abstraction levels.
+
+## Review and handoff gates
+
+### M4.10 The user-facing products agree
+
+Frontend, tests, guides, troubleshooting, quickstart, and advanced example
+describe one construction path and support boundary. Human review confirms that
+usability has not introduced hidden framework ownership or convenience-only
+behavior.
+
+### M4.11 Milestone 5 receives evidence from real optimizer use
+
+The handoff records the optimizer layouts supported by the ordinary and advanced
+paths, the realistic layouts still awkward or unsupported, and the public
+configuration and optimizer objects the utility must reconcile.
+
+## Closure evidence
+
+Milestone 4 closes with the accepted user-path design, construction and
+end-to-end tests, fresh-user walkthrough, user and advanced documentation,
+ordinary and manual examples, human review, and Milestone 5 handoff.

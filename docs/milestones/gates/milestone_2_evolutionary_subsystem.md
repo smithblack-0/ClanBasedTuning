@@ -1,97 +1,172 @@
 # Milestone 2 gates — evolutionary subsystem
 
-Status: proposed completion gates  
+Status: proposed completion gates pending Milestone 1 closure  
 Date: 2026-07-24
+
+## Governing basis
+
+The roadmap and accepted project decisions govern this milestone. Milestone 1
+must accept replacements for the reopened P3 controller-form clause, P4
+parent-selection authority clause, and P7 recovery-allocation clause before this
+gate becomes executable. Unaffected accepted decisions remain governing.
 
 ## Milestone result
 
-ClanBasedTuning has an independently invokable evolutionary controller that
-expresses the population-decision side of Clan Tuning through the narrowest
-viable Ray PBT responsibility.
+ClanBasedTuning has an independently invokable, tested, documented, and
+inspectable evolutionary controller that expresses the population-decision side
+of Clan Tuning with the narrowest reasonable PBT-like responsibility. Its chosen
+framework integration form is justified by direct evidence rather than assumed
+in advance.
 
-## Gates
+## Capability and responsibility gates
 
-### M2.1 The Ray extension seam is qualified
+### M2.1 The controller implementation form is chosen deliberately
 
-- A version-pinned native Tune test exercises synchronous PBT with at least three
-  trials through two population decisions.
-- The test establishes population synchronization, source checkpoint
-  preparation, checkpoint/configuration assignment, pause/resume ordering, and
-  scheduler persistence.
-- The Clan specialization does not reproduce substantial Tune controller
-  behavior.
-- If the seam fails this gate, the PBT-specialization decision is explicitly
-  reopened before a direct controller is designed.
+The milestone compares a narrow specialization of an existing Ray PBT scheduler
+with an independent controller plus the thinnest viable Ray adapter. The accepted
+design records:
 
-### M2.2 The population decision is deterministic and complete
+- the exact framework seam each option requires;
+- which ordinary Tune lifecycle behavior remains native;
+- the version-sensitive surface and maintenance cost;
+- how the public controller remains independently invokable;
+- why the selected option is more coherent, concise, and maintainable.
 
-- The controller consumes one complete population boundary.
-- Metric direction and stable tie behavior are documented and tested.
-- Missing, NaN, infinite, duplicate-member, or incomplete population input fails
-  clearly; equal fitness values use the documented tie rule.
-- Exactly one parent is selected.
+The choice is made before later work builds around one option. A private seam is
+not rejected merely because it is private, and an existing PBT class is not
+adopted merely because it already exists.
 
-### M2.3 The next generation has the correct policy
+### M2.2 The public population-decision contract is complete
 
-- The selected parent state is the sole basis of the next generation.
-- Ray transfers the parent checkpoint to every target member; the parent may
-  retain its already-authoritative state rather than redundantly restoring itself.
-- Exactly one elite optimizer configuration remains unmutated.
-- Every other live member receives a legal target configuration.
-- No member continues from an independent model or optimizer checkpoint.
+The controller consumes one complete population result containing the member
+identity, comparable fitness, current optimizer configuration, and only the
+additional policy state the accepted design requires.
 
-### M2.4 Mutation is optimizer-only
+It produces one inspectable decision containing:
 
-- The accepted mutation surface can identify optimizer values without becoming a
-  second experiment-configuration language.
-- Model, data, batch, augmentation, and other gradient-defining mutations are
-  rejected during setup.
-- Native Ray mutation behavior is used where it fits; custom mutation logic has
-  a demonstrated Clan-specific gap.
+- the sole winning member whose model parameters, optimizer state, and optimizer
+  configuration become the basis of the next generation;
+- one legal optimizer configuration for every next-generation member;
+- the member-to-parent relationship and policy information needed to explain the
+  transition.
 
-### M2.5 Planned completion and failure remain collective
+The output describes a population decision for framework-owned execution. It
+does not transfer model state, construct optimizers, run training, or manage
+trials.
 
-- Planned completion is decided only at a complete population boundary and ends
-  the complete population.
-- Ordinary per-trial stopping is rejected for the supported controller path.
-- A missing or failed member prevents exploitation; the controller does not
-  continue with a smaller population.
-- The controller identifies or invokes the narrowest Ray-native experiment-level
-  outcome rather than implementing distributed process termination itself.
+### M2.3 Selection and optimizer configuration generation are deterministic and valid
 
-### M2.6 Native Ray experiment restoration is qualified
+- Metric direction and tie behavior are explicit.
+- Missing, duplicate, NaN, infinite, or incomplete population input fails
+  clearly.
+- Exactly one parent and one complete next-generation configuration set are
+  produced.
+- Repeated execution from the same controller state and input produces the same
+  decision.
+- Model, data, batch, augmentation, and other gradient-defining mutation choices
+  are outside the accepted controller surface.
 
-- `Tuner.restore` or the selected native equivalent restores the controller,
-  scheduler state, trial configuration, and latest trial checkpoints without a
-  Clan-specific experiment manifest.
-- Tests cover interruption after a completed population decision and interruption
-  while a synchronous population boundary is partially assembled.
-- Restored execution either resumes one coherent population state or fails
-  explicitly; it may not silently combine incompatible member generations.
+The exact mutation and retention policy is documented and tested. The gate does
+not prescribe an elite unless the accepted controller design chooses and
+justifies one.
 
-### M2.7 The controller is independent and inspectable
+### M2.4 Controller state is limited to policy needs
 
-- The public controller contract can be used and tested without Lightning or
-  DDP.
-- State retained by the controller is limited to what the Ray seam genuinely
-  requires.
-- Transition records make parent, targets, elite, mutation, and collective
-  outcome inspectable.
-- Documentation explains non-obvious policy, lifecycle, persistence, and failure
-  decisions.
+The controller retains only state required to reproduce its accepted policy and
+integrate through the chosen framework seam. It does not mirror trial runtime,
+checkpoint contents, resource state, or experiment persistence owned by Ray Tune
+or Lightning.
 
-### M2.8 A native example proves the subsystem
+### M2.5 Incomplete populations do not produce valid transitions
 
-A small Ray example using real trainables, reports, and checkpoints completes
-multiple generations and visibly matches the controller contract. Mocked direct
-scheduler calls are insufficient as the milestone example.
+The controller refuses to manufacture a partial evolutionary decision from a
+missing or invalid population. Failure ordering and persistence are exercised to
+the extent required by the chosen controller seam; process termination and
+operational recovery are not controller subsystems.
 
-## Assigned deferrals
+## Test gates
 
-| Capability | Destination | Why not required here | Destination obligation | Required evidence |
-| --- | --- | --- | --- | --- |
-| Lightning validation/report production | Milestone 3 | This milestone consumes population reports; it does not produce them. | Generate exactly one comparable member-local report per qualifying Lightning boundary. | Multi-rank end-to-end integration test. |
-| Real model/optimizer/data restoration | Milestone 3 | Milestone 2 uses framework-neutral synthetic trainables and checkpoints. | Restore Lightning model, optimizer, and data position through native Ray assignment. | Interrupted and normal multi-round integration tests. |
-| Automated DDP, data, and resource assembly | Milestone 4 | Manual composition is sufficient for Milestone 3. | Provide the short user construction path. | User-path integration test and guide. |
-| General optimizer layouts | Milestone 5 | Controller mutation policy need not solve application to every optimizer structure. | Implement deterministic optimizer configuration resolution. | Multi-optimizer and parameter-group tests. |
-| Production storage and cluster-failure qualification | Milestone 6 | Functional Ray restoration is required now; production operating envelopes are not. | Qualify persistent storage, cluster interruption, diagnosis, and restoration at industry scope. | Industry readiness audit and failure tests. |
+### M2.6 Focused tests prove the public policy contract
+
+The controller suite covers ranking modes, ties, invalid fitness, duplicate and
+incomplete populations, sole-parent selection, complete optimizer-configuration
+output, optimizer-only boundaries, determinism, intentional state persistence,
+and inspectable decision records.
+
+### M2.7 Framework-contract tests prove the selected seam and nothing broader
+
+Version-specific tests invoke the real chosen Ray extension or adapter boundary
+and prove that it supplies the controller's required input and can carry its
+result without substantial Tune lifecycle duplication.
+
+The claim is limited to controller integration. Trial checkpoint assignment,
+Lightning restoration, DDP reformation, and continued training become
+end-to-end requirements in Milestone 3.
+
+Exact versions belong to reproducible test environments. Package dependency
+constraints may claim only the compatibility range those tests establish.
+
+### M2.8 The controller remains independently invokable
+
+The same public controller contract can be exercised directly from explicit
+population results and optimizer configurations. A framework adapter does not
+become the only route to policy testing, explanation, or reuse.
+
+## Documentation gates
+
+### M2.9 Controller documentation transfers the complete policy model
+
+The milestone delivers:
+
+- the accepted controller design and option analysis behind it;
+- public API and configuration reference;
+- selection, tie, mutation, retention, state, and failure semantics;
+- the chosen framework seam, version assumptions, and evidence that would reopen
+  the design;
+- a clear boundary between population decision and framework-owned execution.
+
+A reader must not infer controller behavior from Ray internals or a later
+integration example.
+
+## Example gate
+
+### M2.10 A public example makes the evolutionary transition inspectable
+
+A small reproducible example invokes the public controller with explicit
+population results and optimizer configurations. It makes the input population,
+selected winner, resulting configurations, and explanation record visible and
+explains how to read them.
+
+Synthetic population results are appropriate because this milestone demonstrates
+the decision subsystem. The complete training and checkpoint-driven transition
+example begins in Milestone 3.
+
+## Evidence, review, and handoff gates
+
+### M2.11 The controller products agree
+
+Implementation, focused tests, framework-contract tests, design and API
+documentation, decision records, and example describe one public controller
+contract. Human review applies the standing framework-native review and records
+the selected implementation form or any reopened assumption.
+
+### M2.12 Milestone 3 receives a complete integration handoff
+
+The handoff states:
+
+- the population-result fields and completeness conditions the controller
+  consumes;
+- the transition decision it produces;
+- intentional controller state and persistence requirements;
+- the exact selected Ray seam or adapter;
+- the framework responsibilities that remain outside the controller;
+- the point where Milestone 3 connects the decision to training, evaluation,
+  checkpoint assignment and restoration, data, resources, and distributed
+  execution.
+
+## Closure evidence
+
+Milestone 2 closes with links to the accepted controller-form decision,
+controller design and API, focused and framework-contract test results, public
+example and output, decision-record reference, human review, and Milestone 3
+handoff.

@@ -1,113 +1,140 @@
 # Milestone 1 gates — framework-alignment research
 
-Status: proposed closure gates  
+Status: working closure proposal under review  
 Date: 2026-07-24
 
 ## Milestone result
 
-The project has an accepted, evidence-backed basis for designing
+The project has an accepted, evidence-backed basis for designing and implementing
 ClanBasedTuning in a framework-native manner. The result is a coherent authority
-chain, not merely a collection of research notes.
+chain, inspectable research and evidence, accepted cross-milestone constraints,
+roadmap-derived milestone gates, and an actionable Milestone 2 plan.
 
-## Gates
+## Authority and research gates
 
-### M1.1 Governing authority is explicit
+### M1.1 Status and authority are unambiguous
 
-- The product roadmap remains the governing project contract.
-- Later dated decisions resolve choices the roadmap left open without silently
-  changing product meaning, milestone sequence, state authority, scientific
-  meaning, or public support claims.
-- The root README routes readers to the governing documents and labels the
-  current implementation as proof-of-concept evidence.
+- The product roadmap is the governing project contract.
+- Previously accepted project decisions remain governing unless a concrete
+  conflict explicitly reopens a clause.
+- The current alignment pass identifies the exact reopened clauses and does not
+  demote unrelated accepted decisions.
+- Research, evidence, decisions, milestone gates, plans, implementation evidence,
+  and review history each have one stated role.
+- The preliminary acceptance of the documentation structure is distinguished
+  from final Milestone 1 closure.
 
-### M1.2 Permanent decisions are separated from milestone obligations
+### M1.2 The framework responsibility model is coherent
 
-- Accepted cross-milestone decisions have one dated project-decision file.
-- Milestone completion requirements live only in the owning milestone gate file.
-- Research history, source inspection, and provisional hypotheses do not appear
-  as permanent decisions.
-- No decision uses vague timing such as “later” or “initial support” where a
-  milestone owner is required.
+The research report explains the relevant PyTorch, Lightning, and Ray Tune
+lifecycles and assigns each ordinary responsibility to its native owner. The
+ClanBasedTuning responsibilities follow from the Clan mechanism rather than from
+the current proof of concept.
 
-### M1.3 The framework research covers the required lifecycle
+The report does not make a framework behavior into a ClanBasedTuning subsystem
+or assign it to a milestone merely because the behavior was investigated.
 
-The research report and evidence ledger address, at minimum:
+### M1.3 Accepted decisions and reopened clauses are handled conservatively
 
-- population and trial ownership;
-- round and evaluation ownership;
-- evolutionary scheduling;
-- checkpoint production, transfer, and restoration;
-- optimizer-state inheritance and configuration reconciliation;
-- DDP construction, initial synchronization, gradient reduction, and member
-  divergence;
-- training and fitness data semantics;
-- population admission and resource residency;
-- failure, planned completion, and experiment restoration.
+- P1, P2, P5, and P6 remain accepted unless human review identifies a new
+  concrete conflict.
+- P3 is reopened only because the roadmap explicitly assigns the controller-form
+  choice to Milestone 2.
+- P4 is reopened only because parent selection belongs to the Clan population
+  policy while Ray executes the resulting state/configuration assignment.
+- P7's collective validity rule remains accepted; only its milestone-specific
+  recovery allocation is reopened.
+- Revised clauses are concise, cross-milestone, and free of detailed milestone
+  planning or temporary support claims.
 
-Material uncertainties are assigned to an owning milestone gate rather than
-left as an untracked “current direction.”
+## Evidence and test gates
 
-### M1.4 The audit record is inspectable
+### M1.4 Decisive framework claims are auditable
 
-- Framework claims cite pinned upstream source or focused probe evidence.
-- Observation, inference, accepted decision, and remaining qualification are
-  distinguishable.
-- Alternatives considered and reasons for rejection are preserved where they
-  materially affect the selected architecture.
-- Existing repository code and tests are treated as evidence, not as
-  architectural authority.
-- The evidence record does not act as an implementation plan or permanent gate
-  file.
+Every material framework claim identifies direct source, documentation, a
+focused probe, or a clearly stated inference from those materials. Exact upstream
+revisions provide research reproducibility without becoming exact package pins.
 
-### M1.5 The standing review is usable
+A reviewer can trace each accepted decision or proposed revision to supporting
+evidence, see the alternative considered, and identify the remaining
+qualification question.
 
-- The framework-native review is short enough to apply to every meaningful
-  design or implementation boundary.
-- It tests durable principles rather than milestone-specific implementation
-  details.
-- Detailed requirements route to the owning milestone gate and design.
+### M1.5 Evidence does not become hidden planning authority
 
-### M1.6 Every roadmap milestone has an accountable gate file
+The evidence ledger records observations, probes, inference, alternatives, and
+open questions. It does not assign completion obligations; milestone gates and
+active plans determine when an answer becomes necessary.
 
-- Milestones 2 through 6 each have a gate file.
-- Obligations discovered during framework research are assigned to the milestone
-  that must satisfy them.
-- Every deferral names its destination, reason, later obligation, and required
-  evidence.
-- Future milestone gates may be refined later, but they already cover all known
-  inherited work.
+### M1.6 Current proof-of-concept evidence is scoped honestly
 
-### M1.7 The next milestone is actionable
+Current code, tests, and examples are identified by the mechanism they actually
+demonstrate. Their record states which accepted conclusions they support and
+which milestone or support claims they do not establish.
 
-- The evolutionary-subsystem plan can be executed without reopening basic
-  framework ownership on every work unit.
-- The plan is auditable against the Milestone 2 gate file and the standing
-  framework-native review.
-- Private or version-sensitive Ray seams are treated as executable contract
-  questions, not assumed architecture.
-- The plan identifies how a failed framework assumption reopens the relevant
-  project decision.
+Milestone 1 does not require a new product example merely to manufacture one.
+Its example obligation is to make existing evidence legible, reproducible where
+practical, and correctly limited.
 
-### M1.8 Human review has accepted the package
+## Documentation-system gates
 
-Human review has accepted or corrected:
+### M1.7 The reader path has one primary home for each question
 
-- the project decisions;
-- the framework-native review;
-- the research conclusions and evidence path;
-- the milestone gate system;
-- the evolutionary-subsystem plan.
+The roadmap, package index, research report, evidence ledger, project decisions,
+standing review, milestone gates, Milestone 2 plan, and human review record each
+perform one complete assigned job without competing authority or unnecessary
+repetition.
 
-Any unresolved issue necessary to begin Milestone 2 remains a blocker rather
-than an informal follow-up.
+### M1.8 The standing engineering review is repeatedly usable
+
+The standing review tests algorithmic fidelity, native ownership, demonstrated
+framework gaps, narrow authority, and evidence. It routes detailed project
+requirements to the gate where they become enforceable and component behavior to
+the design artifact for its actual owner.
+
+## Milestone-contract gates
+
+### M1.9 Later gates derive from the roadmap at the appropriate precision
+
+- Every roadmap milestone has a gate covering its capability, tests,
+  documentation, examples or scientific work, evidence, and handoff.
+- Normal cumulative progression is represented as activation, not deferral.
+- Milestone 2 is detailed enough to execute next.
+- Milestones 3 through 6 state required results, major boundaries, and expected
+  evidence without pretending their final designs or test matrices are settled.
+
+### M1.10 The Milestone 2 plan is actionable and responsibility-correct
+
+The plan:
+
+- begins by resolving the roadmap's choice between a narrow PBT specialization
+  and a direct controller with a thin Ray adapter;
+- records and justifies the selected controller form before later work depends on
+  it;
+- develops the controller implementation, focused and framework-contract tests,
+  design and API documentation, inspectable example, and Milestone 3 handoff
+  together;
+- ends at an independently invokable population-decision subsystem;
+- leaves complete Lightning/DDP training, checkpoint transition, data, resource,
+  and distributed lifecycle integration to Milestone 3.
+
+## Human acceptance gate
+
+### M1.11 Human review accepts the complete package
+
+Human review:
+
+- accepts or corrects the proposed P3, P4, and P7 replacement clauses;
+- confirms the unchanged authority of the accepted decisions that survived the
+  alignment pass;
+- accepts or corrects the research conclusions, evidence interpretation,
+  standing review, milestone gate system, Milestone 2 plan, and proof-of-concept
+  evidence classification;
+- retains any unresolved question required to begin Milestone 2 as an explicit
+  blocker.
 
 ## Closure evidence
 
-Milestone 1 closes with links to:
-
-- accepted project decisions;
-- the research report and evidence ledger;
-- the standing framework-native review;
-- all milestone gate files;
-- the accepted Milestone 2 plan;
-- the [human review record](../../framework_alignment/review_record.md).
+Milestone 1 closes with links to the accepted research report, evidence ledger,
+project decisions and reopened-clause resolutions, standing review, complete
+milestone gate system, Milestone 2 plan, scoped current-evidence record, and human
+review decision.

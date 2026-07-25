@@ -1,75 +1,127 @@
 # Milestone 6 gates — industry readiness
 
-Status: proposed completion gates  
-Date: 2026-07-24
+Status: proposed future milestone gate under Milestone 1 review
 
 ## Milestone result
 
-ClanBasedTuning is usable for serious industry workloads within a clearly
-declared, directly qualified, and operationally diagnosable support envelope.
+ClanBasedTuning is usable for serious workloads within a clearly declared,
+directly qualified, observable, diagnosable, and operationally recoverable
+support envelope. An independent engineering team can deploy, inspect, restore,
+and troubleshoot the same public system exercised by tests and examples.
 
-## Gates
+This gate states the required industry result and major evidence. The exact
+support matrix, failure taxonomy, and operational procedures are designed when
+Milestone 6 becomes active.
 
-### M6.1 The supported operating envelope is explicit
+## Capability and responsibility gates
 
-- Supported framework versions, hardware, topology, storage, precision, loader,
-  optimizer, and model-wrapping configurations are published.
-- Every support claim is backed by direct accelerator and failure-boundary
-  evidence.
-- Unsupported configurations fail early with actionable diagnostics.
+### M6.1 The support envelope is explicit and evidence-bounded
 
-### M6.2 Logging and observability explain the Clan lifecycle
+Published support identifies the qualified framework and Python versions,
+hardware, topology, storage, precision, data/evaluation behavior, optimizer
+layouts, model wrapping, and native sharding modes. Unsupported configurations
+fail early with actionable diagnostics.
 
-- Records identify trial/member identity, population boundary, selected parent,
-  target configurations, checkpoint lineage, optimizer reconciliation, and
-  collective outcome.
-- Logs and metrics support diagnosis without reproducing framework-owned state or
-  creating a second source of truth.
-- The operational meaning and retention of emitted records are documented.
+No support row is inferred from a nearby configuration that was not directly
+exercised.
 
-### M6.3 Failure and restoration are production-qualified
+### M6.2 Observability explains the Clan lifecycle
 
-- Persistent storage retains the experiment state and all required trial
-  checkpoints.
-- Cluster, node, process, and member failures are exercised within the declared
-  envelope.
-- Restoration works after completed boundaries and interruptions during a
-  partially assembled synchronous boundary, building on the functional tests
-  from Milestones 2 and 3.
-- Failure either restores one coherent Clan state or terminates clearly; it does
-  not continue with mixed generations or a silently reduced population.
-- Recovery procedures, limits, and operator actions are documented.
+Authoritative records let an operator correlate trial/member identity, round
+boundary, selected parent, resulting optimizer configurations, checkpoint
+lineage, optimizer reconciliation, collective outcome, and failure or recovery
+result without creating a second source of framework state.
 
-### M6.4 Model-sharded training is framework-native
+### M6.3 Persistent failure recovery is qualified for the declared envelope
 
-- FSDP and any other claimed Lightning-native sharding technology use their
-  native lifecycle and checkpoint semantics.
-- Clan-specific additions remain narrow and do not introduce a separate
-  enterprise training implementation.
-- Shared-gradient meaning, member divergence, checkpoint inheritance, optimizer
-  reconciliation, and failure behavior remain correct under each claimed
-  sharding mode.
+For every recovery behavior the support matrix claims, persistent framework
+state is sufficient to restore one coherent Clan or the system terminates
+clearly. Mixed generations and silently reduced populations are invalid.
+
+The accepted failure taxonomy and tests follow the supported deployment design;
+this gate does not precommit to every possible process, node, actor, or storage
+failure before that design exists.
+
+### M6.4 Claimed model-sharding modes remain framework-native
+
+FSDP and any other supported Lightning-native sharding strategy preserve the
+Clan mechanism, checkpoint and restoration semantics, optimizer reconciliation,
+observability, and failure behavior through the native framework lifecycle.
+Industry support does not introduce a separate enterprise training
+implementation.
 
 ### M6.5 Performance and scale are characterized honestly
 
-- Scaled examples and measurements report throughput, memory, checkpoint cost,
-  population overhead, and failure/recovery behavior for the declared envelope.
-- Performance claims distinguish framework overhead, Clan algorithm cost, and
-  workload characteristics.
-- Scientific examples use the public package and expose limitations as well as
-  promising behavior.
+Measurements identify workload, hardware, topology, population, framework
+versions, throughput, memory, checkpoint and storage cost, population overhead,
+and recovery cost. Claims distinguish framework overhead, Clan algorithm cost,
+and workload effects.
 
-### M6.6 An independent team can operate the system
+## Test and qualification gates
 
-- Deployment, storage, monitoring, restoration, diagnosis, and troubleshooting
-  documentation are sufficient for an independent engineering team.
-- The industry-readiness audit exercises the complete public path rather than a
-  private or specially simplified implementation.
-- All inherited deferrals from earlier milestone gate files are either closed by
-  evidence or explicitly removed from the supported product envelope.
+### M6.6 Every published support claim has direct qualification
+
+Accelerator, topology, sharding, precision, optimizer, storage, recovery, and
+observability tests jointly cover the configurations actually listed as
+supported. Performance regression tests protect material operating costs.
+
+### M6.7 Failure and restoration tests cover the accepted operational boundaries
+
+Repeatable failure injection exercises the failure classes named by the support
+matrix and verifies both machine behavior and operator-visible diagnosis.
+Recovery evidence includes the state and lifecycle boundaries necessary to prove
+that one coherent population resumes or that clean termination occurs.
+
+## Documentation gates
+
+### M6.8 Operations documentation enables independent deployment and recovery
+
+The milestone delivers the support matrix, deployment and configuration guide,
+storage and retention guidance, monitoring and record reference, recovery and
+termination runbooks, symptom-oriented troubleshooting, performance and capacity
+guidance, and framework-upgrade compatibility guidance.
+
+### M6.9 Engineering and scientific claims remain honest
+
+Design documents explain every remaining custom seam. Limitations, unsupported
+configurations, operational costs, negative results, and unresolved risks appear
+beside the claims they bound.
+
+## Example and scientific-work gates
+
+### M6.10 Scaled public workloads exercise the declared envelope
+
+Public reproducible workloads cover serious accelerator training, each claimed
+sharding mode, persistent checkpointing and restoration, observable lifecycle
+records, and representative accepted failure handling through the same public
+path users operate.
+
+### M6.11 Scientific studies characterize value and limits at scale
+
+Studies use the public package and declared support envelope, compare relevant
+baselines, report compute, storage, and operational costs and confounders, and
+publish favorable, neutral, or unfavorable outcomes with enough artifacts for
+independent interpretation.
+
+## Evidence and release gates
+
+### M6.12 The industry-readiness audit covers the complete public path
+
+The audit traces every support claim through implementation, qualification tests,
+documentation, examples, records, and observed failure behavior. Private or
+specially simplified paths do not establish support.
+
+### M6.13 An independent team successfully operates the system
+
+A team not responsible for implementation deploys a supported workload,
+inspects a complete Clan lifecycle, diagnoses an accepted failure case, restores
+or terminates according to the runbook, interprets performance and scientific
+output, and identifies the support boundary. Any material documentation or
+diagnostic gap blocks closure.
 
 ## Closure evidence
 
-Milestone 6 closes only after the industry-readiness audit, declared support
-matrix, accelerator integration tests, restoration/failure tests, scaled public
-examples, and operator documentation agree on one support envelope.
+Milestone 6 closes only when the readiness audit, support matrix, accelerator and
+sharding tests, failure and recovery evidence, performance and observability
+results, operations documentation, scaled examples, scientific studies,
+independent-team exercise, and human review agree on one support envelope.
