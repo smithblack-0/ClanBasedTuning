@@ -208,9 +208,11 @@ not violate.
 
 Design artifacts translate those accepted constraints into concrete component
 boundaries, integration points, ordering, state authority, and verification
-plans. Implementation, tests, documentation, and examples then develop
-together. When new evidence invalidates a boundary or assumption, the design
-and its gates are corrected rather than protected by compensating machinery.
+plans. Scoped plans may sequence implementation inside the active gate.
+Implementation, tests, documentation, and examples then develop together. When
+new evidence invalidates a boundary or assumption, the artifact that owns that
+claim is reopened rather than protected by compensating machinery or silently
+rewritten from a lower-authority plan.
 
 ## Roadmap
 
@@ -232,9 +234,8 @@ now govern the work, but the existing code does not yet establish the accepted
 public controller or integration architecture.
 
 The active milestone is the evolutionary subsystem. Its immediate product is an
-independently invokable controller that expresses one complete population
-decision. Ray invocation and end-to-end framework execution activate in
-Milestone 3.
+independently invokable population policy. Ray invocation and end-to-end
+framework execution activate in Milestone 3.
 
 ### Cumulative milestones
 
@@ -269,23 +270,20 @@ expresses the population decision side of Clan Tuning with the narrowest
 coherent responsibility.
 
 **Work.** The controller is designed, implemented, tested, and documented as an
-independent policy component. Given one complete population result, it compares
-fitness, selects one winning member, and produces one legal optimizer
-configuration and explicit parent identity for every next-generation member.
-It retains only intentional policy state and emits an inspectable decision for
-framework-owned execution.
+independent policy component. It compares one population's fitness, selects the
+sole winning member, and emits the optimizer-configuration values for the next
+generation. It does not absorb training-loop, distributed-gradient, checkpoint,
+or framework-lifecycle responsibilities.
 
-The public contract is designed for its immediate Ray Tune consumer through
-stable member identities, ordinary fitness values and configuration mappings,
-and serialization-friendly policy state. It does not contain Ray trials,
-checkpoints, callbacks, schedulers, or adapter lifecycle, and it does not absorb
-training-loop or distributed-gradient responsibilities.
+The public contract is independently usable and reasonably compatible with its
+expected consumer. Its exact representations, state model, policy mechanics,
+and implementation structure are resolved by design inside the Milestone 2 gate,
+not prescribed here.
 
-**Exit.** Focused policy, contract, state, and failure-ordering tests pass; the
-controller can be invoked independently without Ray or a running training job;
-design and user-facing documentation agree with the implementation; an example
-makes the evolutionary transition inspectable; and the Milestone 3 handoff
-states the complete integration obligations without preselecting the Ray seam.
+**Exit.** Focused tests establish the accepted policy, validity, failure, state,
+and compatibility claims; the controller can be invoked independently through
+its documented public contract; design and user-facing documentation agree with
+the implementation; and an example makes the evolutionary decision inspectable.
 
 #### 3. Integratable orchestration subsystems
 
@@ -295,9 +293,9 @@ Clan Tuning works end to end.
 
 **Work.** The workflow is formally analyzed for integration points and
 opportunities. Direct framework evidence is used to choose the narrowest
-coherent Ray Tune seam that can gather a complete population result, invoke the
-accepted controller once, and execute its returned transition while preserving
-native trial, checkpoint, scheduling, and resource ownership.
+coherent Ray Tune seam that can invoke the accepted controller and execute its
+result while preserving native trial, checkpoint, scheduling, and resource
+ownership.
 
 Alternatives and tradeoffs are recorded in design documentation, and the small
 primitives needed to hook Clan behavior into the Ray and Lightning lifecycles
