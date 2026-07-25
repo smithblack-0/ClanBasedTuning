@@ -4,37 +4,29 @@ Last updated: 2026-07-24
 
 ## Current position
 
-The framework-alignment design, responsibility model, project decisions, and
-milestone gate system have passed human review. Milestone 1 is open only for the
-final addition of durable operating context that lets a new contributor or fresh
-LLM session work from the repository without relying on prior conversation.
+Milestone 1 is complete. The repository has an accepted framework-alignment
+basis, responsibility model, project decisions, milestone gate system, and
+durable operating context for new contributors and fresh LLM sessions.
 
-The root README predates the accepted framework-alignment work and is not the
-current project authority.
+The existing package and tests remain proof-of-concept evidence rather than the
+accepted public architecture.
 
 ## Current work
 
-The repository is adding:
+Milestone 2 is active. It delivers an independently invokable evolutionary
+controller that consumes one complete population result, selects the sole parent,
+and produces the next generation's optimizer configurations and decision record.
 
-- a stable entry point for coding agents;
-- shared rules for discovering project authority and current work;
-- the senior-engineering workflow used for substantial implementation and review;
-- a concise business-technical writing workflow with separate writing standards;
-  and
-- maintenance rules for this status file.
+The controller is designed for later native integration without owning Ray,
+Lightning, PyTorch, trial, checkpoint, or training lifecycle behavior. The active
+Milestone 2 plan owns the detailed work sequence.
 
-This operating-context extension is under review.
+## Next capability
 
-## Next planned milestone
-
-Milestone 2 delivers an independently invokable evolutionary controller. Its
-first work unit compares two implementation forms:
-
-- a narrow specialization of Ray's synchronous PBT scheduler; and
-- an independent controller with a thin Ray adapter.
-
-The choice must be made from direct framework evidence before later controller
-work depends on either form.
+Milestone 3 manually integrates the accepted controller with Ray Tune, Lightning,
+and PyTorch distributed training. It will choose and qualify the Ray invocation
+seam, execute repeated sole-parent round transitions, and establish the complete
+manual workflow.
 
 ## Governing references
 
@@ -48,6 +40,6 @@ work depends on either form.
 
 ## Known limitations
 
-The existing package and tests remain proof-of-concept evidence. They do not by
-themselves establish the accepted public architecture or satisfy later milestone
-gates.
+No controller implementation has yet satisfied the Milestone 2 contract. The
+current Ray scheduler and integration code remain useful proof-of-concept evidence
+but do not determine the controller design or the later Ray integration form.
