@@ -101,8 +101,7 @@ Accepted corrections made in the owning artifacts:
   compatibility claims;
 - the milestone system uses roadmap activation rather than normal-progression
   deferral and preserves the roadmap rule that later milestones remain coarse;
-- the Milestone 2 gate and plan stop at the independently invokable controller
-  handoff;
+- Milestone 2 stops at the independently invokable controller capability;
 - Milestone 3 contains the first complete normal checkpoint-driven Clan workflow;
 - Milestones 4 and 5 add usability and optimizer utility without creating new
   restoration contracts; and
@@ -153,39 +152,74 @@ combined two distinct questions:
 
 This caused framework-seam research to begin before the controller contract was
 defined. Human review moved Ray invocation-form selection to Milestone 3 and
-retained one Milestone 2 obligation: construct a controller surface that maps
-naturally to ordinary Ray identities, result values, and configuration mappings
-without importing Ray objects or adapter lifecycle.
+retained one Milestone 2 obligation: define an independent population policy that
+is reasonably compatible with its expected consumer without importing that
+consumer's runtime lifecycle.
 
-The correction was made in the owning roadmap, P3 decision, Milestone 2 gate and
-plan, Milestone 3 gate, and project status. It does not change the Clan mechanism,
-sole-parent authority, or native framework-ownership decisions.
+The correction does not change the Clan mechanism, sole-parent authority, or
+native framework-ownership decisions.
 
-Review also found that `STATUS.md` repeated active-plan work-unit details. The
-status contract was tightened: status now exposes durable project-level
-capabilities and links to the owning gate, decision, plan, or design rather than
-duplicating subordinate detail. Internal plan or seam changes should not ripple
-to status unless the project-level meaning changes.
+### Gate and plan authority correction
+
+**Result:** the evolutionary-controller plan and its derived controller-design
+proposal were rejected and deleted before implementation began.
+
+Review discovered that `docs/milestones/evolutionary_controller_plan.md` had been
+introduced beside the permanent milestone gate system and then treated as a
+project authority. Temporary work-unit choices flowed upward into the Milestone 2
+gate, project status, package index, review record, project decision detail, and
+an unmerged roadmap revision. The plan also attempted to reason across Milestones
+2 and 3 at once, blurring the difference between defining the accepted policy
+capability and choosing its integration.
+
+The underlying process defect was premature planning across abstraction and
+milestone boundaries:
+
+- a gate should contract the broadest acceptable solution space needed for safe
+  downstream progress;
+- an accepted design chooses one solution inside that gate;
+- a durable plan may govern execution inside the active gate;
+- a plan may not narrow the gate, become a second roadmap, or predesign later
+  milestones; and
+- a newly discovered future necessity must be proposed explicitly to the owning
+  future gate rather than preserved as a forward promise in the current plan.
+
+Corrective actions:
+
+- delete the shadow evolutionary-controller plan;
+- delete the controller-design proposal derived from it;
+- reserve `docs/milestones/` for the gate-system README and gate files;
+- re-derive Milestone 2 directly from the roadmap and accepted decisions;
+- remove plan-derived design choices from gates and higher-level summaries;
+- add alternate-solution, counterfactual-validity, plan-deletion,
+  downstream-sufficiency, upward-leakage, and unforeseen-failure reviews; and
+- retain no persistent LLM scratch-planning directory unless human review later
+  establishes a need and explicit preliminary contract.
+
+No source code, tests, dependencies, or workflow files had been changed under the
+rejected plan.
 
 ## Final artifact status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
-| Product roadmap | Governing; trusted | Defines product meaning, milestone sequence, and the controller/integration boundary. |
-| Documentation structure | Accepted | Distinct primary homes and abstraction boundaries are retained. |
-| Project decisions | Accepted | P3 assigns the controller to M2 and Ray integration choice to M3; P4 and P7 remain accepted. |
+| Product roadmap | Governing; trusted | Defines product meaning and milestone sequence. Only the accepted M2/M3 responsibility correction may change its current-status wording. |
+| Documentation structure | Corrected | Gates, accepted designs, scoped durable plans, status, evidence, and review history have distinct authority. `docs/milestones/` contains gates only. |
+| Project decisions | Accepted | P3 assigns the independent controller to M2 and Ray integration choice to M3 without fixing the controller design. P4 and P7 remain accepted. |
 | Research report | Accepted explanatory basis | Explains the framework model without becoming current execution authority. |
 | Evidence ledger | Accepted audit record | Evidence and open questions are separated from gates and plans. |
 | Framework-native review | Accepted standing review | Component ownership and milestone activation are distinguished. |
-| Milestone gate system | Accepted | Complete-project dimensions and roadmap activation govern milestone closure. |
-| Milestone 2 gate and plan | Active and accepted for execution | Define the independent controller and integration-ready handoff without selecting a Ray seam. |
-| Milestone 3–6 gates | Accepted as future milestone contracts | Milestone 3 now owns Ray invocation-form selection and the complete manual workflow. |
-| LLM operating context | Accepted | Transfers engineering, writing, authority-discovery, change-control, and status-maintenance process. |
-| `STATUS.md` | Accepted shared status | Reports durable project abstractions without duplicating active-plan internals. |
+| Milestone gate system | Corrected and active | Gates contract complete acceptable results without importing active-plan choices. |
+| Milestone 2 gate | Active | Defines the independent controller capability and reasonable compatibility without prescribing implementation. |
+| Milestone 3–6 gates | Future milestone contracts | Remain outcome-level and must be rechecked for design leakage before activation. |
+| Milestone 2 design and plan | Not yet accepted | Must be developed inside the corrected gate; no deleted artifact retains authority. |
+| LLM operating context | Corrected | Transfers engineering and writing process, including gate/design/plan separation. |
+| `STATUS.md` | Accepted shared status | Reports durable project abstractions without linking to a shadow plan. |
 
 ## Closure
 
-Milestone 1 is accepted and closed. Milestone 2 is active under the corrected
-controller boundary. The framework-alignment evidence remains available for
-later integration research, but it does not pull Ray adapter design into the
-controller milestone.
+Milestone 1 remains accepted and closed because its framework research,
+responsibility decisions, gate system, and operating context remain valid after
+the shadow-plan correction. Milestone 2 is active under the corrected broad gate.
+Its design and any durable execution plan must now be developed from current
+evidence within that gate rather than recovered from the deleted plan.
