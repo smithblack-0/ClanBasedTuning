@@ -1,8 +1,8 @@
 # Business-technical writing workflow
 
 Use this workflow for substantial ClanBasedTuning writing: roadmaps, decisions,
-designs, plans, reports, audits, READMEs, user guidance, reference documentation,
-docstrings, and technical explanations.
+gates, designs, plans, reports, audits, READMEs, user guidance, reference
+documentation, docstrings, and technical explanations.
 
 This file defines the execution loop. The
 [technical-writing standards](technical_writing_standards.md) define how to judge
@@ -40,14 +40,18 @@ govern or be changed.
 **Produce:**
 
 - the requested artifact or reader result;
-- the governing roadmap, decision, gate, plan, implementation, evidence, or
-  review material;
+- the governing roadmap, decision, gate, accepted design, scoped plan,
+  implementation, evidence, or review material;
 - the artifact that owns the requested change; and
 - any authority or scope change requiring human consultation.
 
 Proceed when the task and authority are clear. Inspect more repository state when
 the owner is uncertain. Ask the smallest necessary question when the user has not
 supplied the current objective or a required authority decision.
+
+Do not infer authority from a file's detail, recency, or proximity. In
+particular, a plan does not become a gate because it is more specific, and a gate
+does not become an implementation plan because it must be complete.
 
 ## Stage 2 — inspect evidence and the documentation system
 
@@ -61,7 +65,7 @@ designing prose.
 - relevant entry points, neighboring artifacts, public surfaces, and existing
   authoritative homes; and
 - discovered gaps classified as writing, product, API, implementation,
-  ownership, or unresolved-decision work.
+  ownership, gate, design, plan, or unresolved-decision work.
 
 Do not make the target document absorb every discovered gap.
 
@@ -83,6 +87,27 @@ before drafting it.
 - reader purpose and required post-reading result;
 - prerequisites and handoffs; and
 - expected reading path.
+
+For milestone work, classify the artifact before writing:
+
+- **Roadmap:** defines project capability and sequence.
+- **Gate:** contracts the broadest acceptable solution space needed for safe and
+  sufficient downstream progress.
+- **Design:** selects and explains one solution inside the gate.
+- **Durable plan:** governs execution of an accepted design inside one active
+  gate.
+- **Scratch or option analysis:** supports current reasoning but has no durable
+  authority unless explicitly promoted through review.
+
+A gate describes what must be true, including failure boundaries and evidence,
+without assuming the only ways success or failure can occur. A plan may be
+narrower because it pursues one accepted solution, but it may never narrow the
+gate or predesign later milestones.
+
+A durable plan must state the active gate it serves and stop at that boundary.
+When current work discovers a condition that future work genuinely must satisfy,
+route that condition to the owning future gate for explicit review rather than
+leaving it as a forward promise in the current plan.
 
 Continue when the artifact has one coherent job at one deliberate abstraction
 level. Return to Stage 1 when the request belongs to another authority or
@@ -111,21 +136,38 @@ relationship and links to the lower-level owner. It does not repeat work-unit
 order, option analysis, class details, or framework seams merely to become
 locally complete.
 
-Apply this test before drafting:
+Apply these tests before drafting a roadmap, gate, design, or plan:
+
+- **Alternate-solution:** could materially different implementations satisfy the
+  gate? If not, is the mechanism truly invariant?
+- **Counterfactual validity:** could the roadmap result be fully achieved while
+  violating this proposed gate clause?
+- **Plan deletion:** would the gate remain complete if every plan and design
+  vanished?
+- **Downstream sufficiency:** can the next milestone rely on the gate result
+  without knowing its implementation?
+- **Upward leakage:** did a class, hook, schema, policy detail, or work order enter
+  a higher artifact only because the current plan uses it?
+- **Milestone containment:** does the plan stop at its active gate rather than
+  designing later work?
+- **Unforeseen failure:** does the gate reject unsafe outcomes broadly enough
+  without enumerating only currently imagined failure modes?
+
+Also ask:
 
 > If a subordinate plan, design, or implementation changed without changing this
 > artifact's promised abstraction, would this artifact remain correct?
 
-If not, either the lower-level detail has leaked upward or the higher-level
-contract is not actually stable. Return to Stage 3 when the abstraction is wrong;
-remain here when the information allocation is wrong.
+If not, either lower-level detail has leaked upward or the higher-level contract
+is not actually stable. Return to Stage 3 when the abstraction is wrong; remain
+here when the information allocation is wrong.
 
 Prefer causal relationships and meaningful contrasts over inventories of
 implementation detail.
 
 Return here when review finds missing concepts, duplicated material, orphan
-facts, a wrong information home, an abstraction leak, or a broken cross-document
-path.
+facts, a wrong information home, an abstraction leak, milestone leakage, or a
+broken cross-document path.
 
 ## Stage 5 — draft the complete reader path
 
@@ -137,8 +179,8 @@ optimize isolated passages while the document model remains unstable.
 
 Remain here for defects limited to sequence, explanation, layout, terminology,
 sentence structure, or local precision. Return to an earlier stage when a prose
-defect exposes a deeper contract, abstraction, evidence, or information-ownership
-problem.
+defect exposes a deeper contract, abstraction, evidence, milestone, or
+information-ownership problem.
 
 ## Stage 6 — run independent standards passes
 
@@ -157,8 +199,8 @@ Record material defects before editing and identify the stage that owns each one
 | Defect | Return to |
 | --- | --- |
 | Unsupported claim, wrong mechanism, missing evidence | Stage 2 |
-| Wrong document type, authority, audience, abstraction, prerequisite, or handoff | Stage 3 |
-| Missing concept, duplication, orphan, abstraction leak, or wrong primary home | Stage 4 |
+| Wrong document type, authority, audience, abstraction, milestone scope, prerequisite, or handoff | Stage 3 |
+| Missing concept, duplication, orphan, abstraction leak, cross-milestone leakage, or wrong primary home | Stage 4 |
 | Poor order, explanation, layout, terminology, or prose | Stage 5 |
 | Proposed change to accepted project meaning or authority | Human consultation, then the owning stage |
 
@@ -170,6 +212,8 @@ During the information-architecture pass, deliberately test encapsulation:
   false?
 - Does a change ripple upward only when the higher-level contract actually
   changes?
+- Does a durable plan remain inside one active gate?
+- Has any current design choice been promoted into gate authority without review?
 
 Do not resolve a Stage 2–4 defect by polishing Stage 5 prose around it. After a
 correction, rerun every materially affected pass. Treat new criticism as evidence
@@ -179,8 +223,8 @@ against the complete model, not as a replacement writing theory.
 
 Enter through the path a technically literate reader would plausibly use. Verify
 that the reader can build the intended model without repair, that authority and
-status remain legible, that abstraction boundaries are visible, and that links,
-examples, tables, and handoffs work.
+status remain legible, that abstraction and milestone boundaries are visible,
+and that links, examples, tables, and handoffs work.
 
 Ask:
 
@@ -192,7 +236,12 @@ Also ask:
 > Which details in this artifact would become stale after an internal change that
 > should have remained encapsulated?
 
-When either answer exposes a defect, classify it and follow the corresponding
+For gates and plans, ask separately:
+
+> Does the gate still admit every acceptable solution, and does the plan stop at
+> the gate it serves?
+
+When an answer exposes a defect, classify it and follow the corresponding
 backward edge. Before delivery, update every artifact that owns an accepted
 correction and record remaining work outside the current artifact.
 
@@ -204,10 +253,13 @@ Writing is complete when:
 - the technical model and strongest claims are supported;
 - every material point has an appropriate primary home;
 - subordinate detail remains encapsulated behind real, navigable handoffs;
+- gates preserve the full acceptable solution space;
+- durable plans remain authoritative only within one declared active gate;
 - the reader path is coherent, efficient, and navigable;
 - status and authority are accurate;
 - the fresh-reader pass succeeds; and
 - all accepted corrections are made in the artifacts that own them.
 
 A polished draft is not complete when the underlying evidence, artifact role,
-abstraction, information architecture, or authority remains wrong.
+abstraction, milestone scope, information architecture, or authority remains
+wrong.
