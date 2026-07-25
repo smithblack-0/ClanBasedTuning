@@ -104,6 +104,29 @@ def test_log_mutation_multiplies_by_exponential_draw(monkeypatch):
     assert next_configurations == [{"lr": 2.0}, {"lr": pytest.approx(4.0)}]
 
 
+def test_log_mutation_clamps_overflow_to_upper_bound(monkeypatch):
+    """Pre: an extreme log draw overflows exp. Post: mutation reaches the upper bound."""
+    controller = _controller(
+        hyperparameters={
+            "lr": {
+                "default": 2.0,
+                "standard_deviation": 1.0,
+                "geometry": "log",
+                "minimum": 0.1,
+                "maximum": 20.0,
+            }
+        }
+    )
+    monkeypatch.setattr(controller._random, "gauss", lambda mean, std: 1000.0)
+
+    _, next_configurations = controller.next_generation(
+        [0.0, 1.0],
+        [{"lr": 2.0}, {"lr": 4.0}],
+    )
+
+    assert next_configurations[1] == {"lr": 20.0}
+
+
 def test_mutation_clamps_to_declared_bounds(monkeypatch):
     """Pre: draw proposes an illegal value. Post: result equals the nearest bound."""
     controller = _controller()
