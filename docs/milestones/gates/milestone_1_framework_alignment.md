@@ -95,8 +95,9 @@ A new contributor or fresh LLM session can discover and apply the working method
 without reconstructing it from prior conversation:
 
 - a stable root entry point routes coding agents to the operating context;
-- the senior-engineering and business-technical writing workflows are preserved
-  as separate durable modules;
+- the senior-engineering workflow is preserved as a durable executable process;
+- technical writing uses a concise backward-capable workflow and separate
+  standards reference rather than one combined manual;
 - the operating context explains authority discovery, targeted context loading,
   change control, and consultation thresholds;
 - `STATUS.md` is maintained as ordinary shared project documentation for humans
@@ -141,7 +142,8 @@ Human review:
 - accepts the framework-alignment conclusions, decisions, evidence
   interpretation, standing review, milestone gate system, Milestone 2 plan, and
   proof-of-concept evidence classification;
-- accepts the durable LLM operating context and shared status contract;
+- accepts the durable LLM operating context, technical-writing workflow and
+  standards split, and shared status contract;
 - confirms that the repository can transfer both project authority and working
   process without prior conversational context; and
 - retains any unresolved question required to begin Milestone 2 as an explicit
