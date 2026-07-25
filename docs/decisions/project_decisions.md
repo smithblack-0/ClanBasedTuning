@@ -19,8 +19,10 @@ research, evidence, and planning artifacts for their actual jobs.
 
 All seven decisions are accepted. P3, P4, and the allocation portion of P7 were
 revised during the Milestone 1 alignment pass and accepted by human review on
-2026-07-24. P1, P2, P5, and P6 retained their accepted authority throughout the
-pass.
+2026-07-24. P3 was clarified again when Milestone 2 began: the independent
+controller belongs to Milestone 2, while selection and implementation of its Ray
+invocation seam belong to Milestone 3. P1, P2, P5, and P6 retained their accepted
+authority throughout these corrections.
 
 ## P1. One Ray Tune trial represents one live Clan member
 
@@ -46,22 +48,27 @@ that all members reach them coherently.
 
 **Status:** accepted.
 
-## P3. Milestone 2 chooses the narrowest PBT-like controller form
+## P3. Milestone 2 owns the controller; Milestone 3 owns Ray integration
 
-The evolutionary subsystem owns the independently invokable Clan population
-decision. Milestone 2 must choose, from direct framework evidence, whether that
-policy is best implemented as a narrow specialization of an existing Ray PBT
-scheduler or as a direct controller with the thinnest viable Ray adapter.
+Milestone 2 delivers an independently invokable Clan population controller. The
+controller consumes one complete population result, selects the sole parent, and
+produces one complete next-generation optimizer-configuration decision without
+owning live trials, checkpoints, training, or framework lifecycle execution.
 
-The selected design must preserve one Clan policy authority, independent
-controller invocation, and native Ray ownership of ordinary trial execution,
-checkpoint assignment, pause/resume, resource, and scheduler lifecycle behavior.
-It must not reproduce substantial Tune controller machinery merely to avoid an
-awkward or version-sensitive extension seam.
+Its public contract must be designed for its immediate Ray Tune consumer: stable
+member identities, ordinary fitness values and configuration mappings, explicit
+policy state, and one complete decision that a later integration layer can carry
+without inventing a second experiment schema. Ray objects and adapter lifecycle
+do not become part of the controller merely to anticipate that consumer.
 
-**Status:** accepted; revised during Milestone 1 alignment because the previous
-fixed PBT-subclass choice conflicted with the roadmap's explicit Milestone 2
-design choice.
+Milestone 3 chooses and implements the narrowest justified Ray invocation seam.
+That work must preserve one Clan policy authority and native Ray ownership of
+ordinary trial execution, checkpoint assignment, pause/resume, resources, and
+scheduler lifecycle behavior. It must not reproduce substantial Tune controller
+machinery merely to avoid an awkward or version-sensitive extension seam.
+
+**Status:** accepted. This replaces the earlier assignment of the
+PBT-specialization-versus-adapter choice to Milestone 2.
 
 ## P4. ClanBasedTuning selects the parent; Ray transfers state; Lightning restores it
 
