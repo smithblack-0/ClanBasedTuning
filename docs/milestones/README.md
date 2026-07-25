@@ -8,8 +8,7 @@ Date: 2026-07-24
 Each gate states the cumulative project result that must be true when its roadmap
 milestone closes. A gate does not own framework behavior. It requires
 ClanBasedTuning to deliver and demonstrate the project capability introduced by
-the roadmap while respecting the component and framework ownership accepted for
-that stage of the project.
+the roadmap while respecting the governing component and framework ownership.
 
 A milestone is not complete because its central code path runs. Its tests,
 documentation, examples or scientific work, evidence, and handoff must establish
@@ -18,8 +17,10 @@ one coherent project result.
 ## Authority and detail
 
 The [product roadmap](../product_roadmap.md) governs product meaning, development
-criteria, and milestone sequence. Project decisions remain proposed until
-Milestone 1 accepts them.
+criteria, and milestone sequence. Accepted project decisions govern the questions
+they resolve. An explicitly reopened clause is temporarily unavailable as
+implementation authority until human review accepts its replacement; reopening
+one clause does not demote unrelated accepted decisions.
 
 Only the active milestone and the immediately executable next plan should be
 decomposed into detailed work. Later gate files state the required result, major
