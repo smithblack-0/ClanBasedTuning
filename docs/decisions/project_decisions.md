@@ -13,7 +13,7 @@ a replacement is accepted.
 
 This file does not contain milestone completion gates, audit history, temporary
 support limits, or implementation plans. Those belong in the milestone,
-research, evidence, and planning artifacts for their actual jobs.
+research, evidence, design, and planning artifacts for their actual jobs.
 
 ## Current alignment status
 
@@ -51,15 +51,16 @@ that all members reach them coherently.
 ## P3. Milestone 2 owns the controller; Milestone 3 owns Ray integration
 
 Milestone 2 delivers an independently invokable Clan population controller. The
-controller consumes one complete population result, selects the sole parent, and
-produces one complete next-generation optimizer-configuration decision without
-owning live trials, checkpoints, training, or framework lifecycle execution.
+controller owns the population policy required to compare one population,
+select the sole parent, and emit the next generation's optimizer-configuration
+values. It does not own live trials, checkpoints, training, distributed
+execution, or framework lifecycle.
 
-Its public contract must be designed for its immediate Ray Tune consumer: stable
-member identities, ordinary fitness values and configuration mappings, explicit
-policy state, and one complete decision that a later integration layer can carry
-without inventing a second experiment schema. Ray objects and adapter lifecycle
-do not become part of the controller merely to anticipate that consumer.
+The public controller must be reasonably compatible with its expected consumer
+without importing that consumer's runtime objects or preselecting its integration
+form. Exact public representations, state, policy mechanics, and implementation
+structure are Milestone 2 design questions constrained by its gate, not durable
+cross-milestone decisions.
 
 Milestone 3 chooses and implements the narrowest justified Ray invocation seam.
 That work must preserve one Clan policy authority and native Ray ownership of
