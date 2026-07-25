@@ -1,7 +1,8 @@
 # Milestone 1 human review record
 
-Status: review in progress  
-Date opened: 2026-07-24
+Status: accepted; Milestone 1 closed  
+Date opened: 2026-07-24  
+Date closed: 2026-07-24
 
 ## Purpose
 
@@ -69,7 +70,7 @@ then reuse prior text only when it survives those checks.
 
 ### Full Milestone 1 alignment pass
 
-**Result:** corrected package prepared; human review still open.
+**Result:** accepted. Milestone 1 passed human review.
 
 The alignment pass preserved accepted decisions by default and reopened only
 clauses with demonstrated conflicts:
@@ -81,16 +82,16 @@ clauses with demonstrated conflicts:
 - P7's three recovery scopes conflicted with the roadmap's controller,
   integration, and industry capability sequence.
 
-P1, P2, P5, and the native-distributed core of P6 remain accepted. The root
-README was excluded as stale routing.
+P1, P2, P5, and P6 retained their accepted authority. Human review accepted the
+revised P3 and P4 decisions and the removal of P7's milestone-specific recovery
+allocation. The root README was excluded as stale routing.
 
-Corrections made in the owning artifacts:
+Accepted corrections made in the owning artifacts:
 
-- the project-decision file preserves the original P1–P7 structure, records the
-  accepted decisions that remain in force, and marks only the conflicting clauses
-  as reopened with proposed replacements;
+- the project-decision file preserves the original P1–P7 structure and records
+  the accepted revised P3, P4, and P7 language;
 - the research report explains the accepted responsibility baseline and the
-  exact reasons for the targeted reopenings;
+  reasons for the targeted corrections;
 - the evidence ledger records observations, probes, inference, alternatives, and
   open questions without assigning milestone work;
 - the standing review distinguishes milestone activation from component and
@@ -106,24 +107,23 @@ Corrections made in the owning artifacts:
 - Milestone 6 contains the declared operational recovery and industry support
   envelope without precommitting to a final failure taxonomy.
 
-## Current artifact review status
+## Final artifact status
 
 | Artifact | Status | Review note |
 | --- | --- | --- |
 | Product roadmap | Governing; trusted | Primary source for product meaning, milestone sequence, and development criteria. |
-| Documentation structure | Preliminarily accepted | Distinct primary homes are retained. |
-| Project decisions | Accepted with three clauses reopened | P1, P2, P5, and P6 remain governing; revised P3, P4, and P7 clauses await human acceptance. |
-| Research report | Corrected; pending review | Explains the accepted baseline and targeted reopenings without becoming decision authority. |
-| Evidence ledger | Corrected; pending review | Evidence and open questions are separated from gates and plans. |
-| Framework-native review | Corrected; pending review | Component ownership and milestone activation are distinguished. |
-| Milestone gate system | Rewritten; pending review | Complete-project dimensions, roadmap activation, and future-gate precision rules. |
-| Milestone 1 gate | Rewritten; pending review | Closure contract for the aligned package and targeted decision resolutions. |
-| Milestone 2 gate and plan | Replaced; pending review | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
-| Milestone 3–6 gates | Re-derived; pending review | State roadmap results and major evidence without premature issue-level design. |
+| Documentation structure | Accepted | Distinct primary homes are retained. |
+| Project decisions | Accepted | Revised P3, P4, and P7 language accepted; P1, P2, P5, and P6 retained. |
+| Research report | Accepted explanatory basis | Explains the governing responsibility model without becoming decision authority. |
+| Evidence ledger | Accepted audit record | Evidence and open questions are separated from gates and plans. |
+| Framework-native review | Accepted standing review | Component ownership and milestone activation are distinguished. |
+| Milestone gate system | Accepted | Complete-project dimensions, roadmap activation, and future-gate precision rules govern milestone closure. |
+| Milestone 1 gate | Passed | The complete framework-alignment package was accepted. |
+| Milestone 2 gate and plan | Accepted for execution | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
+| Milestone 3–6 gates | Accepted as future milestone contracts | State roadmap results and major evidence without premature issue-level design. |
 
 ## Closure
 
-Milestone 1 remains open until human review accepts or corrects the reopened
-clauses and the corrected subordinate artifacts, while preserving the accepted
-decisions that survived the alignment pass. Every Milestone 1 gate must be
-satisfied or retained as an explicit blocker.
+Milestone 1 passed human review on 2026-07-24. No blocker prevents beginning
+Milestone 2. Future evidence may reopen an accepted decision through the normal
+explicit decision process; it does not reopen Milestone 1 by implication.
