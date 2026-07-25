@@ -1,5 +1,3 @@
-# ruff: noqa
-
 """Framework-independent Clan population policy."""
 
 from __future__ import annotations
