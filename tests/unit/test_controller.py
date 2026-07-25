@@ -203,6 +203,12 @@ def test_random_state_round_trip_reproduces_next_mutation():
     assert first.next_generation(*generation) == second.next_generation(*generation)
 
 
+def test_constructor_rejects_nondeterministic_none_seed():
+    """Pre: seed is None. Post: construction rejects a nondeterministic random stream."""
+    with pytest.raises(ValueError, match="seed must be explicit"):
+        _controller(seed=None)
+
+
 @pytest.mark.parametrize(
     ("field", "value", "message"),
     [
