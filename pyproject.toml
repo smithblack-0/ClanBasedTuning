@@ -53,8 +53,6 @@ markers = [
 line-length = 100
 target-version = "py311"
 extend-exclude = [
-    "examples/evolutionary_policy.py",
-    "src/clan_based_tuning/controller.py",
     "tests/test_package.py",
     "tests/unit/test_controller.py",
 ]
