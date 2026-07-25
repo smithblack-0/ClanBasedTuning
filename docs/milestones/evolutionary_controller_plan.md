@@ -1,16 +1,27 @@
 # Evolutionary-controller milestone plan
 
-Status: proposed Milestone 2 execution plan pending Milestone 1 acceptance
+Status: proposed Milestone 2 execution plan pending Milestone 1 closure  
+Date: 2026-07-24
+
+## Governing inputs
+
+This plan is governed by:
+
+- the [product roadmap](../product_roadmap.md);
+- the accepted [project decisions](../decisions/project_decisions.md), except for
+  the explicitly reopened P3, P4, and P7 clauses until their replacements are
+  accepted;
+- the [Milestone 2 gate](gates/milestone_2_evolutionary_subsystem.md);
+- the [framework-native review](../reviews/framework_native_review.md).
+
+The plan is an execution route, not a second acceptance contract. Reopening a
+specific clause does not suspend unrelated accepted decisions.
 
 ## Purpose
 
 Produce the Milestone 2 result: an independently invokable evolutionary
 controller that owns only the population decision required by Clan Tuning and
 uses the narrowest justified PBT-like framework responsibility.
-
-This plan is governed by the product roadmap, accepted Milestone 1 decisions,
-the Milestone 2 gate, and the standing framework-native review. It is an
-execution route, not a second acceptance contract.
 
 ## Products developed together
 
@@ -44,7 +55,7 @@ Each work unit follows the same backward-capable loop:
 
 ```mermaid
 flowchart TD
-    A[Inspect roadmap, decisions, framework source, and current unit] --> B[State unit purpose and owners]
+    A[Inspect roadmap, governing decisions, framework source, and current unit] --> B[State unit purpose and owners]
     B --> C[Implement or revise the smallest complete unit]
     C --> D[Test contract, state, and failure ordering]
     D --> E[Update design, API docs, and example]
@@ -64,9 +75,9 @@ state or adapter machinery.
 
 ### Purpose
 
-Choose whether ClanBasedTuning should specialize Ray's synchronous PBT scheduler
-or use an independent controller with a thin Ray adapter. Do not make later
-implementation depend on one option before this choice is reviewed.
+Resolve the roadmap's explicit choice between specializing Ray's synchronous PBT
+scheduler and using an independent controller with a thin Ray adapter. Do not
+make later implementation depend on one option before this choice is reviewed.
 
 ### Evidence work
 
