@@ -1,100 +1,137 @@
 # ClanBasedTuning project decisions
 
-Status: proposed project decisions for Milestone 1 acceptance  
+Status: accepted project decisions under Milestone 1 alignment review  
 Date: 2026-07-24
 
 ## Purpose
 
 This file records dated technical decisions that resolve choices left open by
-the governing [product roadmap](../product_roadmap.md). They remain proposed
-until Milestone 1 human review accepts them. Once accepted, later work may rely
-on them unless a newer explicit decision supersedes them.
+the governing [product roadmap](../product_roadmap.md). Accepted decisions remain
+authoritative unless a concrete roadmap, framework-evidence, or responsibility
+conflict explicitly reopens them. A reopened decision remains under review until
+a replacement is accepted.
 
-This file contains only durable cross-milestone choices. Milestone completion
-requirements, research evidence, active implementation plans, temporary support
-limits, and framework-version qualification belong in their own artifacts.
+This file does not contain milestone completion gates, audit history, temporary
+support limits, or implementation plans. Those belong in the milestone,
+research, evidence, and planning artifacts for their actual jobs.
+
+## Current alignment status
+
+- P1, P2, P5, and P6 remain accepted.
+- P3 is reopened because the roadmap explicitly leaves the choice between a PBT
+  specialization and a direct controller to Milestone 2.
+- P4 is reopened because its earlier wording gave Ray the Clan-specific parent
+  selection policy rather than only execution of the selected transition.
+- P7 is reopened only for its milestone-specific recovery sentence. Its
+  collective-validity and collective-completion rule remains accepted.
+
+The revised P3, P4, and P7 text below is proposed for human acceptance. Until
+then, the accepted portions named above continue to govern and the conflicting
+clauses may not be used as implementation authority.
 
 ## P1. One Ray Tune trial represents one live Clan member
 
-In the Ray-backed program, one Tune trial represents one Clan member. Every
-member that contributes to shared-gradient training must be concurrently live;
-time-multiplexing or silently omitting a member changes the method.
+One Tune trial represents one Clan member. The complete population must be
+concurrently resident, and every member participates in every shared training
+gradient.
 
-Ray's generated trial set remains the population authority. Integration and
-usability work must make trial count, concurrent capacity, Clan membership,
-rank/world-size assignment, and dedicated resources describe one coherent live
-population.
+Ray remains the population authority. Later assembly work must make the
+generated trial count, concurrent capacity, Clan world size, and dedicated
+resources describe one consistent live population.
 
-## P2. Lightning produces the qualifying round boundary
+**Status:** accepted.
+
+## P2. Lightning produces the evolutionary boundary
 
 A Clan round ends at a qualifying Lightning validation-and-checkpoint event.
-Lightning owns the training and validation cadence that produces the event; a
-Clan controller consumes the completed population result rather than maintaining
-a second progress clock.
+Lightning owns the training and validation cadence that produces the event; the
+evolutionary controller consumes it rather than maintaining a second progress
+clock.
 
 The integration milestone must define which Lightning events qualify and prove
-that every live member reaches the same logical boundary.
+that all members reach them coherently.
 
-## P3. ClanBasedTuning decides the population transition; native frameworks execute it
+**Status:** accepted.
 
-The evolutionary controller owns the Clan-specific population decision: compare
-one complete population, select the sole parent whose model and optimizer state
-become the basis of the next generation, and produce the next member optimizer
-configurations.
+## P3. Milestone 2 chooses the narrowest PBT-like controller form
 
-In the Ray/Lightning path, native framework machinery executes that decision:
-Ray Tune owns trial lifecycle and checkpoint/configuration assignment, while
-Lightning owns checkpoint contents and restoration. After Lightning restores
-the inherited optimizer state, ClanBasedTuning reapplies only the receiving
-member's evolved optimizer values.
+The evolutionary subsystem owns the independently invokable Clan population
+decision. Milestone 2 must choose, from direct framework evidence, whether that
+policy is best implemented as a narrow specialization of an existing Ray PBT
+scheduler or as a direct controller with the thinnest viable Ray adapter.
 
-This decision does not choose whether Milestone 2 implements the controller by
-specializing an existing PBT scheduler or by building a direct controller with a
-thin framework adapter. Milestone 2 must choose the narrowest design that
-expresses the policy without duplicating ordinary Tune lifecycle behavior.
+The selected design must preserve one Clan policy authority, independent
+controller invocation, and native Ray ownership of ordinary trial execution,
+checkpoint assignment, pause/resume, resource, and scheduler lifecycle behavior.
+It must not reproduce substantial Tune controller machinery merely to avoid an
+awkward or version-sensitive extension seam.
 
-No separate Clan checkpoint scheduler, generation manifest, or optimizer
-construction system is introduced without direct evidence of a native gap.
+**Status:** reopened; revised text proposed. The previous fixed PBT-subclass
+choice conflicts with the roadmap's explicit Milestone 2 design choice.
 
-## P4. Training data is partitioned; fitness data is comparable
+## P4. ClanBasedTuning selects the parent; Ray transfers state; Lightning restores it
+
+ClanBasedTuning owns the Clan-specific population policy and therefore selects
+the sole winning parent. In the Ray-backed path, Ray owns execution of the
+resulting checkpoint and configuration assignment to target trials. Lightning
+owns checkpoint contents and restoration.
+
+After Lightning restores the parent's optimizer state, ClanBasedTuning reapplies
+only the receiving member's evolved optimizer configuration. This division does
+not create a separate Clan checkpoint scheduler, generation manifest, or
+optimizer-construction system.
+
+**Status:** reopened; revised text proposed. The previous wording incorrectly
+assigned parent/source selection to Ray rather than the Clan policy.
+
+## P5. Training data is partitioned; fitness data is comparable
 
 Training retains normal distributed partitioning. Every member is evaluated on
 the same held-out workload under comparable conditions, and each fitness value
-remains member-local until the population controller compares the candidates.
+remains local to its Tune trial until the population controller compares the
+population.
 
-The integration milestone defines and proves the concrete sampler, metric,
-boundary, and reporting contract.
+The integration milestone owns the concrete sampler, metric, and reporting
+contract.
 
-## P5. Native PyTorch distributed strategies own shared-gradient execution
+**Status:** accepted.
 
-PyTorch's qualified distributed strategy owns ordinary model wrapping, initial
-state synchronization, gradient bucketing, and gradient collectives.
-ClanBasedTuning may configure or narrowly specialize a framework boundary where
-intentional member divergence requires it, but it does not reimplement ordinary
-gradient reduction.
+## P6. Native PyTorch distributed execution owns shared-gradient mechanics
 
-The first complete integration qualifies DDP. Later support for FSDP or another
-model-sharding strategy must preserve the same Clan semantics through that
-strategy's native lifecycle rather than creating a separate distributed
-implementation.
+PyTorch's qualified distributed strategy owns ordinary model wrapping, gradient
+bucketing, initial synchronization, and gradient collectives wherever its
+qualified behavior fits. ClanBasedTuning may configure or narrowly specialize
+the framework boundary, but it does not reimplement normal gradient reduction.
 
-## P6. Active-population validity and planned completion are collective
+Milestone 3 must prove the first supported DDP path does not erase intended
+member divergence. Later model-sharding support must preserve the same Clan
+semantics through its native PyTorch/Lightning strategy rather than creating a
+second distributed implementation.
 
-An active Clan is the complete population participating in one shared-gradient
-workflow. If a required member is missing or fails, the current Clan is invalid;
-the system may not silently continue with a smaller population or redefine the
-survivors as the same Clan.
+**Status:** accepted core with scope clarification for the roadmap's later
+model-sharding milestone.
 
-Planned completion occurs only at a coherent population boundary and applies to
-the complete Clan. The exact framework behavior for termination, diagnosis, and
-operational recovery becomes enforceable where the roadmap introduces the
-corresponding integration or industry capability; it is not a separate
-controller-owned recovery subsystem.
+## P7. Failure and planned completion are collective
+
+Failure of one active member invalidates the active Clan. Planned completion
+occurs only at a synchronized population boundary and ends the complete Clan.
+No supported path may silently continue one member independently, shrink the
+active population, or redefine a partial population as a valid Clan.
+
+The controller must reject incomplete population input. The complete integration
+must terminate or invalidate broken distributed execution clearly. Operational
+interruption recovery becomes enforceable when the industry milestone defines
+and qualifies its support envelope. These are applications of one collective
+validity rule, not separate controller, integration, and production recovery
+subsystems.
+
+**Status:** collective rule accepted; revised milestone-allocation text proposed.
 
 ## Supporting record
 
-The reasoning and source evidence behind these proposed decisions are recorded
-in:
+The reasoning and source evidence behind these decisions and revisions are
+recorded in:
 
 - [Framework-alignment research report](../framework_alignment/research_report.md)
 - [Framework-alignment evidence ledger](../framework_alignment/evidence_ledger.md)
+- [Milestone 1 human review record](../framework_alignment/review_record.md)
