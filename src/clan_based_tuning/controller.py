@@ -211,11 +211,12 @@ class ClanPopulationPolicy:
 
     def _validate_parent_fields(self, parent_config: Mapping[str, Any]) -> None:
         for field in self._field_factors:
-            if field not in parent_config:
+            try:
+                value = parent_config[field]
+            except KeyError as error:
                 raise ValueError(
                     f"selected parent optimizer config is missing field {field!r}"
-                )
-            value = parent_config[field]
+                ) from error
             if isinstance(value, bool) or not isinstance(value, Real):
                 raise TypeError(
                     f"selected parent optimizer field {field!r} must be a real scalar"
