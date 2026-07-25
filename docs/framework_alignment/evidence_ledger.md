@@ -1,78 +1,90 @@
 # Framework-alignment evidence ledger
 
-Status: Milestone 1 audit record  
+Status: Milestone 1 audit record under review  
 Date: 2026-07-24  
 Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
 ## Purpose
 
-This ledger preserves the evidence and reasoning used to propose the dated
+This ledger preserves the source observations, focused probes, inferences,
+alternatives, and unresolved questions used to evaluate the proposed
 [project decisions](../decisions/project_decisions.md). It is an audit record,
-not a permanent decision file, milestone gate, or implementation plan.
+not a decision file, milestone gate, compatibility promise, or implementation
+plan.
 
-Existing repository code and tests are treated as proof-of-concept evidence.
-They do not determine the accepted architecture merely because they already
-exist or pass.
+The milestone gates determine when a project capability must be demonstrated.
+This ledger records what the inspected frameworks appear to provide and what
+remains uncertain; it does not assign work merely because a framework behavior
+was discovered here.
+
+Existing repository code and tests are proof-of-concept evidence. They do not
+determine the accepted architecture or support envelope merely because they
+already exist or pass.
 
 ## Evidence classifications
 
-- **Direct source:** behavior visible in pinned upstream source.
+- **Direct source:** behavior visible in the pinned upstream source.
 - **Probe:** behavior observed in an executable focused test.
-- **Inference:** conclusion derived from the Clan mechanism or by combining
-  direct sources.
-- **Qualification obligation:** behavior that must be proved by the named
-  milestone before that milestone may close.
+- **Inference:** a conclusion derived from the Clan mechanism or by combining
+  direct observations.
+- **Open qualification question:** a material uncertainty that a later design or
+  support claim must resolve before relying on it.
 
-## P1. One trial is one fully resident member
+An open qualification question is not automatically assigned to the earliest
+possible milestone. Its natural home is determined by the roadmap capability
+whose completion depends on the answer.
+
+## P1. One trial represents one concurrently live member
 
 ### Ray population generation
 
-**Direct source.** Ray's `BasicVariantGenerator` uses `num_samples` together
-with the search space to generate trials and tracks the resulting sample count
-and concurrency limit.
+**Direct source.** Ray's `BasicVariantGenerator` uses `num_samples` and the
+search space to generate trials while tracking sample count and concurrency.
 
 - [Ray `BasicVariantGenerator`](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/search/basic_variant.py)
 
-**Inference.** A second package population count would duplicate Ray's
-configuration and could disagree with the actual generated trial set.
+**Inference.** A second package-owned population count could disagree with the
+actual trial set. The Ray-backed program should derive Clan membership from the
+native trial population rather than mirror it.
 
-**Alternative considered.** Maintain an independent `population_size` inside
-ClanBasedTuning. Rejected because it creates a second authority rather than
-constraining Ray's actual population.
+**Alternative considered.** Maintain an independent `population_size` as the
+population authority inside ClanBasedTuning. Rejected because it creates a
+second source of truth.
 
-### Actor staging
+### Actor staging and residency
 
-**Direct source.** Ray's Tune controller can stage pending actors through its
-resource-management path after consulting the scheduler. Scheduler selection is
-not the only admission mechanism.
+**Direct source.** Tune's controller can stage pending actors through its
+resource-management path after consulting the scheduler. Scheduler policy is not
+the only admission mechanism.
 
 - [Ray `TuneController`](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/execution/tune_controller.py)
 
-**Inference.** Full-population residency cannot be guaranteed solely by the
-scheduler. Admission belongs at the orchestration boundary.
+**Inference.** Full-population residency cannot be guaranteed by the evolutionary
+scheduler alone. The orchestration boundary must verify that generated trials,
+concurrent resources, and distributed membership describe one live population
+before shared-gradient work begins.
 
-**Qualification obligations.**
+**Open qualification question.** Which native Ray resource and trial-state
+signals are sufficient for a reliable preflight in the first complete manual
+workflow?
 
-- Milestone 3: reject incomplete residency before manual DDP setup.
-- Milestone 4: automate the same preflight through the user construction path.
-
-## P2. Lightning produces the evolutionary boundary
+## P2. Lightning produces the qualifying round boundary
 
 ### Native validation cadence
 
 **Direct source.** Lightning's training loop decides when validation runs from
-Trainer validation configuration, including epoch and subepoch forms.
+Trainer configuration, including epoch and subepoch forms.
 
 - [Lightning training-epoch loop](https://github.com/Lightning-AI/pytorch-lightning/blob/7f0c3436cd3f6ad3753125672024fc415cbcb414/src/lightning/pytorch/loops/training_epoch_loop.py)
 - [Lightning Trainer setup](https://github.com/Lightning-AI/pytorch-lightning/blob/7f0c3436cd3f6ad3753125672024fc415cbcb414/src/lightning/pytorch/trainer/setup.py)
 
 **Inference.** A Clan-owned progress clock would duplicate the training-loop
-owner. One qualifying validation report can represent one evolutionary
-boundary.
+owner. A qualifying Lightning validation-and-checkpoint event can define the
+round boundary.
 
 **Alternative considered.** Define rounds through a package epoch, batch,
-optimizer-step, or wall-clock counter. Rejected because it duplicates
-Lightning cadence and can desynchronize collective members.
+optimizer-step, or wall-clock counter. Rejected because it creates a second
+cadence and can desynchronize collective members.
 
 ### Wall-clock cadence
 
@@ -81,64 +93,64 @@ each process.
 
 - [Lightning time-based validation branch](https://github.com/Lightning-AI/pytorch-lightning/blob/7f0c3436cd3f6ad3753125672024fc415cbcb414/src/lightning/pytorch/loops/training_epoch_loop.py)
 
-**Inference.** Runtime jitter can cause members to leave training at different
-collective positions. This mode cannot be claimed without direct synchronization
-evidence.
+**Inference.** Runtime jitter may cause members to reach different collective
+positions. Time-based validation cannot be included in a support claim without
+direct synchronization evidence.
 
-**Qualification obligation.** Milestone 3 must prove every supported cadence,
-loader, accumulation, and continuation combination.
+**Open qualification question.** Which validation, accumulation, loader, and
+continuation configurations preserve one coherent population boundary?
 
-## P3. Synchronous Ray PBT is the evolutionary foundation
+## Milestone 2 design choice: PBT specialization or direct controller
 
-### Population lifecycle
+### Synchronous PBT lifecycle
 
 **Direct source.** Ray's synchronous PBT path waits for the live population,
 pauses early arrivals, stores results, prepares source checkpoints before
-exploitation, transfers source checkpoint/configuration to targets, and resumes
+exploitation, assigns source checkpoint/configuration to targets, and resumes
 trials through Tune.
 
 - [Ray `PopulationBasedTraining`](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/schedulers/pbt.py)
 
-**Inference.** ClanBasedTuning can change the parent/target policy without
-reimplementing the surrounding lifecycle. A singleton source set and all other
-members as targets express the Clan transition.
+**Inference.** A narrow PBT specialization may replace only the population
+selection policy while retaining native trial execution.
 
-**Alternative considered.** Implement a new population scheduler directly. It
-remains the fallback only if Milestone 2 proves the PBT seam cannot express the
-Clan policy without substantial Tune-controller duplication.
+**Risk.** The likely population-selection seam is version-sensitive and may be
+private in Ray 2.56. A subclass that depends on broad internals could be less
+maintainable than an independent controller with a thin adapter.
 
-**Risk.** The likely selection seam is private in Ray 2.56.
+**Alternative retained.** Implement an independently invokable controller and
+translate its decision through the narrowest Ray adapter available. This is not
+a license to reproduce Tune's pause, resume, checkpoint, resource, or trial
+execution lifecycle.
 
-**Qualification obligation.** Milestone 2 must pin the seam with an executable
-three-or-more-trial, multi-generation contract test before implementation treats
-it as stable.
+**Open qualification question.** Which option expresses the Clan policy with one
+policy authority, independent invocation, minimal version-sensitive surface, and
+no substantial Tune lifecycle duplication?
 
 ### Experiment restoration
 
 **Direct source.** Ray `Tuner.restore` resumes unfinished trials and can resume
-errored trials from their latest checkpoints. Tune persistent storage is
-designed to retain experiment state and trial checkpoints for experiment-level
-fault tolerance.
+errored trials from their latest checkpoints. Tune persistent storage retains
+experiment state and trial checkpoints for experiment-level fault tolerance.
 
 - [Ray `Tuner.restore`](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/tuner.py)
 - [Ray Tune storage documentation source](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/doc/source/tune/tutorials/tune-storage.rst)
 
-**Inference.** Native restoration should be tested before ClanBasedTuning
-introduces a generation manifest or recovery transaction. The open question is
-whether the specialized synchronous scheduler restores one coherent population
-when interruption occurs during a partially assembled boundary.
+**Inference.** Native experiment restoration must be investigated before the
+project invents a Clan generation manifest or recovery transaction.
 
-**Qualification obligations.**
+**Boundary.** This evidence does not make interruption recovery a controller
+responsibility. Normal checkpoint-driven next-generation continuation belongs to
+the complete integration workflow. Operational interruption recovery is a
+support-envelope question for industry qualification.
 
-- Milestone 2: test scheduler/trial restoration with synthetic trainables after
-  completed and partially assembled population boundaries.
-- Milestone 3: repeat with real Lightning model, optimizer, and data state.
-- Milestone 6: qualify persistent storage and cluster-failure recovery for the
-  industry support envelope.
+**Open qualification question.** For each future recovery claim, does native Ray
+and Lightning state restore one coherent Clan, fail clearly, or expose a
+specific gap requiring approved Clan-specific machinery?
 
-## P4. Ray transfers state; Lightning defines and restores it
+## P3. ClanBasedTuning decides the transition; frameworks execute it
 
-### Lightning report/checkpoint bridge
+### Report and checkpoint bridge
 
 **Direct source.** Ray's Lightning integration saves a Lightning checkpoint at
 validation end and attaches it to `tune.report`. Under FunctionTrainable, a
@@ -147,17 +159,19 @@ later save request returns the most recently reported checkpoint.
 - [Ray Lightning report/checkpoint callback](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/integration/pytorch_lightning.py)
 - [Ray FunctionTrainable checkpoint bridge](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/trainable/function_trainable.py)
 
-**Direct source.** Ray PBT assigns the prepared source checkpoint and new
-configuration to exploited target trials.
+**Direct source.** Ray PBT exploitation assigns a prepared source checkpoint and
+new configuration to target trials.
 
 - [Ray PBT exploitation](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/schedulers/pbt.py)
 
-**Inference.** Ray can remain authoritative for source selection and transfer;
-a second Clan checkpoint scheduler is unnecessary.
+**Inference.** ClanBasedTuning should decide the winning parent. Native Ray
+execution can then perform checkpoint/configuration assignment. Saying that Ray
+owns “source selection” would incorrectly transfer the Clan policy back to the
+framework.
 
 **Alternative considered.** Add a Clan checkpoint scheduler or generation
-manifest. Rejected absent evidence that native Ray assignment and restoration
-fail the milestone contract tests.
+manifest. Rejected absent direct evidence that native assignment and restoration
+cannot satisfy an accepted integration or support contract.
 
 ### Member-local checkpoint writing
 
@@ -166,12 +180,14 @@ global rank zero because ordinary replicas are assumed equivalent.
 
 - [Lightning Strategy checkpoint gate](https://github.com/Lightning-AI/pytorch-lightning/blob/7f0c3436cd3f6ad3753125672024fc415cbcb414/src/lightning/pytorch/strategies/strategy.py)
 
-**Inference.** Every divergent Tune trial must be permitted to write its own
-checkpoint because any member may become the parent. A custom `CheckpointIO`
-alone cannot bypass a Strategy-level rank gate.
+**Inference.** When separate Tune trials participate in one DDP collective,
+every divergent trial must be able to provide its own checkpoint because any
+member may be selected. A custom `CheckpointIO` alone cannot bypass a
+Strategy-level rank gate.
 
-**Qualification obligation.** Milestone 3 must select a nonzero DDP rank as the
-parent and prove native report, transfer, and restore behavior.
+**Open qualification question.** What is the narrowest Lightning seam that lets
+every candidate report a native trial-local checkpoint without introducing a
+second checkpoint system?
 
 ### Optimizer restoration ordering
 
@@ -181,99 +197,111 @@ then restores scheduler state through its checkpoint connector.
 - [Lightning checkpoint connector](https://github.com/Lightning-AI/pytorch-lightning/blob/7f0c3436cd3f6ad3753125672024fc415cbcb414/src/lightning/pytorch/trainer/connectors/checkpoint_connector.py)
 
 **Inference.** The receiving member's evolved optimizer values must be applied
-after inherited optimizer state is loaded. An independent LR scheduler can
-create competing authority over those values.
+after inherited optimizer state is loaded. A Lightning scheduler that also
+writes those fields can create competing authority.
 
-**Probe.** Existing CPU exploit/restart work shows that inherited optimizer
-state and a target learning rate can coexist after restore. It does not
-establish the final public seam or broad optimizer support.
+**Probe.** Current CPU exploit/restart evidence shows that inherited optimizer
+state and a target learning rate can coexist after restore. It does not certify
+the final public hook or broad optimizer layouts.
 
-**Qualification obligations.**
+**Open qualification questions.** Which Lightning hook provides the correct
+ordering for the first integration, and which optimizer/scheduler layouts can be
+claimed without conflicting authority?
 
-- Milestone 3: prove the chosen Lightning hook with the narrow supported
-  optimizer layout.
-- Milestone 5: qualify multiple optimizers, parameter groups, remapping, and
-  scheduler interaction.
+## P4. Training data is partitioned; fitness data is comparable
 
-## P5. Training data is partitioned; fitness data is comparable
-
-**Mechanism inference.** Distinct training batches contribute useful distributed
-work to the shared gradient. Candidate fitness must instead be comparable:
-different validation samples confound ranking, while distributed metric
-reduction combines the candidate scores.
+**Mechanism inference.** Distinct training batches contribute distributed work
+to the common gradient. Fitness must instead compare candidate models on the
+same workload; different validation samples confound ranking, while distributed
+metric reduction combines the candidate scores.
 
 **Framework direction.** Standard PyTorch sampling can express repeated access
 to one deterministic evaluation set without a separate data framework.
 
-**Alternatives considered.** A custom evaluation-data subsystem and DDP-reduced
-fitness were rejected: the first duplicates standard sampling, while the second
-erases the member differences Ray must compare.
-
 - [PyTorch `DistributedSampler`](https://github.com/pytorch/pytorch/blob/4899d123e80a124f31e45ed832bba195af32c353/torch/utils/data/distributed.py)
 
-**Qualification obligation.** Milestone 3 must prove identical validation data,
-transforms, ordering, loader length, boundary timing, and one member-local report
-per qualifying validation.
+**Alternatives considered.** A custom evaluation-data subsystem and DDP-reduced
+fitness were rejected: the first duplicates standard sampling, while the second
+erases the candidate differences the controller must compare.
 
-## P6. Native DDP owns the shared-gradient substrate
+**Open qualification question.** Which sampler, transforms, ordering,
+loader-length, boundary timing, and report path establish comparable member-local
+fitness in the complete integration?
+
+## P5. Native PyTorch distributed strategies own shared gradients
 
 **Direct source.** PyTorch DDP owns parameter verification, initial state
 synchronization, gradient hooks, bucketing, and reduction.
 
 - [PyTorch `DistributedDataParallel`](https://github.com/pytorch/pytorch/blob/4899d123e80a124f31e45ed832bba195af32c353/torch/nn/parallel/distributed.py)
 
-**Probe.** Focused PyTorch 2.10 work showed that native DDP can synchronize an
-initial state, subsequent buffer broadcasting can be disabled, reduced
-gradients remain equal, and different learning rates produce divergent
+**Probe.** Focused PyTorch and Lightning CPU work showed that native DDP can
+synchronize an initial state, runtime buffer broadcasting can be disabled,
+reduced gradients remain equal, and different learning rates produce divergent
 parameters.
 
-**Inference.** Manual collective and initial-state machinery should be removed
-where Lightning can preserve native behavior.
+**Inference.** ClanBasedTuning should configure or narrowly specialize the
+framework boundary rather than reimplement gradient communication or initial
+state transfer where native behavior fits.
 
-**Alternative considered.** Reimplement gradient communication or initial state
-broadcast in ClanBasedTuning. Rejected because Clan requires an ordinary common
-gradient, not a new collective algorithm.
+**Alternative considered.** Implement a package gradient reducer. Rejected
+because Clan Tuning requires an ordinary common gradient, not a new collective
+algorithm.
 
-**Qualification obligations.**
+**Open qualification questions.** Which DDP precision, accumulation, buffer,
+model, and loader configurations preserve the method? Later, which native
+model-sharding strategies can preserve the same semantics without hardcoding a
+one-process-per-member architecture?
 
-- Milestone 3: commit the Lightning-facing contract test and qualify the first
-  supported precision, accumulation, buffer, and model envelope.
-- Milestone 6: repeat under every claimed model-sharding technology.
-
-## P7. Failure and planned completion are collective
+## P6. Population validity and completion are collective
 
 ### Per-trial stopping order
 
 **Direct source.** Tune evaluates ordinary per-trial stop conditions before the
-scheduler completes its result handling.
+scheduler completes result handling.
 
 - [Ray TuneController result handling](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/execution/tune_controller.py)
 
-**Inference.** One trial may terminate before the synchronous population
-transition. Member-local Tune stopping and Lightning early stopping cannot be
-accepted without a collective owner.
+**Inference.** Member-local Tune stopping or Lightning early stopping can remove
+a participant before a complete population transition. Such behavior requires a
+collective contract rather than ordinary independent stopping.
 
 ### Failure handling
 
 **Direct source.** Ray provides trial-error and experiment-stop paths, but
-independent recovery does not by itself prove a coherent fixed DDP population.
+independent trial recovery does not by itself prove a coherent fixed distributed
+population.
 
 - [Ray TuneController failure handling](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/execution/tune_controller.py)
 
-**Mechanism inference.** Losing one participant invalidates both the fixed DDP
-world and the population producing the shared gradient.
+**Mechanism inference.** Losing one required participant invalidates both the
+active distributed world and the population producing the shared gradient.
 
-**Alternatives considered.** Per-trial early stopping, member-local recovery,
-and continuing with a smaller population were rejected because each changes the
-active collective or population semantics.
+**Alternatives considered.** Per-trial early stopping, silent member-local
+recovery, and continuing with a smaller population were rejected because each
+changes the active Clan semantics.
 
-**Qualification obligations.**
+**Open qualification questions.** How does the complete integration terminate or
+invalidate a broken Clan without indefinite collective waits? Which operational
+failure and restoration behaviors can later be included in a published industry
+support envelope?
 
-- Milestone 2: select and test the controller-level collective completion and
-  invalid-population outcome.
-- Milestone 3: prove distributed termination without indefinite collective
-  waits and with useful diagnosis.
-- Milestone 6: qualify production failure and recovery behavior.
+## Current proof-of-concept evidence
+
+The current repository demonstrates useful mechanisms but does not certify the
+proposed architecture or later milestone exits.
+
+- `tests/framework_contracts/test_ray_native_pbt_cycle.py` exercises a small
+  native Tune/Lightning/PBT exploit-and-restore cycle. It supports feasibility of
+  the current Ray/Lightning path but does not decide the final controller form,
+  prove experiment interruption recovery, or establish a broad support range.
+- Existing CPU distributed probes support common gradients with optimizer-driven
+  divergence, member-local state, and exploit-style restore ordering. Their
+  conclusions remain mechanism evidence until retained tests and documentation
+  identify the exact public contract they qualify.
+- Existing examples demonstrate proof-of-concept composition. They are not
+  milestone examples unless they use the accepted public path and perform the
+  reader and evidence job required by that milestone.
 
 ## Source revisions
 
@@ -281,5 +309,7 @@ active collective or population semantics.
 - Lightning: `7f0c3436cd3f6ad3753125672024fc415cbcb414`
 - Ray: `27b0e6a7b88324eab5214a0bc65a839bfbb2dc85`
 
-When a version-sensitive seam changes, update the evidence record, affected
-project decision, owning milestone gate, and executable contract test together.
+These exact revisions make the research reproducible. They do not pin the
+published package to one exact dependency version. Future compatibility claims
+must be backed by version-specific contract tests and expressed as the support
+range those tests actually establish.
