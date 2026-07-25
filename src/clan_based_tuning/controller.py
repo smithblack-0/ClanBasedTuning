@@ -1,91 +1,44 @@
-"""Framework-independent Clan population policy."""
+"""Framework-independent Clan population controller."""
 
 from __future__ import annotations
 
 import math
 import random
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
 from numbers import Real
 from typing import Any, Literal
 
-
-@dataclass(frozen=True)
-class MemberResult:
-    """Fitness and optimizer configuration reported by one Clan member.
-
-    The controller reads this record only to compare fitness and obtain the
-    selected parent's optimizer configuration. It never applies the configuration
-    to a live optimizer or owns any training state.
-    """
-
-    fitness: float
-    optimizer_config: Mapping[str, Any]
+_REQUIRED_SPEC_KEYS = frozenset({"default", "std", "sampling", "lower", "upper"})
+_REQUIRED_RESULT_KEYS = frozenset({"fitness", "config"})
 
 
-@dataclass(frozen=True)
-class PopulationDecision:
-    """One complete population-policy result for later framework execution.
+class ClanController:
+    """Transform completed Clan populations into optimizer configurations.
 
-    ``optimizer_configs`` maps every input member identity to the optimizer
-    configuration values that member should receive in the next generation.
-    The record contains values only; applying them to optimizers is a later
-    integration responsibility.
-    """
+    The controller owns only evolutionary policy. It initializes a population
+    around required defaults, selects one sole parent from a completed population,
+    and emits the next optimizer configuration for every member. Callers supply
+    explicit seeds, so the controller has no hidden mutable state and requires no
+    persistence lifecycle.
 
-    parent_id: str
-    parent_fitness: float
-    optimizer_configs: Mapping[str, Mapping[str, Any]]
-
-
-class ClanPopulationPolicy:
-    """Select one parent and emit the next optimizer-configuration population.
-
-    The policy is champion-centered: the best member under ``mode`` is the sole
-    parent, that member retains the exact parent optimizer configuration, and
-    every other member receives a copied parent configuration with explicitly
-    named numeric fields scaled by one of the caller-supplied factors.
-
-    The object is stateless. Randomness is supplied explicitly to ``decide`` by a
-    seed, making repeated calls reproducible without controller persistence.
+    Parameter specifications use ordinary mappings with five required fields:
+    ``default``, ``std``, ``sampling`` (``"linear"`` or ``"log"``), ``lower``,
+    and ``upper``. Linear parameters receive additive normal perturbations. Log
+    parameters receive normal perturbations in log coordinates, which are
+    multiplicative in the original coordinates. Results are constrained to the
+    declared bounds.
     """
 
     def __init__(
         self,
         *,
+        parameters: Mapping[str, Mapping[str, Any]],
         mode: Literal["min", "max"],
-        field_factors: Mapping[str, Sequence[float]],
     ) -> None:
         if mode not in {"min", "max"}:
             raise ValueError("mode must be 'min' or 'max'")
-        if not field_factors:
-            raise ValueError("field_factors must name at least one optimizer field")
-
-        normalized_factors: dict[str, tuple[float, ...]] = {}
-        for field, factors in field_factors.items():
-            if not isinstance(field, str) or not field:
-                raise ValueError("optimizer field names must be non-empty strings")
-            normalized = tuple(float(factor) for factor in factors)
-            if not normalized:
-                raise ValueError(
-                    f"field {field!r} must provide at least one scale factor"
-                )
-            if any(
-                not math.isfinite(factor) or factor <= 0.0
-                for factor in normalized
-            ):
-                raise ValueError(
-                    f"field {field!r} scale factors must be finite and positive"
-                )
-            if any(factor == 1.0 for factor in normalized):
-                raise ValueError(
-                    f"field {field!r} scale factors must change the value; "
-                    "the selected parent already retains the exact configuration"
-                )
-            normalized_factors[field] = normalized
-
         self._mode = mode
-        self._field_factors = normalized_factors
+        self._parameters = self._validate_parameters(parameters)
 
     @property
     def mode(self) -> Literal["min", "max"]:
@@ -94,134 +47,223 @@ class ClanPopulationPolicy:
         return self._mode
 
     @property
-    def field_factors(self) -> Mapping[str, tuple[float, ...]]:
-        """Return a copy of the configured numeric exploration factors."""
+    def parameters(self) -> dict[str, dict[str, float | str]]:
+        """Return a copy of the normalized parameter policy."""
 
-        return dict(self._field_factors)
+        return {name: dict(spec) for name, spec in self._parameters.items()}
 
-    def decide(
+    def initialize(
         self,
-        population: Mapping[str, MemberResult],
-        *,
-        seed: int,
-    ) -> PopulationDecision:
-        """Return one complete, reproducible next-generation policy decision."""
-
-        if isinstance(seed, bool) or not isinstance(seed, int):
-            raise TypeError("seed must be an integer")
-
-        validated = self._validate_population(population)
-        parent_id = self._select_parent(validated)
-        parent_result = validated[parent_id]
-        parent_config = dict(parent_result.optimizer_config)
-        self._validate_parent_fields(parent_config)
-
-        member_ids = sorted(validated)
-        challenger_ids = [
-            member_id for member_id in member_ids if member_id != parent_id
-        ]
-        assignments = self._factor_assignments(challenger_ids, seed=seed)
-
-        optimizer_configs: dict[str, dict[str, Any]] = {}
-        for member_id in member_ids:
-            next_config = dict(parent_config)
-            if member_id != parent_id:
-                for field, factor in assignments[member_id].items():
-                    next_config[field] = next_config[field] * factor
-                    if not math.isfinite(float(next_config[field])):
-                        raise ValueError(
-                            f"scaling field {field!r} produced a non-finite value"
-                        )
-            optimizer_configs[member_id] = next_config
-
-        return PopulationDecision(
-            parent_id=parent_id,
-            parent_fitness=float(parent_result.fitness),
-            optimizer_configs=optimizer_configs,
-        )
-
-    def _factor_assignments(
-        self,
-        challenger_ids: Sequence[str],
+        member_ids: Sequence[str],
         *,
         seed: int,
     ) -> dict[str, dict[str, float]]:
-        generator = random.Random(seed)
-        assignments = {member_id: {} for member_id in challenger_ids}
-        for field, factors in self._field_factors.items():
-            ordered_factors = list(factors)
-            generator.shuffle(ordered_factors)
-            for index, member_id in enumerate(challenger_ids):
-                assignments[member_id][field] = ordered_factors[
-                    index % len(ordered_factors)
-                ]
-        return assignments
+        """Create the initial optimizer configurations around required defaults.
 
-    def _select_parent(self, population: Mapping[str, MemberResult]) -> str:
+        The lexicographically first member retains the exact defaults as the
+        control. Every other member receives an independently perturbed copy.
+        """
+
+        members = self._validate_member_ids(member_ids)
+        generator = self._generator(seed)
+        defaults = {
+            name: float(spec["default"]) for name, spec in self._parameters.items()
+        }
+
+        configurations = {members[0]: dict(defaults)}
+        for member_id in members[1:]:
+            configurations[member_id] = self._mutate(defaults, generator)
+        return configurations
+
+    def advance(
+        self,
+        population: Mapping[str, Mapping[str, Any]],
+        *,
+        seed: int,
+    ) -> tuple[str, dict[str, dict[str, float]]]:
+        """Select the sole parent and emit the complete next population."""
+
+        validated = self._validate_population(population)
+        parent_id = self._select_parent(validated)
+        parent_config = validated[parent_id]["config"]
+        generator = self._generator(seed)
+
+        configurations: dict[str, dict[str, float]] = {}
+        for member_id in sorted(validated):
+            if member_id == parent_id:
+                configurations[member_id] = dict(parent_config)
+            else:
+                configurations[member_id] = self._mutate(parent_config, generator)
+        return parent_id, configurations
+
+    def _mutate(
+        self,
+        base_config: Mapping[str, float],
+        generator: random.Random,
+    ) -> dict[str, float]:
+        mutated: dict[str, float] = {}
+        for name, spec in self._parameters.items():
+            value = float(base_config[name])
+            displacement = generator.gauss(0.0, float(spec["std"]))
+            lower = float(spec["lower"])
+            upper = float(spec["upper"])
+
+            if spec["sampling"] == "linear":
+                candidate = value + displacement
+                mutated[name] = min(max(candidate, lower), upper)
+            else:
+                log_candidate = math.log(value) + displacement
+                log_candidate = min(
+                    max(log_candidate, math.log(lower)),
+                    math.log(upper),
+                )
+                mutated[name] = math.exp(log_candidate)
+        return mutated
+
+    def _select_parent(
+        self,
+        population: Mapping[str, Mapping[str, Any]],
+    ) -> str:
         if self._mode == "min":
             return min(
                 population,
-                key=lambda member_id: (
-                    population[member_id].fitness,
-                    member_id,
-                ),
+                key=lambda member_id: (population[member_id]["fitness"], member_id),
             )
         return min(
             population,
-            key=lambda member_id: (
-                -population[member_id].fitness,
-                member_id,
-            ),
+            key=lambda member_id: (-population[member_id]["fitness"], member_id),
         )
 
     def _validate_population(
         self,
-        population: Mapping[str, MemberResult],
-    ) -> dict[str, MemberResult]:
+        population: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, dict[str, Any]]:
         if not isinstance(population, Mapping):
-            raise TypeError(
-                "population must be a mapping from member IDs to MemberResult"
-            )
+            raise TypeError("population must be a mapping from member IDs to results")
         if len(population) < 2:
             raise ValueError("a Clan population must contain at least two members")
 
-        validated: dict[str, MemberResult] = {}
+        validated: dict[str, dict[str, Any]] = {}
+        expected_fields = set(self._parameters)
         for member_id, result in population.items():
-            if not isinstance(member_id, str) or not member_id:
-                raise ValueError("member IDs must be non-empty strings")
-            if not isinstance(result, MemberResult):
-                raise TypeError("every population value must be a MemberResult")
-            if isinstance(result.fitness, bool) or not isinstance(result.fitness, Real):
-                raise TypeError(
-                    f"fitness for member {member_id!r} must be a real scalar"
-                )
-            if not math.isfinite(float(result.fitness)):
+            self._validate_member_id(member_id)
+            if not isinstance(result, Mapping):
+                raise TypeError(f"result for member {member_id!r} must be a mapping")
+            if set(result) != _REQUIRED_RESULT_KEYS:
                 raise ValueError(
-                    f"fitness for member {member_id!r} must be finite"
+                    f"result for member {member_id!r} must contain exactly "
+                    "'fitness' and 'config'"
                 )
-            if not isinstance(result.optimizer_config, Mapping):
-                raise TypeError(
-                    f"optimizer_config for member {member_id!r} must be a mapping"
-                )
-            validated[member_id] = MemberResult(
-                fitness=float(result.fitness),
-                optimizer_config=dict(result.optimizer_config),
+
+            fitness = self._finite_real(
+                result["fitness"], f"fitness for member {member_id!r}"
             )
+            config = result["config"]
+            if not isinstance(config, Mapping):
+                raise TypeError(f"config for member {member_id!r} must be a mapping")
+            if set(config) != expected_fields:
+                raise ValueError(
+                    f"config for member {member_id!r} must contain exactly the "
+                    "configured optimizer fields"
+                )
+
+            normalized_config: dict[str, float] = {}
+            for name, spec in self._parameters.items():
+                value = self._finite_real(
+                    config[name], f"optimizer field {name!r} for member {member_id!r}"
+                )
+                lower = float(spec["lower"])
+                upper = float(spec["upper"])
+                if not lower <= value <= upper:
+                    raise ValueError(
+                        f"optimizer field {name!r} for member {member_id!r} "
+                        f"must be within [{lower}, {upper}]"
+                    )
+                normalized_config[name] = value
+
+            validated[member_id] = {
+                "fitness": fitness,
+                "config": normalized_config,
+            }
         return validated
 
-    def _validate_parent_fields(self, parent_config: Mapping[str, Any]) -> None:
-        for field in self._field_factors:
-            try:
-                value = parent_config[field]
-            except KeyError as error:
+    @classmethod
+    def _validate_parameters(
+        cls,
+        parameters: Mapping[str, Mapping[str, Any]],
+    ) -> dict[str, dict[str, float | str]]:
+        if not isinstance(parameters, Mapping):
+            raise TypeError("parameters must be a mapping")
+        if not parameters:
+            raise ValueError("parameters must define at least one optimizer field")
+
+        normalized: dict[str, dict[str, float | str]] = {}
+        for name in sorted(parameters):
+            cls._validate_member_id(name, label="parameter names")
+            spec = parameters[name]
+            if not isinstance(spec, Mapping):
+                raise TypeError(f"parameter specification for {name!r} must be a mapping")
+            if set(spec) != _REQUIRED_SPEC_KEYS:
                 raise ValueError(
-                    f"selected parent optimizer config is missing field {field!r}"
-                ) from error
-            if isinstance(value, bool) or not isinstance(value, Real):
-                raise TypeError(
-                    f"selected parent optimizer field {field!r} must be a real scalar"
+                    f"parameter {name!r} must define exactly default, std, sampling, "
+                    "lower, and upper"
                 )
-            if not math.isfinite(float(value)):
-                raise ValueError(
-                    f"selected parent optimizer field {field!r} must be finite"
-                )
+
+            default = cls._finite_real(spec["default"], f"default for {name!r}")
+            std = cls._finite_real(spec["std"], f"std for {name!r}")
+            lower = cls._finite_real(spec["lower"], f"lower bound for {name!r}")
+            upper = cls._finite_real(spec["upper"], f"upper bound for {name!r}")
+            sampling = spec["sampling"]
+
+            if std <= 0.0:
+                raise ValueError(f"std for {name!r} must be positive")
+            if sampling not in {"linear", "log"}:
+                raise ValueError(f"sampling for {name!r} must be 'linear' or 'log'")
+            if lower >= upper:
+                raise ValueError(f"lower bound for {name!r} must be less than upper")
+            if not lower <= default <= upper:
+                raise ValueError(f"default for {name!r} must be within its bounds")
+            if sampling == "log" and lower <= 0.0:
+                raise ValueError(f"log parameter {name!r} requires a positive lower bound")
+
+            normalized[name] = {
+                "default": default,
+                "std": std,
+                "sampling": sampling,
+                "lower": lower,
+                "upper": upper,
+            }
+        return normalized
+
+    @staticmethod
+    def _finite_real(value: Any, label: str) -> float:
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{label} must be a real scalar")
+        normalized = float(value)
+        if not math.isfinite(normalized):
+            raise ValueError(f"{label} must be finite")
+        return normalized
+
+    @classmethod
+    def _validate_member_ids(cls, member_ids: Sequence[str]) -> list[str]:
+        if isinstance(member_ids, (str, bytes)) or not isinstance(member_ids, Sequence):
+            raise TypeError("member_ids must be a sequence of member IDs")
+        members = list(member_ids)
+        if len(members) < 2:
+            raise ValueError("a Clan population must contain at least two members")
+        for member_id in members:
+            cls._validate_member_id(member_id)
+        if len(set(members)) != len(members):
+            raise ValueError("member IDs must be unique")
+        return sorted(members)
+
+    @staticmethod
+    def _validate_member_id(member_id: Any, *, label: str = "member IDs") -> None:
+        if not isinstance(member_id, str) or not member_id:
+            raise ValueError(f"{label} must be non-empty strings")
+
+    @staticmethod
+    def _generator(seed: int) -> random.Random:
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise TypeError("seed must be an integer")
+        return random.Random(seed)
