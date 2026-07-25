@@ -11,6 +11,7 @@ def main() -> None:
     """Run one reproducible population transition and print the policy result."""
 
     controller = ClanController(
+        population_size=4,
         parameters={
             "lr": {
                 "default": 3e-4,
