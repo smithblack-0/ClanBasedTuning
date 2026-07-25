@@ -52,10 +52,6 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-extend-exclude = [
-    "tests/test_package.py",
-    "tests/unit/test_controller.py",
-]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
