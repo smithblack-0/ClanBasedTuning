@@ -1,7 +1,25 @@
 # Milestone gate system
 
-Status: working Milestone 1 proposal under review  
-Date: 2026-07-24
+Status: active milestone-contract system  
+Date: 2026-07-25
+
+## Read this before editing gates or plans
+
+Gate files state the cumulative result and evidence required to close a roadmap
+milestone. They do not choose implementation structure, store tentative research,
+or act as progress trackers.
+
+Before editing a gate:
+
+1. read the governing roadmap milestone;
+2. read accepted decisions that constrain it;
+3. identify the capability and evidence that become necessary at that milestone;
+4. keep design choices in an accepted design and work sequence in an active plan;
+5. keep tentative alternatives and unresolved reasoning in scratchwork.
+
+A durable plan may direct work only within the active gate. It may record concrete
+needs that later gates must satisfy, but it may not preselect how a later milestone
+will implement them.
 
 ## Purpose
 
@@ -18,12 +36,12 @@ one coherent project result.
 
 The [product roadmap](../product_roadmap.md) governs product meaning, development
 criteria, and milestone sequence. Accepted project decisions govern the questions
-they resolve. An explicitly reopened clause is temporarily unavailable as
-implementation authority until human review accepts its replacement; reopening
-one clause does not demote unrelated accepted decisions.
+they resolve. An explicitly reopened clause is unavailable as implementation
+authority until human review accepts its replacement; reopening one clause does
+not demote unrelated accepted decisions.
 
-Only the active milestone and the immediately executable next plan should be
-decomposed into detailed work. Later gate files state the required result, major
+Only the active milestone and its accepted design or plan should be decomposed
+into detailed work. Later gate files state the required result, major
 responsibility boundaries, and expected evidence without pretending their final
 design or test matrix is already known.
 
@@ -34,7 +52,7 @@ enforceable when its milestone introduces it. Earlier gates do not disclaim,
 transfer, or predesign that capability.
 
 A requirement belongs in a milestone only when it is necessary to establish that
-milestone's roadmap Outcome, Work, or Exit. A framework behavior may be exercised
+milestone's roadmap outcome, work, or exit. A framework behavior may be exercised
 as part of that proof without becoming a ClanBasedTuning-owned subsystem.
 
 ## Complete-project dimensions
@@ -47,8 +65,8 @@ Every milestone considers the dimensions relevant to its result:
    at its natural boundary.
 3. **Documentation:** what the relevant engineer, user, reviewer, or operator
    must understand or be able to do.
-4. **Examples and scientific work:** what public-package behavior must become
-   visible and interpretable.
+4. **Examples and scientific work:** what package behavior must become visible
+   and interpretable.
 5. **Project integration and handoff:** what stable products later work may rely
    upon.
 6. **Closure evidence:** which artifacts and review results jointly establish
@@ -61,16 +79,16 @@ in responsibilities introduced only by a later milestone.
 
 Artifact existence is not completion.
 
-- A test must exercise the ClanBasedTuning or integration contract it claims,
-  not unrelated framework behavior that merely occurs nearby.
+- A test must exercise the ClanBasedTuning or integration contract it claims, not
+  unrelated framework behavior that merely occurs nearby.
 - Documentation must enable its named reader task without requiring
   reconstruction from source code, audit history, or private discussion.
-- An example must use the evolving public implementation and expose the milestone
-  behavior it claims to teach or demonstrate.
+- An example must use the evolving accepted implementation and expose the
+  milestone behavior it claims to teach or demonstrate.
 - Scientific work must report cost, limitations, and neutral or unfavorable
   results honestly. Closure never requires a favorable result.
-- A handoff states the stable products the next milestone may rely on; it does
-  not design that milestone in advance.
+- A handoff states the stable products the next milestone may rely on; it does not
+  design that milestone in advance.
 
 ## Exceptional reassignment
 
@@ -81,7 +99,7 @@ must identify:
 - the roadmap requirement being changed;
 - the technical evidence;
 - the destination milestone or explicit removal;
-- the consequence for the current milestone result;
+- the consequence for the current milestone result; and
 - the human decision authorizing the change.
 
 This process is for genuine roadmap or scope correction, not ordinary cumulative
@@ -95,6 +113,9 @@ development.
 4. [Milestone 4 — usability](gates/milestone_4_usability.md)
 5. [Milestone 5 — optimizer utility](gates/milestone_5_optimizer_utility.md)
 6. [Milestone 6 — industry readiness](gates/milestone_6_industry.md)
+
+Accepted active plans live in [`../plans/`](../plans/). Plans are subordinate to
+the roadmap, decisions, and active gate.
 
 ## Closure rule
 

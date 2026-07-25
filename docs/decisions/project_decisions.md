@@ -1,7 +1,7 @@
 # ClanBasedTuning project decisions
 
 Status: accepted project decisions  
-Date: 2026-07-24
+Date: 2026-07-25
 
 ## Purpose
 
@@ -13,14 +13,15 @@ a replacement is accepted.
 
 This file does not contain milestone completion gates, audit history, temporary
 support limits, or implementation plans. Those belong in the milestone,
-research, evidence, and planning artifacts for their actual jobs.
+research, evidence, audit, design, and planning artifacts for their actual jobs.
 
 ## Current alignment status
 
-All seven decisions are accepted. P3, P4, and the allocation portion of P7 were
-revised during the Milestone 1 alignment pass and accepted by human review on
-2026-07-24. P1, P2, P5, and P6 retained their accepted authority throughout the
-pass.
+All seven decisions are accepted. P3 was revised on 2026-07-25 to separate the
+framework-independent controller from the later Ray invocation decision. P4 and
+the allocation portion of P7 were revised during the Milestone 1 alignment pass
+and accepted by human review on 2026-07-24. P1, P2, P5, and P6 retained their
+accepted authority throughout the pass.
 
 ## P1. One Ray Tune trial represents one live Clan member
 
@@ -46,22 +47,23 @@ that all members reach them coherently.
 
 **Status:** accepted.
 
-## P3. Milestone 2 chooses the narrowest PBT-like controller form
+## P3. Milestone 2 owns the independent policy; Milestone 3 chooses the Ray seam
 
-The evolutionary subsystem owns the independently invokable Clan population
-decision. Milestone 2 must choose, from direct framework evidence, whether that
-policy is best implemented as a narrow specialization of an existing Ray PBT
-scheduler or as a direct controller with the thinnest viable Ray adapter.
+Milestone 2 delivers the independently invokable Clan population policy. Its
+controller consumes ordinary data representing one complete population result
+and produces the sole parent plus the next optimizer-hyperparameter
+configurations. It remains testable and understandable without Ray trial objects,
+a Tune scheduler subclass, or framework lifecycle ownership.
 
-The selected design must preserve one Clan policy authority, independent
-controller invocation, and native Ray ownership of ordinary trial execution,
-checkpoint assignment, pause/resume, resource, and scheduler lifecycle behavior.
-It must not reproduce substantial Tune controller machinery merely to avoid an
-awkward or version-sensitive extension seam.
+Milestone 3 chooses and qualifies the narrowest Ray-native invocation path from
+direct framework evidence. That work may compare a scheduler specialization with
+a thin adapter around the accepted controller, but it must preserve one Clan
+policy authority and native Ray ownership of trial execution, checkpoint and
+configuration assignment, pause/resume, resources, and scheduler lifecycle.
 
-**Status:** accepted; revised during Milestone 1 alignment because the previous
-fixed PBT-subclass choice conflicted with the roadmap's explicit Milestone 2
-design choice.
+**Status:** accepted; revised on 2026-07-25 after human review found that choosing
+the Ray invocation form inside Milestone 2 leaked integration constraints into
+the controller before its own contract was settled.
 
 ## P4. ClanBasedTuning selects the parent; Ray transfers state; Lightning restores it
 
@@ -128,4 +130,5 @@ recorded in:
 
 - [Framework-alignment research report](../framework_alignment/research_report.md)
 - [Framework-alignment evidence ledger](../framework_alignment/evidence_ledger.md)
-- [Milestone 1 human review record](../framework_alignment/review_record.md)
+- [Milestone 1 acceptance record](../framework_alignment/review_record.md)
+- [Framework-alignment review audit](../framework_alignment/review_audit.md)

@@ -1,53 +1,56 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-07-24
+Last updated: 2026-07-25
 
 ## Current position
 
-The framework-alignment design, responsibility model, project decisions, and
-milestone gate system have passed human review. Milestone 1 is open only for the
-final addition of durable operating context that lets a new contributor or fresh
-LLM session work from the repository without relying on prior conversation.
+The framework-alignment responsibility model, project decisions, milestone gate
+system, and durable working-process documents are present and remain subject to
+ordinary correction through their owning artifacts.
 
-The root README predates the accepted framework-alignment work and is not the
-current project authority.
+The current source and examples are proof-of-concept evidence. They do not define
+an accepted architecture or stable public API.
 
 ## Current work
 
-The repository is adding:
+Milestone 2 is developing the framework-independent evolutionary controller.
+Human review has accepted the responsibility boundary:
 
-- a stable entry point for coding agents;
-- shared rules for discovering project authority and current work;
-- the senior-engineering workflow used for substantial implementation and review;
-- a concise business-technical writing workflow with separate writing standards;
-  and
-- maintenance rules for this status file.
+- Milestone 2 owns the independent population policy.
+- Milestone 3 chooses and qualifies the Ray Tune invocation seam and completes the
+  real Ray/Lightning/PyTorch workflow.
 
-This operating-context extension is under review.
+No Milestone 2 controller implementation is currently accepted. The next review
+unit is the controller design and lifecycle contract described by the active plan.
 
-## Next planned milestone
+## Active plan
 
-Milestone 2 delivers an independently invokable evolutionary controller. Its
-first work unit compares two implementation forms:
+The [Milestone 2 controller plan](docs/plans/milestone_2_controller.md) separates
+work into stable review units:
 
-- a narrow specialization of Ray's synchronous PBT scheduler; and
-- an independent controller with a thin Ray adapter.
+1. controller design and lifecycle contract;
+2. controller implementation and focused tests; and
+3. repeated synthetic demonstration, engineering reference, and Milestone 3
+   handoff.
 
-The choice must be made from direct framework evidence before later controller
-work depends on either form.
+Tentative alternatives and framework notes are not project authority.
 
 ## Governing references
 
 - [Product roadmap](docs/product_roadmap.md)
 - [Project decisions](docs/decisions/project_decisions.md)
-- [Framework-native engineering review](docs/reviews/framework_native_review.md)
 - [Milestone gate system](docs/milestones/README.md)
 - [Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
-- [Evolutionary-controller plan](docs/milestones/evolutionary_controller_plan.md)
+- [Milestone 2 controller plan](docs/plans/milestone_2_controller.md)
+- [Framework-alignment package](docs/framework_alignment/README.md)
 - [LLM operating context](docs/llm/README.md)
 
 ## Known limitations
 
-The existing package and tests remain proof-of-concept evidence. They do not by
-themselves establish the accepted public architecture or satisfy later milestone
-gates.
+- The framework-independent controller design and implementation remain under
+  development.
+- The Ray invocation path, Lightning lifecycle integration, checkpoint transfer,
+  distributed reformation, and live optimizer application remain Milestone 3
+  work.
+- Existing package classes and examples must not be presented as accepted public
+  contracts until the owning milestone accepts and documents them.
