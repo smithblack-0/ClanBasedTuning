@@ -2,161 +2,141 @@
 
 ## Purpose
 
-This directory contains durable working-process instructions for LLMs that
-contribute to ClanBasedTuning. It does not summarize the project, identify the
-current assignment, or replace the roadmap, decisions, gates, plans, code,
-tests, or human review.
+This directory contains durable working-process instructions for substantial
+ClanBasedTuning work. It does not summarize the project, choose the current task,
+or replace the roadmap, decisions, gates, designs, plans, code, tests, or human
+review.
 
-The objective is transferability: a fresh session should be able to discover the
-relevant authority, understand how work is conducted, and begin a named task
-without relying on undocumented conversational habits.
+The objective is reliable transfer: a fresh contributor should be able to find
+the governing material, understand the relevant system, and perform a named task
+without reconstructing undocumented conversational habits.
 
-## Start by classifying the task
+## Start with the repository and local reader paths
 
-Before loading project material, identify the kind of work requested:
+1. Read the root [`AGENTS.md`](../../AGENTS.md).
+2. Identify the requested task and the repository area it affects.
+3. Read the nearest `README.md` for every documentation subtree you may edit.
+4. Load the complete authority chain, current implementation, tests, consumers,
+   and evidence needed to judge that task correctly.
 
-- implementation or refactoring;
-- debugging or framework investigation;
-- design or technical review;
-- planning or milestone review;
-- substantial technical writing;
-- repository or pull-request operation; or
-- a narrow informational question.
+Targeted context loading means excluding unrelated project areas. It does not
+mean reading the minimum possible material or avoiding necessary system review.
 
-Read only the process modules relevant to that work:
+For milestone work, read [`docs/milestones/README.md`](../milestones/README.md)
+before any gate or plan. For framework-alignment work, enter through
+[`docs/framework_alignment/README.md`](../framework_alignment/README.md).
 
-- [Senior engineering workflow](senior_engineering_workflow.md) for substantial
-  engineering, debugging, design, implementation, and review;
-- [Business-technical writing workflow](technical_writing_workflow.md) for the
-  executable writing loop used by roadmaps, decisions, designs, plans, reports,
-  audits, READMEs, user guidance, reference documentation, and substantial
-  technical explanations; and
-- [Business-technical writing standards](technical_writing_standards.md) as the
-  detailed evaluation reference consulted by the writing workflow when a stage
-  or defect requires it.
+## Choose the working process
 
-For writing work, enter through the workflow. Do not preload the complete
-standards file merely because writing is involved; consult the sections relevant
-to the current workflow stage or defect.
+- Use the [senior engineering workflow](senior_engineering_workflow.md) for
+  substantial design, implementation, debugging, refactoring, and technical
+  review.
+- Use the [technical-writing workflow](technical_writing_workflow.md) for
+  roadmaps, decisions, gates, designs, plans, reports, audits, READMEs, reference
+  documentation, docstrings, and substantial technical explanations.
+- Consult the [technical-writing standards](technical_writing_standards.md) from
+  the writing workflow when a stage or defect requires detailed criteria.
 
-Many tasks require both the engineering and writing processes. A design document
-that governs implementation, for example, must survive the engineering workflow
-and the technical-writing workflow, with standards consulted as needed.
+Most governing designs and implementation PRs require both workflows. Technical
+correctness does not excuse a broken reader path, and polished prose does not
+repair an incorrect contract.
 
-## Discover project authority
+## Project authority
 
-Do not reconstruct intent from filenames, class names, the newest commit, or the
-root README.
-
-Use the repository's authority system:
+Use artifacts for their assigned jobs:
 
 1. The [product roadmap](../product_roadmap.md) governs product meaning,
    development criteria, and milestone sequence.
 2. Accepted [project decisions](../decisions/project_decisions.md) govern the
-   cross-milestone questions they resolve unless a specific clause is explicitly
-   reopened.
-3. [Milestone gates](../milestones/README.md) govern what must be demonstrated
-   before a milestone closes.
-4. Accepted designs and active plans govern implementation structure and work
-   sequence within those higher contracts.
-5. Research and evidence records support conclusions; they do not independently
-   assign work or supersede decisions.
-6. Code and tests establish current implementation behavior. Existing behavior
-   is evidence, not automatic architectural authority.
-7. Review records preserve audit history; they do not become technical decision
-   sources.
+   cross-milestone questions they resolve unless a specific clause is reopened.
+3. [Milestone gates](../milestones/README.md) state what must be true before a
+   milestone closes.
+4. Accepted designs define component contracts. Active plans sequence work only
+   within the current gate and may not decide later milestones in advance.
+5. Research and evidence support conclusions; they do not independently assign
+   work or override accepted decisions.
+6. Code and tests establish current behavior. Existing behavior is evidence, not
+   automatic architectural authority.
+7. Review records preserve accepted outcomes. Audit files preserve rejected
+   iterations and failure history; neither substitutes for the owning artifact.
+8. Scratchwork stores tentative research, alternatives, and reasoning that has
+   not become project authority.
 
-When two artifacts disagree, identify their roles and authority before editing
-one. Correct the artifact that owns the contradiction rather than patching the
-nearest file.
+When artifacts disagree, identify their roles before editing. Correct the
+artifact that owns the contradiction rather than patching the nearest file or
+copying the same statement into several documents.
 
-## Discover current work without inventing intent
+## Current work and status
 
-[`STATUS.md`](../../STATUS.md) is a shared, human-readable description of the
-repository's latest durable position. It may identify recently completed work,
-work currently under review, the next planned milestone, blockers, and links to
-governing material.
+[`STATUS.md`](../../STATUS.md) states the latest durable project position for
+humans and tools. It may identify accepted work, the current review unit, the next
+planned capability, blockers, and governing links.
 
-`STATUS.md` is not an autonomous work queue. Repository state cannot establish
-what the user wants to do in the present conversation.
+`STATUS.md` is not an autonomous work queue, session handoff, scratchpad, or
+substitute for live repository state. When the user names a task, that request
+governs the current work. When a continuation request is genuinely ambiguous,
+read status and live PR/branch state, then ask only for the missing task identity.
 
-When the user names a task, use that task and load only the relevant status,
-authority, plan, implementation, tests, and evidence. When the user asks to
-continue earlier work without identifying it:
+Update `STATUS.md` when durable project position changes materially. Do not copy
+commit-by-commit progress, CI logs, speculative ideas, or private conversational
+history into it.
 
-1. read `STATUS.md`;
-2. inspect live branch, pull-request, issue, and CI state where relevant; and
-3. ask the user which work should be resumed or whether the recorded continuation
-   remains current.
+## Documentation placement
 
-Do not silently choose the newest milestone, plan, pull request, or unfinished
-item.
+Before adding or moving information, identify its reader and primary home:
 
-## Maintain `STATUS.md` as shared documentation
+- root README: project dispatch and explicit unaccepted/TODO surfaces;
+- status: current durable position;
+- roadmap: product direction and milestone sequence, not live status;
+- decision: accepted cross-milestone choice;
+- gate: completion result and evidence, not implementation design;
+- design/reference: component contract, lifecycle, algorithms, and data model;
+- plan: executable work sequence within the active gate;
+- review record: accepted human outcomes;
+- audit: rejected iterations and what failed;
+- scratchwork: tentative reasoning and alternatives.
 
-Humans and LLMs maintain `STATUS.md` under the same writing standards. It must
-read like normal project documentation, not like a machine scratchpad or a
-message to a future model.
+Do not force a newly discovered gap into an existing document merely because that
+document is already being edited.
 
-Update it when durable project position changes materially, such as:
+## Pull-request boundary
 
-- a milestone or major review passes, reopens, or changes scope;
-- a governing decision is accepted, revised, or reopened;
-- the principal work under review changes;
-- a durable blocker appears or is resolved;
-- the next planned project capability changes; or
-- an authoritative document moves or is replaced.
+A pull request must perform one coherent small-to-medium task and leave a stable,
+mergeable repository state. It may be an incremental step, but it must be useful
+and internally complete at that step.
 
-Do not update it for every commit, test run, conversation, or speculative idea.
-Live GitHub details should be linked or queried rather than copied exhaustively.
-
-Write status in project terms. Avoid phrases such as:
-
-- “the human said”;
-- “last human update”;
-- “the LLM should remember”;
-- “continue where the previous model stopped”;
-- private conversational history; or
-- instructions addressed only to an agent.
-
-A status section should state the project condition directly: what is accepted,
-what is under review, what is next, what is blocked, and where the governing
-material lives.
-
-Before changing `STATUS.md`, check the governing artifacts and live repository
-state. After changing it, verify that a human reader can understand the project
-position without knowing who wrote the file.
+Do not use a PR, plan file, or scratch document merely to communicate a question
+to the user. Discuss unresolved architecture before opening the PR. Split design,
+implementation, integration, and unrelated authority repair when each can form a
+stable review unit. Temporary test or lint exclusions must be identified as
+temporary in status updates and removed before completion unless the repository
+explicitly accepts them.
 
 ## Change control
 
-Make ordinary in-scope design improvements autonomously and report them. Consult
-the user before changing:
+Make ordinary in-scope improvements autonomously. Consult the user before
+changing:
 
 - the Clan Tuning mechanism or scientific interpretation;
-- roadmap scope, milestone meaning, or acceptance criteria;
-- state authority, recovery semantics, or public support claims;
+- governing product meaning or milestone acceptance criteria;
 - an accepted cross-milestone decision;
-- CI or workflow files;
-- repository permissions or release policy; or
+- state authority, recovery semantics, or public support claims;
+- CI/workflow files, repository permissions, or release policy; or
 - pull-request merge state.
 
-Accepted decisions remain governing by default. Concrete contradictory evidence
-may justify reopening a specific clause; it does not make every surrounding
-decision provisional.
-
-Do not merge a pull request unless the user explicitly requests the merge.
+Do not merge a pull request unless the user explicitly requests it.
 
 ## Before substantial action
 
-A fresh contributor should be able to state:
+A contributor should be able to state:
 
-- the requested task and expected result;
-- the governing authority and owning artifact;
+- the requested result and PR-sized review unit;
+- the governing authority and owning artifacts;
 - the relevant implementation boundary and consumers;
-- the evidence needed before choosing a design;
-- which changes are ordinary and which require consultation; and
-- how completion will be judged.
+- the evidence required before choosing a design;
+- which information belongs in authority, design, audit, or scratchwork; and
+- how the unit will be tested and reviewed.
 
-If one of these cannot be determined from the request and repository, gather the
-missing evidence or ask the smallest necessary question before committing to a
-direction.
+Gather missing evidence before committing to a direction. Ask the user only when
+a required product, authority, or task decision cannot be resolved from the
+request and repository.
