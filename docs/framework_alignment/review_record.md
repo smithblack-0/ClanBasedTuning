@@ -123,7 +123,9 @@ milestone responsibility model.
 **Required addition:**
 
 - a stable root entry point for coding agents;
-- separate durable senior-engineering and business-technical writing workflows;
+- a durable senior-engineering workflow;
+- a concise backward-capable technical-writing workflow with separate detailed
+  writing standards;
 - authority-discovery, targeted-loading, change-control, and consultation rules;
 - a root `STATUS.md` written as ordinary shared project documentation for humans
   and tools;
@@ -131,6 +133,12 @@ milestone responsibility model.
   scratchpad or autonomous work queue; and
 - a cold-start standard under which ambiguous continuation requests are confirmed
   with the human rather than inferred from repository state.
+
+The first technical-writing draft combined standards and execution in one long
+manual. Review accepted the standards content but rejected the combined form
+because the iterative workflow and backward edges were obscured by evaluation
+detail. The correction separates the executable control loop from the standards
+used to judge each stage.
 
 ## Current artifact review status
 
@@ -145,7 +153,7 @@ milestone responsibility model.
 | Milestone gate system | Accepted with final M1 extension under review | Complete-project dimensions and roadmap activation govern milestone closure; M1 now includes operating-process transfer. |
 | Milestone 2 gate and plan | Accepted for execution after final M1 closure | Begin with evidence-backed controller-form selection; end at independent controller handoff. |
 | Milestone 3–6 gates | Accepted as future milestone contracts | State roadmap results and major evidence without premature issue-level design. |
-| LLM operating context | Under review | Must transfer engineering, writing, authority-discovery, change-control, and status-maintenance process. |
+| LLM operating context | Under review | Must transfer engineering workflow, technical-writing workflow and standards, authority discovery, change control, and status maintenance. |
 | `STATUS.md` | Under review | Must remain concise shared project status for humans and tools, not a session handoff artifact. |
 
 ## Closure
