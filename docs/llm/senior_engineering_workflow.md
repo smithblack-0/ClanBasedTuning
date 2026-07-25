@@ -2,7 +2,7 @@
 
 This guide defines the standing process for serious ClanBasedTuning engineering
 work. It is not a milestone checklist and does not replace the governing roadmap,
-decisions, gates, or accepted design.
+decisions, gates, accepted design, or active plan.
 
 ## Core imperative
 
@@ -23,13 +23,19 @@ Engineering work moves through distinct abstraction layers:
 2. The milestone gate defines the complete acceptable solution space needed to
    make that capability safe and sufficient downstream.
 3. An accepted design selects one solution within the gate.
-4. Current execution planning sequences construction and validation of that
-   design.
+4. An accepted plan may govern execution of that design within the active gate.
 5. Implementation and evidence establish whether the gate is actually satisfied.
 
 A design may narrow the gate by choosing one solution for implementation. A plan
 may narrow the design into the next executable steps. Neither may narrow the
 gate contract or acquire upward authority merely because it is current.
+
+A durable plan is authoritative only inside its declared active-milestone scope.
+It may encode necessities created by the accepted design and current project
+state, but it may not predesign later milestones. When current work discovers a
+condition that future work genuinely must satisfy, propose that condition to the
+owning future gate for explicit review rather than leaving it as a forward
+promise in the current plan.
 
 Before accepting a design assumption as a requirement, ask:
 
@@ -44,19 +50,22 @@ If a current route fails, revise the route or design first. Reopen a gate only
 when evidence shows the acceptance envelope itself is wrong or incomplete, and
 consult the user before changing it.
 
-Temporary planning normally belongs in the current conversation, issue, or pull
-request. Do not create durable shadow plans beside milestone gates. The
-repository currently has no persistent LLM scratch-planning area; create one
+Do not place plans or scratch designs beside milestone gates. A durable plan,
+when justified, must live in a clearly identified planning or design location,
+state the active gate it serves, and stop at that gate boundary. Exploratory
+scratch normally belongs in the current conversation, issue, or pull request.
+The repository currently has no persistent LLM scratch-planning area; create one
 only with explicit human approval and unmistakable preliminary status.
 
 ## Before coding
 
 1. Read the roadmap requirement, active milestone gate, accepted decisions,
-   current artifact, relevant comments, and nearby consumers. Read an accepted
-   design when one exists. Do not reconstruct intent from names or from a
-   temporary plan alone.
+   accepted design, active plan when one exists, current artifact, relevant
+   comments, and nearby consumers. Do not reconstruct intent from names or from
+   a plan outside its declared scope.
 2. State the success criteria and current implementation boundary. Distinguish
-   “this unit is complete” from “the milestone gate is satisfied.”
+   “this unit is complete” from “the active plan is complete” and from “the
+   milestone gate is satisfied.”
 3. Identify each proposed class or function’s main idea: why it exists, what it
    owns, and what it explicitly does not own.
 4. Search across the whole relevant system for existing implementations,
@@ -79,6 +88,8 @@ perform these passes before calling it done.
 - Does data leave a component in the form promised by its contract?
 - Does the implementation satisfy the gate without pretending its design choices
   are gate requirements?
+- Does the work remain inside the active plan and gate rather than designing a
+  later milestone?
 
 ### 2. DRY and boundary pass
 
@@ -114,8 +125,8 @@ For every awkward part, ask:
   and surprising framework constraints where they occur.
 - Preserve useful comments during rewrites. Concision never justifies making
   code unauditable.
-- Keep gate conditions, accepted design, and temporary execution sequence in
-  their proper homes.
+- Keep gate conditions, accepted design, active-plan sequence, and future-gate
+  obligations in their proper homes.
 
 ### 5. Fresh adversarial pass
 
@@ -127,8 +138,9 @@ time. Do not ask “can I prove the whole system correct?” Ask:
 Look especially for misleading names, missing explanations, accidental second
 sources of truth, hot-path validation, hidden recomputation, pending-state
 machinery, one-use abstractions, stale development terminology, behavior that
-exists only to compensate for an earlier design mistake, and design assumptions
-that have leaked upward into acceptance criteria.
+exists only to compensate for an earlier design mistake, design assumptions that
+have leaked upward into acceptance criteria, and active-plan decisions that have
+leaked forward into later milestones.
 
 ## Technical reduction method
 
@@ -142,8 +154,8 @@ When a unit becomes hard to reason about:
    stages become candidate design defects.
 4. Walk the code again. Anything substantial that did not fit its owner’s
    summary is a potential responsibility leak.
-5. For each mismatch, decide whether the gate, design, artifact, or component is
-   wrong, or whether the component should be removed or redesigned.
+5. For each mismatch, decide whether the gate, design, plan, artifact, or
+   component is wrong, or whether the component should be removed or redesigned.
 
 This method requires concrete and abstract reasoning together: follow the real
 classes and data flow, then judge whether their responsibilities form a coherent
@@ -200,6 +212,9 @@ another.
 - Before milestone closure, rerun the gate review tests against the delivered
   solution and verify that no current implementation detail has become a hidden
   acceptance clause.
+- Before carrying a discovered requirement forward, update the owning future gate
+  through explicit review rather than extending the active plan across milestone
+  boundaries.
 
 ## Communication and feedback
 
