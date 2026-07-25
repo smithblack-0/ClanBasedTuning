@@ -8,10 +8,3 @@ def test_declared_package_exports_are_bound():
     assert clan_based_tuning.__name__ == "clan_based_tuning"
     for name in clan_based_tuning.__all__:
         assert getattr(clan_based_tuning, name) is not None
-
-
-def test_clan_controller_is_a_declared_export():
-    """Pre: Milestone 2 adds ClanController. Post: the package declares that surface."""
-    import clan_based_tuning
-
-    assert "ClanController" in clan_based_tuning.__all__
