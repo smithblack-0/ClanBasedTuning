@@ -1,6 +1,6 @@
 # Framework-alignment evidence ledger
 
-Status: Milestone 1 audit record under alignment review  
+Status: accepted Milestone 1 audit record  
 Date: 2026-07-24  
 Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
@@ -8,13 +8,14 @@ Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
 This ledger preserves the source observations, focused probes, inferences,
 alternatives, and unresolved questions used to audit the accepted
-[project decisions](../decisions/project_decisions.md) and the three clauses
-reopened by the current alignment pass.
+[project decisions](../decisions/project_decisions.md) and the clauses corrected
+during framework alignment and Milestone 2 activation.
 
 It is an audit record, not a decision file, milestone gate, compatibility
-promise, or implementation plan. Accepted decisions remain authoritative unless
-a concrete conflict explicitly reopens them. This ledger records the evidence
-for such a conflict; it does not reopen or reassign work by itself.
+promise, design, or implementation plan. Accepted decisions remain authoritative
+unless a concrete conflict explicitly reopens them. This ledger records evidence
+for review; it does not reopen a clause, assign current work, or select an
+implementation by itself.
 
 Existing repository code and tests are proof-of-concept evidence. They do not
 determine the accepted architecture or support envelope merely because they
@@ -101,7 +102,7 @@ direct synchronization evidence.
 **Open qualification question.** Which validation, accumulation, loader, and
 continuation configurations preserve one coherent population boundary?
 
-## P3. Controller form — accepted clause reopened by roadmap conflict
+## P3. Controller and Ray-integration boundary — accepted correction
 
 ### Synchronous PBT lifecycle
 
@@ -124,14 +125,16 @@ translate its decision through the narrowest Ray adapter available. This is not
 permission to reproduce Tune's pause, resume, checkpoint, resource, or trial
 execution lifecycle.
 
-**Roadmap conflict.** The original P3 selected a PBT subclass before Milestone 2.
-The roadmap explicitly assigns the subclass-versus-direct-controller decision to
-Milestone 2. This is sufficient evidence to reopen only that implementation-form
-clause.
+**Historical conflict and accepted allocation.** The original P3 selected a PBT
+subclass before the independent policy and its Ray execution seam were separated.
+Human review now assigns the independently invokable controller to Milestone 2
+and the Ray invocation-form choice to Milestone 3. The PBT-versus-adapter
+evidence remains relevant to Milestone 3; it does not determine Milestone 2's
+public representation or policy design.
 
-**Open qualification question.** Which option expresses the Clan policy with one
-policy authority, independent invocation, minimal version-sensitive surface, and
-no substantial Tune lifecycle duplication?
+**Open qualification question for Milestone 3.** Which Ray seam invokes the
+accepted controller with one policy authority, minimal version-sensitive
+surface, and no substantial Tune lifecycle duplication?
 
 ### Experiment restoration evidence
 
@@ -154,7 +157,7 @@ support-envelope question for industry qualification.
 and Lightning state restore one coherent Clan, fail clearly, or expose a
 specific gap requiring approved Clan-specific machinery?
 
-## P4. Parent-selection and state-transfer authority — accepted clause reopened
+## P4. Parent-selection and state-transfer authority — accepted correction
 
 ### Report and checkpoint bridge
 
@@ -264,7 +267,7 @@ model, and loader configurations preserve the method? Later, which native
 model-sharding strategies can preserve the same semantics without hardcoding a
 one-process-per-member architecture?
 
-## P7. Failure and planned completion are collective — core accepted, allocation reopened
+## P7. Failure and planned completion are collective — accepted rule
 
 ### Per-trial stopping order
 
@@ -292,11 +295,11 @@ active distributed world and the population producing the shared gradient.
 recovery, and continuing with a smaller population were rejected because each
 changes the active Clan semantics.
 
-**Responsibility conflict.** The earlier P7 sentence assigned three scopes of
-“native framework recovery” to Milestones 2, 3, and 6. The roadmap instead makes
-M2 the controller, M3 the complete normal workflow, and M6 the operational
-support envelope. The collective rule survives; the recovery allocation does
-not.
+**Historical responsibility conflict.** The earlier P7 sentence assigned three
+scopes of “native framework recovery” to Milestones 2, 3, and 6. The accepted
+roadmap allocation instead makes M2 the controller, M3 the complete normal
+workflow, and M6 the operational support envelope. The collective rule survives;
+the recovery allocation does not.
 
 **Open qualification questions.** How does the complete integration terminate or
 invalidate a broken Clan without indefinite collective waits? Which operational
@@ -310,8 +313,9 @@ accepted architecture or later milestone exits.
 
 - `tests/framework_contracts/test_ray_native_pbt_cycle.py` exercises a small
   native Tune/Lightning/PBT exploit-and-restore cycle. It supports feasibility of
-  the current Ray/Lightning path but does not decide the final controller form,
-  prove experiment interruption recovery, or establish a broad support range.
+  the current Ray/Lightning path but does not decide the final Ray invocation
+  form, prove experiment interruption recovery, or establish a broad support
+  range.
 - Existing CPU distributed probes support common gradients with optimizer-driven
   divergence, member-local state, and exploit-style restore ordering. Their
   conclusions remain mechanism evidence until retained tests and documentation
