@@ -1,7 +1,7 @@
 # Clan controller API
 
 The accepted Milestone 2 surface consists of `ClanController`. It uses only Python
-scalars, mappings, and rank-ordered sequences and has no Ray or Lightning
+real scalars, mappings, and rank-ordered sequences and has no Ray or Lightning
 dependency.
 
 ## Construction
@@ -42,14 +42,16 @@ required fields:
 | `minimum` | Inclusive lower bound. Must be positive for `log`. |
 | `maximum` | Inclusive upper bound. |
 
-`mode` is `"min"` or `"max"`. `seed` must be an explicit non-`None` value and
-initializes the controller's reproducible random stream.
+Numeric fields must be finite real scalars. Strings and booleans are not accepted
+as numeric values. `mode` is `"min"` or `"max"`. `seed` must be an explicit
+non-`None` value and initializes the controller's reproducible random stream.
 
 ## `initial_configurations(population_size)`
 
 Returns one new optimizer-hyperparameter mapping per rank. `population_size` must
-be an integer of at least two. Rank zero receives exact defaults; the remaining
-ranks receive independent mutations of the defaults.
+be an integer of at least two; booleans are not accepted as integers. Rank zero
+receives exact defaults; the remaining ranks receive independent mutations of the
+defaults.
 
 ```python
 configurations = controller.initial_configurations(population_size=4)
@@ -73,9 +75,10 @@ Preconditions:
 - both arguments are rank-ordered sequences;
 - they have equal length and at least two entries;
 - `fitnesses[rank]` and `configurations[rank]` describe the same external member;
-- fitness values are finite;
+- fitness values are finite real scalars, not strings or booleans;
 - every configuration contains exactly the declared hyperparameter names; and
-- every current hyperparameter value is finite and inside its declared bounds.
+- every current hyperparameter value is a finite real scalar inside its declared
+  bounds.
 
 Postconditions:
 
