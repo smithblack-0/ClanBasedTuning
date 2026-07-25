@@ -152,9 +152,13 @@ Milestone 3 receives a stable, independently exercised public controller and its
 documented behavior. The handoff is the public capability and evidence, not a
 predesigned Ray adapter or cross-milestone execution plan.
 
-Any integration necessity discovered during Milestone 2 that is not already
-covered by the Milestone 3 gate must be proposed explicitly to that gate for
-review rather than asserted by a Milestone 2 plan.
+Any integration dependency established during Milestone 2 that is not already
+covered by the Milestone 3 gate is inserted directly into that gate at the
+behavioral level: what current capability must be connected or preserved, and
+what observable result must occur. The inserted requirement may not choose the
+future class, hook, adapter, framework seam, or strategy. Speculative mechanisms
+remain non-authoritative scratchwork until Milestone 3 design work evaluates
+them.
 
 ## Closure evidence
 
