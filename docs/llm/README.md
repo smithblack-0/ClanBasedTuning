@@ -80,9 +80,10 @@ active plan.
 `docs/milestones/` contains only the gate-system README and gate files. Do not
 place plans, designs, or scratchwork beside the gates. A durable plan, when
 justified, must state the active gate it serves and live in a clearly identified
-planning or design location. The repository has no persistent LLM scratch area;
-create one only after explicit human approval and with unmistakable preliminary
-status.
+planning or design location. Preliminary framework research, option fragments,
+tentative implementation ideas, and unresolved questions belong in
+[`scratchwork/`](scratchwork/README.md). Scratchwork is non-authoritative and may
+not assign work, narrow a gate, or predesign a later milestone.
 
 ## Discover current work without inventing intent
 
