@@ -1,7 +1,7 @@
 # ClanBasedTuning Project Roadmap
 
 Status: governing project roadmap
-Date: 2026-07-23
+Date: 2026-07-25
 
 Clan Tuning is a distributed training method that combines shared-gradient
 training with online adaptation of optimizer hyperparameters. ClanBasedTuning
@@ -219,23 +219,8 @@ Only the active milestone should be decomposed into issue-level work. Later
 milestones state the result, major boundary, and evidence expected without
 pretending their detailed designs are already settled.
 
-### Current position
-
-The repository is pre-alpha proof-of-concept work. It contains evidence that
-separate Lightning processes can participate in a PyTorch DDP group, receive a
-common reduced gradient, apply it through different optimizer configurations,
-preserve member-local state, and exercise parts of an exploit-and-restart path
-under Ray.
-
-That evidence does not yet establish a supported implementation or the correct
-public architecture. The present code predates a complete audit of native
-framework ownership and contains decisions that may be artifacts of the proof
-of concept rather than durable ClanBasedTuning contracts.
-
-The active milestone is therefore completion of framework-alignment research.
-The immediate product is not more code surface. It is a human-auditable body of
-framework evidence, accepted invariant gates, and an actionable native
-implementation plan that later code can be reviewed against.
+Live project position belongs in [`STATUS.md`](../STATUS.md). This roadmap does
+not track the current branch, active PR, or day-to-day completion state.
 
 ### Cumulative milestones
 
@@ -243,7 +228,7 @@ Every milestone must satisfy the continuous documentation, test, evidence, and
 example obligations above. A milestone is not complete merely because its
 central code path runs.
 
-#### 1. Completion of framework-alignment research — current
+#### 1. Completion of framework-alignment research
 
 **Outcome.** The project has an accepted, evidence-backed basis for designing
 ClanBasedTuning in a framework-native manner.
@@ -265,28 +250,28 @@ against those gates.
 
 #### 2. Evolutionary subsystem
 
-**Outcome.** ClanBasedTuning has an invokable evolutionary controller that
-expresses the population decision side of Clan Tuning with the narrowest
-reasonable PBT-like responsibility.
+**Outcome.** ClanBasedTuning has an independently invokable evolutionary
+controller that expresses the population-decision side of Clan Tuning.
 
-**Work.** Using the framework-alignment conclusions, the project chooses whether
-to subclass an existing PBT scheduler or implement the necessary controller
-directly. The subsystem is designed, implemented, tested, and documented with
-the Lightning execution context and later integration points in view. Its code
-explains non-obvious policy and lifecycle decisions, and it remains as close to
-the native PBT responsibility model as the Clan Tuning algorithm allows.
+**Work.** The controller is designed, implemented, tested, and documented as a
+framework-independent population policy. It consumes ordinary data describing
+one complete population, compares fitness, selects the sole winning member, and
+produces the next optimizer-hyperparameter configurations.
 
-The controller produces member optimizer configurations, compares fitness at
-round boundaries, selects one winning member, and makes that winner's model
-parameters, optimizer state, and optimizer configuration the sole basis for the
-next generation. It does not absorb training-loop or distributed-gradient
-responsibilities.
+Its engineering documentation explains lifecycle boundaries, input and output
+data structures, algorithms, state, and failure behavior. A reproducible pet
+loop demonstrates several synthetic generations and shows where an external
+training system supplies fitness and consumes the decision.
 
-**Exit.** Focused and framework-contract tests pass; persistence and failure
-ordering are exercised where the chosen framework seam requires them; the
-controller can be invoked independently through its documented public
-contract; design and user-facing documentation agree with the implementation;
-and an example makes the evolutionary transition inspectable.
+The controller does not import Ray trial objects, choose a Tune scheduler hook,
+transfer checkpoints, construct optimizers, apply live optimizer values, or own
+training and distributed execution.
+
+**Exit.** Focused and plain-data compatibility tests pass; intentional state and
+failure ordering are exercised; the controller is independently invokable
+through its accepted contract; engineering documentation agrees with the
+implementation; and the repeated synthetic example makes the evolutionary
+transition inspectable.
 
 #### 3. Integratable orchestration subsystems
 
@@ -294,25 +279,30 @@ and an example makes the evolutionary transition inspectable.
 can be manually composed into a real distributed Lightning workflow in which
 Clan Tuning works end to end.
 
-**Work.** The workflow is formally analyzed for integration points and
-opportunities. Alternatives and tradeoffs are recorded in design
-documentation, and the small primitives needed to hook Clan behavior into the
-Lightning lifecycle are implemented. A working multi-rank training example
-manually composes those primitives with the required external Lightning,
-PyTorch DDP, model-wrapping, and distributed-data configuration.
+**Work.** Direct Ray evidence is used to choose the narrowest invocation path
+that gathers one complete population for the accepted controller and executes
+its decision through native trial lifecycle. The design may compare a scheduler
+specialization with a thin adapter, but it preserves one policy authority and
+native Ray ownership of trial execution, checkpoint/configuration assignment,
+pause/resume, resources, and scheduler lifecycle.
 
-Package-managed DDP setup, model wrapping, and data partitioning are
-deliberately outside this milestone. Their absence makes the system awkward to
-use, not theoretically unintegratable; removing that external ceremony is the
-next milestone's job.
+The workflow is formally analyzed for integration points and opportunities.
+Small primitives needed to hook Clan behavior into the Lightning lifecycle are
+implemented. A working multi-rank training example manually composes those
+primitives with the required external Lightning, PyTorch DDP, model-wrapping,
+and distributed-data configuration.
 
-**Exit.** The manual composition completes multiple rounds, uses independent
-training batches and the same held-out evaluation data, produces shared
-gradients and member divergence, selects a sole parent, and continues from the
-next generation. Direct and integration tests pass, failure boundaries are
-documented, and the working example is scientifically meaningful enough to
-begin illustrating the method rather than merely exercising mocked control
-flow.
+Package-managed DDP setup, model wrapping, and data partitioning are deliberately
+outside this milestone. Their absence makes the system awkward to use, not
+theoretically unintegratable; removing that external ceremony is the next
+milestone's job.
+
+**Exit.** The selected Ray seam passes direct framework-contract tests. The
+manual composition completes multiple rounds, uses independent training batches
+and the same held-out evaluation data, produces shared gradients and member
+divergence, selects a sole parent, inherits state through native framework
+behavior, and continues from the next generation. Failure boundaries and the
+manual reader path are documented.
 
 #### 4. Usability
 
