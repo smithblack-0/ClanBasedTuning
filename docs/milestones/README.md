@@ -1,53 +1,88 @@
 # Milestone gate system
 
-Status: working rewrite for review
+Status: working Milestone 1 proposal under review
 
 ## Purpose
 
-Each milestone gate states the complete cumulative project result that becomes enforceable at that point in the roadmap. Milestones do not own framework mechanisms. The gate requires ClanBasedTuning to deliver or demonstrate the project products introduced by that milestone while preserving the framework and component ownership established by accepted decisions.
+Each gate states the cumulative project result that must be true when its roadmap
+milestone closes. A gate does not own framework behavior. It requires
+ClanBasedTuning to deliver and demonstrate the project capability introduced by
+the roadmap while respecting the accepted component and framework owners.
 
-A milestone is not complete because its central code path runs. Its implementation, tests, documentation, examples, evidence, and handoff must establish one coherent result.
+A milestone is not complete because its central code path runs. Its tests,
+documentation, examples or scientific work, evidence, and handoff must establish
+one coherent project result.
+
+## Authority and detail
+
+The [product roadmap](../product_roadmap.md) governs product meaning, development
+criteria, and milestone sequence. Project decisions remain proposed until
+Milestone 1 accepts them.
+
+Only the active milestone and the immediately executable next plan should be
+decomposed into detailed work. Later gate files state the required result, major
+responsibility boundaries, and expected evidence without pretending their final
+design or test matrix is already known.
 
 ## Activation rule
 
-Normal roadmap progression is not deferred work. A later capability becomes enforceable when its milestone introduces it. Earlier gate files do not need to disclaim or transfer that responsibility.
+Normal roadmap progression is not deferred work. A later capability becomes
+enforceable when its milestone introduces it. Earlier gates do not disclaim,
+transfer, or predesign that capability.
 
-A requirement belongs in a milestone when it is necessary to establish that milestone's stated outcome, work, or exit. A framework behavior may be exercised as part of that proof without becoming a ClanBasedTuning-owned subsystem.
+A requirement belongs in a milestone only when it is necessary to establish that
+milestone's roadmap Outcome, Work, or Exit. A framework behavior may be exercised
+as part of that proof without becoming a ClanBasedTuning-owned subsystem.
 
-## Required gate dimensions
+## Complete-project dimensions
 
-Each gate considers:
+Every milestone considers the dimensions relevant to its result:
 
-1. **Capability and responsibility.** What project result becomes real and which accepted owners provide its parts.
-2. **Tests and direct evidence.** What must be exercised to prove the claimed contract at its natural boundary.
-3. **Documentation.** What the relevant engineer, user, reviewer, or operator must be able to understand or do.
-4. **Examples and scientific work.** What public-package behavior must be visible at this stage of the project.
-5. **Project integration and handoff.** What later work may rely upon after this milestone closes.
-6. **Closure evidence.** Which artifacts and review results jointly establish completion.
+1. **Capability and responsibility:** what project capability becomes real and
+   which owners provide its parts.
+2. **Tests and direct evidence:** what must be exercised to prove that capability
+   at its natural boundary.
+3. **Documentation:** what the relevant engineer, user, reviewer, or operator
+   must understand or be able to do.
+4. **Examples and scientific work:** what public-package behavior must become
+   visible and interpretable.
+5. **Project integration and handoff:** what stable products later work may rely
+   upon.
+6. **Closure evidence:** which artifacts and review results jointly establish
+   completion.
 
-A dimension may be small when the roadmap requires little of it. It may not absorb behavior introduced only by a later milestone.
+A dimension may be small when the roadmap requires little of it. It may not pull
+in responsibilities introduced only by a later milestone.
 
 ## Functional artifact rule
 
 Artifact existence is not completion.
 
-- A test must exercise the ClanBasedTuning or integration contract it claims. It should not retest unrelated framework behavior merely because that behavior occurs nearby.
-- Documentation must enable its named reader task without requiring reconstruction from source code or audit history.
-- An example must use the evolving public implementation, make the milestone behavior visible, and avoid a cleaner private implementation.
-- Scientific work must report limitations and unfavorable or neutral results honestly. Closure never requires a favorable result.
-- A handoff must state the stable products the next milestone may rely on, not redesign the next milestone in advance.
+- A test must exercise the ClanBasedTuning or integration contract it claims,
+  not unrelated framework behavior that merely occurs nearby.
+- Documentation must enable its named reader task without requiring
+  reconstruction from source code, audit history, or private discussion.
+- An example must use the evolving public implementation and expose the milestone
+  behavior it claims to teach or demonstrate.
+- Scientific work must report cost, limitations, and neutral or unfavorable
+  results honestly. Closure never requires a favorable result.
+- A handoff states the stable products the next milestone may rely on; it does
+  not design that milestone in advance.
 
 ## Exceptional reassignment
 
-If evidence shows that an obligation expected by the current roadmap milestone cannot or should not be completed there, the proposed change must identify:
+If evidence shows that the roadmap places a required capability at the wrong
+milestone or that the capability should leave project scope, the proposed change
+must identify:
 
-- the current requirement being changed;
-- the technical reason;
-- the destination milestone or explicit removal from project scope;
+- the roadmap requirement being changed;
+- the technical evidence;
+- the destination milestone or explicit removal;
 - the consequence for the current milestone result;
-- the evidence and human decision authorizing the change.
+- the human decision authorizing the change.
 
-This process is for genuine roadmap or scope changes, not ordinary cumulative development.
+This process is for genuine roadmap or scope correction, not ordinary cumulative
+development.
 
 ## Gate files
 
@@ -60,4 +95,7 @@ This process is for genuine roadmap or scope changes, not ordinary cumulative de
 
 ## Closure rule
 
-A milestone closes only after human review confirms that every gate is satisfied by cited evidence, explicitly revised through an accepted decision, or retained as a blocker. Unassigned work, vague future language, and artifacts that do not perform their stated function block closure.
+A milestone closes only after human review confirms every gate as satisfied by
+cited evidence, explicitly revised through an accepted project decision, or
+retained as a blocker. Unassigned work, vague future language, contradictory
+status, and artifacts that do not perform their stated function block closure.
