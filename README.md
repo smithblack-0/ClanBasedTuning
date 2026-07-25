@@ -1,191 +1,42 @@
 # ClanBasedTuning
 
-ClanBasedTuning connects synchronous Ray Population Based Training to
-Lightning's native DDP strategy lifecycle.
+ClanBasedTuning explores optimizer hyperparameters across synchronous members that
+share reduced gradients while retaining separate model and optimizer trajectories.
 
 ## Project status
 
-This repository is pre-alpha proof-of-concept work. The current source and usage
-example demonstrate mechanisms; they are not accepted architecture or a stable
-public API.
+This repository is pre-alpha. The product roadmap, accepted decisions, and milestone
+gates are authoritative; proof-of-concept integration code is not a stable public API.
 
-The governing development path begins with the
-[product roadmap](docs/product_roadmap.md). The complete framework-alignment
-package, including its reader paths, decisions, evidence, standing review, and
-milestone gates, begins at
-[`docs/framework_alignment/README.md`](docs/framework_alignment/README.md).
+- [Product roadmap](docs/product_roadmap.md)
+- [Current project status](STATUS.md)
+- [Framework-alignment package](docs/framework_alignment/README.md)
+- [Active Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
 
-The sections below describe the current proof of concept. Future work may replace
-its classes, configuration surfaces, and composition where they do not satisfy
-the accepted framework-alignment decisions.
+## Current accepted subsystem
 
-Each Ray Tune trial remains an ordinary trial with its own model trajectory,
-optimizer state, configuration, checkpoint, and lineage. During training, the
-trials join one PyTorch DDP process group. PyTorch performs its normal optimized
-gradient reduction; each member then applies the common gradient through its own
-optimizer state and hyperparameters.
+Milestone 2 introduces the framework-independent
+[`ClanController`](docs/clan_controller.md). It initializes optimizer configurations,
+selects the sole parent from a completed population, and emits the next population's
+optimizer configurations using plain Python data.
 
-## Proof-of-concept design
-
-The public API follows the two framework construction points directly:
-
-- `ClanBasedTraining(...)` is the driver-side Ray scheduler.
-- `make_clan_lightning_plugins(config, ...)` runs inside a Tune trial and
-  returns the concrete Lightning strategy, cluster-environment plugin, and Ray
-  reporting callback.
-- `prepare_clan_trainer(trainer)` validates the explicit composition without
-  injecting or replacing anything.
-- `tune_checkpoint_path()` keeps Ray's materialized checkpoint alive while
-  Lightning restores it.
-- `replicated_sampler(dataset)` configures PyTorch's built-in
-  `DistributedSampler` so every member evaluates the same examples.
-
-Ray owns PBT scoring, mutation, checkpoint selection and cloning, pause, resume,
-and trial restoration. Lightning owns the training loop and model transform.
-PyTorch DDP owns gradient bucketing and collectives. ClanBasedTuning owns only
-the seams needed to make those native lifecycles describe one cross-trial clan.
-
-There is no package-owned `TuneConfig`, `RunConfig`, model wrapper, optimizer
-schema, or training facade.
-
-## Proof-of-concept usage
-
-```python
-from lightning import Trainer
-from ray import tune
-
-from clan_based_tuning import (
-    ClanBasedTraining,
-    make_clan_lightning_plugins,
-    prepare_clan_trainer,
-    tune_checkpoint_path,
-)
-
-scheduler = ClanBasedTraining(
-    population_size=4,
-    metric="fitness",
-    mode="min",
-    perturbation_interval=4,
-    hyperparam_mutations={
-        "lr": tune.loguniform(1e-5, 1e-2),
-        "weight_decay": tune.loguniform(1e-6, 1e-1),
-    },
-)
-
-
-def train(config):
-    model = MyLightningModule(config)
-    clan = make_clan_lightning_plugins(
-        config,
-        metrics={"fitness": "val_loss"},
-    )
-
-    trainer = Trainer(
-        accelerator="gpu",
-        devices=1,
-        num_nodes=1,
-        strategy=clan.strategy,
-        plugins=[clan.environment],
-        callbacks=[clan.report_callback],
-        enable_checkpointing=False,
-    )
-    prepare_clan_trainer(trainer)
-
-    with tune_checkpoint_path() as checkpoint_path:
-        trainer.fit(model, datamodule=MyDataModule(), ckpt_path=checkpoint_path)
-
-
-tuner = tune.Tuner(
-    tune.with_resources(train, {"gpu": 1}),
-    param_space={
-        "lr": tune.loguniform(1e-5, 1e-2),
-        "weight_decay": tune.loguniform(1e-6, 1e-1),
-    },
-    tune_config=tune.TuneConfig(
-        scheduler=scheduler,
-        num_samples=4,
-        max_concurrent_trials=4,
-        reuse_actors=False,
-    ),
-    run_config=tune.RunConfig(
-        stop={"training_iteration": 20},
-        failure_config=tune.FailureConfig(max_failures=0, fail_fast=True),
-    ),
-)
-tuner.fit()
+```bash
+python examples/clan_controller.py
 ```
 
-The complete CPU example in
-[`examples/native_clan_tuning.py`](examples/native_clan_tuning.py) can be run
-without a GPU.
+## [TODO] Training integration API
 
-## Optimizer reconciliation
+The existing Ray, Lightning, DDP, checkpoint, and optimizer-application code remains
+proof-of-concept evidence. Its construction API and usage contracts are intentionally
+not documented here as accepted behavior while the milestone sequence replaces or
+qualifies them.
 
-Ray's current trial config is authoritative for tuned hyperparameters, while an
-exploited checkpoint supplies the source member's optimizer moments and other
-state. After Lightning loads that state, ClanBasedTuning calls an injected
-optimizer strategy to reconcile the live optimizer with the current config.
+## [TODO] User-facing configuration
 
-The default strategy supports exactly one optimizer with one parameter group.
-It copies every top-level config value whose name already exists in the group:
-
-```python
-config = {"lr": 3e-4, "weight_decay": 0.01, "batch_size": 128}
-```
-
-For AdamW this updates `lr` and `weight_decay` and ignores `batch_size`. It never
-touches `params`.
-
-More complex layouts remain explicit user code:
-
-```python
-def apply_two_groups(optimizers, config):
-    if len(optimizers) != 1 or len(optimizers[0].param_groups) != 2:
-        raise ValueError("Expected one optimizer with two parameter groups")
-    optimizers[0].param_groups[0]["lr"] = config["encoder_lr"]
-    optimizers[0].param_groups[1]["lr"] = config["head_lr"]
-
-
-clan = make_clan_lightning_plugins(
-    config,
-    metrics={"fitness": "val_loss"},
-    apply_optimizer_strategy=apply_two_groups,
-)
-```
-
-This function is called after optimizer construction and again after checkpoint
-restore. Multiple optimizers, tuple fields such as Adam betas, aliases, and
-transformations can be supported by supplying an appropriate function; they are
-not part of the clan's durable identity.
-
-## Data and metric contract
-
-Training loaders should retain Lightning's normal distributed sampling. For
-fitness evaluation, attach `replicated_sampler(dataset)` to the validation
-loader so every member sees the same examples. Log member fitness with
-`sync_dist=False`; synchronizing the metric would erase the member differences
-that PBT needs to rank.
-
-## Current limits
-
-The proof-of-concept implementation requires:
-
-- synchronous PBT;
-- the complete population resident concurrently;
-- one Lightning process/device and one Ray resource bundle per trial;
-- compatible model, buffer, optimizer-class, and parameter-group topology;
-- fixed world size within a training window;
-- no independent member failure recovery or member-local early termination;
-- `init_sync=False` and `broadcast_buffers=False` so DDP does not erase member
-  divergence.
-
-The built-in optimizer strategy has the narrower one-optimizer/one-group limit;
-that is not a fundamental restriction of Clan Based Training.
-
-The [framework-alignment package](docs/framework_alignment/README.md)
-supersedes the proof-of-concept design as the authority for future work. The
-limits above describe the present implementation, not promises about the
-accepted architecture.
+A later milestone will define how Tune-facing parameter declarations, required
+starting defaults, controller policy, and optimizer application compose into the
+ordinary user workflow. Preliminary framework research belongs in
+[`docs/llm/scratchwork/`](docs/llm/scratchwork/) and is non-authoritative.
 
 ## Development
 
@@ -197,6 +48,3 @@ python -m pytest
 python -m ruff check .
 python -m ruff format --check .
 ```
-
-The framework-contract suite includes a two-process CPU exploit/restart probe
-and a native Ray Tune/PBT cycle.
