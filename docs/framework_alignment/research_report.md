@@ -6,206 +6,204 @@ Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
 ## Conclusion
 
-ClanBasedTuning should make the Clan mechanism native to the existing Ray Tune,
-Lightning, and PyTorch execution model. It should not surround those frameworks
-with a second scheduler, validation loop, checkpoint system, optimizer factory,
-or distributed-training abstraction.
+ClanBasedTuning should express the Clan mechanism through the existing PyTorch,
+Lightning, and Ray Tune responsibility model. It should not surround those
+frameworks with a second training loop, validation clock, checkpoint system,
+optimizer factory, trial runtime, or gradient-communication implementation.
 
-The proposed responsibility split is:
+The proposed responsibility model is:
 
-- **PyTorch DDP** performs shared-gradient collectives and ordinary distributed
-  model wrapping.
+- **PyTorch distributed strategies** perform ordinary model wrapping, initial
+  synchronization, gradient bucketing, and shared-gradient collectives.
 - **Lightning** performs training, validation, optimizer construction,
-  checkpoint serialization, restoration, and data integration.
-- **Ray Tune** owns trials, synchronous population scheduling, trial
-  configuration, checkpoint assignment, pause, resume, scheduler persistence,
-  and experiment restoration.
-- **ClanBasedTuning** supplies only the behavior those frameworks do not natively
-  express together: treating Tune trials as members of one DDP collective,
-  selecting one parent for the next generation, reconciling a receiving
-  member's optimizer configuration after inherited state is restored, and
-  enforcing the collective constraints of the Clan mechanism.
+  checkpoint serialization and restoration, and data integration.
+- **Ray Tune** owns trial identity and execution, resource scheduling, trial
+  configuration, checkpoint/configuration assignment, pause and resume, and
+  experiment persistence in the Ray-backed path.
+- **ClanBasedTuning** supplies the behavior those frameworks do not express
+  together: one live Tune trial per Clan member, one complete-population
+  evolutionary decision, sole-parent inheritance, optimizer-only variation,
+  post-restore optimizer reconciliation, and collective Clan validity.
 
-This is a proposed framework architecture, not an endorsement of the current
-proof-of-concept classes.
+This model is proposed for Milestone 1 acceptance. It does not certify the
+current proof-of-concept classes, and it does not yet choose the implementation
+form of the Milestone 2 controller.
 
-## Why the mechanism constrains the architecture
+## What the Clan mechanism requires
 
 A Clan round begins from one inherited model and optimizer state. Members train
 on distinct data, contribute to one reduced gradient, and apply that gradient
-through different optimizer states and hyperparameters. They therefore share
-training work while gradually diverging. Comparable fitness evaluation then
-selects one member as the sole basis of the next generation.
+through different optimizer states and hyperparameters. Comparable fitness
+evaluation then selects one member whose state becomes the sole basis of the
+next generation.
 
-Three consequences follow directly:
+The mechanism creates four architectural constraints:
 
-1. **Every member must be live for every training gradient.** Queuing or time
-   multiplexing removes members from the shared work and changes the method.
-2. **Member variation must remain optimizer-side.** Mutating model, data, or
-   other gradient-defining configuration changes the meaning of the common
-   gradient.
-3. **Selection is a population lifecycle event.** Training, comparable
-   evaluation, checkpoint availability, parent selection, restore, and
-   optimizer reconciliation form one transition.
+1. **The complete active population participates in shared training.** Queuing,
+   time-multiplexing, or silently dropping members changes the work being shared.
+2. **Variation remains optimizer-side during a round.** Mutating model, data, or
+   another gradient-defining choice changes the meaning of the common gradient.
+3. **Fitness remains candidate-local until population comparison.** Reducing
+   candidate scores across members destroys the signal used for selection.
+4. **A round transition has one policy owner and native execution owners.** The
+   controller decides the parent and next optimizer configurations; framework
+   machinery executes checkpoint assignment, restoration, and resumed training.
 
-These are product constraints. Frameworks should continue to own the ordinary
-mechanics that satisfy them.
+These are project constraints. They do not imply that ClanBasedTuning must own
+the ordinary mechanics used to satisfy them.
 
 ## Native round lifecycle
 
-A round should be the training interval between qualifying Lightning validation
-and checkpoint reports.
+Lightning already owns the training and validation cadence. Defining a second
+Clan epoch, batch, optimizer-step, or wall-clock clock would create two
+potentially inconsistent descriptions of the same progress boundary.
 
-Lightning already owns when validation occurs. A Clan-specific epoch counter,
-batch conversion, optimizer-step clock, or timer would duplicate that authority
-and create two definitions of the same boundary. Ray PBT can instead treat each
-qualifying report as one population-decision opportunity; its report counter is
-bookkeeping, not the definition of training progress.
-
-The resulting lifecycle is:
+The intended Ray/Lightning lifecycle is therefore:
 
 1. Lightning trains according to the user's Trainer configuration.
-2. Lightning enters a qualifying validation loop at a synchronized point.
-3. Every member evaluates the same held-out examples and reports one local
-   fitness value with one trial-local Lightning checkpoint.
-4. Synchronous Ray PBT waits for the complete population.
-5. ClanBasedTuning's evolutionary policy identifies one parent and target
-   optimizer configurations.
-6. Ray assigns the parent checkpoint and configurations to the next-generation
-   trials.
-7. Lightning restores the inherited model and optimizer state.
-8. ClanBasedTuning reapplies each receiving member's optimizer configuration,
-   and training resumes.
+2. Lightning enters a qualifying validation-and-checkpoint event.
+3. Every live member evaluates the same held-out workload and reports one
+   member-local fitness value with one trial-local checkpoint.
+4. The population decision receives one complete population result.
+5. ClanBasedTuning selects the sole parent and produces the next member optimizer
+   configurations.
+6. Ray Tune assigns the selected checkpoint and target configuration through its
+   native trial lifecycle.
+7. Lightning restores the inherited model, optimizer, and training progress.
+8. ClanBasedTuning reapplies the receiving member's evolved optimizer values.
+9. The next live population reforms its distributed execution and continues.
 
-Exact cadence, data-position continuation, and callback seams are Milestone 3
-obligations rather than permanent project decisions.
+Exact cadence, supported loader and accumulation behavior, checkpoint hooks,
+resource admission, and process-group reformation are integration design work.
+They become enforceable when Milestone 3 builds the complete manual workflow.
 
-## Evolution through Ray PBT
+## Evolutionary controller form remains a Milestone 2 choice
 
-Ray's synchronous `PopulationBasedTraining` already owns the surrounding
-population lifecycle: waiting for the population, ranking results, preparing a
-source checkpoint before exploitation, assigning source checkpoints and
-configuration to targets, pausing and resuming trials, and persisting scheduler
-state with the Tune experiment.
+Ray's synchronous `PopulationBasedTraining` provides a relevant policy/executor
+split. Its scheduler receives trial results and decides exploit/explore actions,
+while Tune's runtime performs checkpoint preparation, assignment, pause, resume,
+and trial execution. A narrow PBT specialization may therefore express the Clan
+population decision without rebuilding the surrounding lifecycle.
 
-ClanBasedTuning changes the selection policy. Instead of ordinary upper- and
-lower-quantile exploitation, the Clan policy selects one deterministic winner,
-preserves one elite configuration, and treats every other member as a target
-for optimizer-only mutation.
+That is a leading candidate, not yet a durable project decision. The likely
+selection seam in Ray 2.56 is version-sensitive and may be too entangled with
+ordinary PBT ranking or mutation policy. Milestone 2 must compare two designs
+against direct source and executable seam evidence:
 
-The next implementation should therefore be a narrow PBT specialization. The
-likely selection seam is version-sensitive, so Milestone 2 must protect it with
-executable contract tests. A direct controller becomes appropriate only if
-those tests show that the required policy cannot be expressed without
-reproducing substantial Tune controller behavior.
+- **Narrow PBT specialization:** replace only the population decision while
+  retaining native scheduler/executor behavior.
+- **Independent controller with a thin Ray adapter:** keep the public policy
+  independent and translate its decision into the narrowest Tune scheduling
+  surface available.
 
-## Checkpoint, restore, and optimizer authority
+The choice must preserve independent controller invocation, avoid a second Tune
+lifecycle, retain one policy authority, and expose only the framework state that
+is genuinely required. A direct controller is not justified merely because a
+private seam is inconvenient; a PBT subclass is not justified merely because it
+already exists.
 
-Ray and Lightning divide ordinary checkpoint responsibility cleanly:
+## State-transition authority
 
-- Lightning defines and serializes each member's training state.
-- Ray PBT chooses the source and assigns its checkpoint to target trials.
-- Lightning restores the assigned model and optimizer state.
-- ClanBasedTuning applies only the receiving member's evolved optimizer values
-  after restore.
+The controller decides **which member is the parent**. Ray does not own that
+Clan policy. In the Ray-backed integration, Ray owns execution of the resulting
+checkpoint and configuration assignment.
 
-Ray's Lightning callback can report a Lightning checkpoint with validation
-metrics, and the FunctionTrainable path can return that reported checkpoint when
-PBT requests the source save. This avoids a second Clan checkpoint scheduler.
+Lightning owns the contents of each trial checkpoint and restoration of model,
+optimizer, and training progress. ClanBasedTuning then applies the receiving
+member's evolved optimizer values after inherited optimizer state is loaded.
+This order preserves the parent's moments, momentum, counters, and other
+optimizer history while allowing the next generation to use different optimizer
+hyperparameters.
 
-Every divergent member must nevertheless be able to produce a trial-local
-checkpoint. Lightning's ordinary DDP strategy writes only on global rank zero
-because ordinary replicas are equivalent; Clan members are not. Milestone 3
-must find and qualify the narrowest Lightning seam that permits every candidate
-to supply a checkpoint through the native Ray reporting path.
+Every divergent trial must be able to produce a trial-local checkpoint because
+any member may be selected. Lightning's ordinary DDP checkpoint assumptions may
+require a narrow integration seam when different Tune trials participate in one
+collective. That seam is an integration responsibility, not a reason to create a
+Clan checkpoint scheduler.
 
-Ray also provides native experiment restoration. `Tuner.restore` resumes
-unfinished trials and can restore errored trials from their latest checkpoints.
-That makes restoration a qualification problem, not a presumed need for a Clan
-manifest or transaction system:
+Ray also provides experiment restoration. That evidence establishes a design
+rule: test native restoration before inventing Clan-specific recovery state. It
+does not make interruption recovery part of the controller milestone. Normal
+checkpoint-driven next-generation continuation is qualified with the complete
+Milestone 3 workflow; production interruption recovery is qualified when the
+industry milestone defines its support envelope.
 
-- Milestone 2 must prove that the specialized scheduler and synthetic trial
-  population restore coherently, including a partially assembled synchronous
-  boundary.
-- Milestone 3 must prove the same path with real Lightning model, optimizer, and
-  data state.
-- Milestone 6 must qualify persistent storage, cluster failures, diagnostics,
-  and restoration for the declared industry envelope.
+## Population and resources
 
-Custom recovery machinery is justified only if those tests demonstrate a native
-framework gap.
+In the Ray-backed program, one Tune trial is one Clan member. Ray's generated
+trial set remains the population authority; ClanBasedTuning should not mirror it
+with an independent count that can disagree.
 
-## Population and resource model
-
-One Tune trial is one Clan member. Ray's population configuration should remain
-the population authority rather than being mirrored by a second package count.
-
-The first supported orchestration topology must keep that relationship
-inspectable: generated trial count, concurrent capacity, Clan world size, and
-dedicated resource allocation describe the same fully resident population.
-The exact public admission check belongs to Milestone 3 manual composition and
-Milestone 4 automated assembly.
-
-The scheduler cannot guarantee residency alone because Ray may stage pending
-actors through controller resource management. Admission therefore belongs at
-the assembly boundary before any member enters DDP.
+The complete population must be concurrently resident whenever shared gradients
+are computed. Scheduler policy alone cannot guarantee that condition because
+Ray's controller also stages actors through resource management. Population
+admission must therefore be checked at the orchestration boundary before any
+member enters the distributed collective. Manual integration first proves the
+contract; the usability milestone later automates it.
 
 ## Data and fitness
 
 Training data retains normal distributed partitioning owned by Lightning and
-PyTorch. Fitness data serves a different purpose: members are candidate models,
-so they must be compared on the same examples under equivalent conditions.
+PyTorch. Fitness data has a different purpose: it compares divergent candidate
+models, so every member must evaluate the same held-out workload under equivalent
+conditions.
 
-The fitness value remains local to the Tune trial. A distributed metric
+Each fitness value remains member-local until population comparison. A DDP metric
 reduction would combine candidate scores and erase the population signal.
-Standard PyTorch data primitives appear sufficient; Milestone 3 must define and
-prove the concrete evaluation and reporting contract.
+Standard PyTorch and Lightning data mechanisms appear sufficient; the complete
+integration must define and prove the supported sampler, transform, ordering,
+loader-length, boundary, and reporting contract.
 
-## DDP boundary
+## Shared-gradient execution
 
-PyTorch DDP should own gradient bucketing, all-reduce, initial synchronization,
-and the normal distributed wrapper lifecycle. ClanBasedTuning should not
-reimplement collectives.
+PyTorch's native distributed strategies should own ordinary shared-gradient
+execution. For the first complete integration, DDP is the relevant substrate:
+it can synchronize an initial common state and reduce gradients while local
+optimizer states and hyperparameters subsequently produce divergent parameters.
+Runtime synchronization, including buffer behavior, must not erase that intended
+divergence.
 
-Focused probing supports this direction: DDP can synchronize an initial common
-state, reduced gradients can remain common, and different optimizer
-configurations can then produce divergent parameters. Runtime synchronization,
-including buffer broadcast, must not erase that divergence.
-
-Milestone 3 must commit the exact Lightning-facing contract tests and declare
-support only for the precision, accumulation, model, and loader behavior those
-tests qualify.
+Later industry support may add FSDP or another Lightning-native model-sharding
+strategy. Those modes must preserve the same Clan semantics through their native
+lifecycle. The project should not encode “one DDP process equals one member” as a
+permanent architecture if doing so would preclude the roadmap's model-sharding
+milestone.
 
 ## Failure and completion
 
-Every active member is part of one collective training entity. Failure of one
-member therefore invalidates the active Clan. Planned completion has the same
-population constraint: it occurs at a complete boundary and stops the complete
-population.
+An active Clan is one complete population participating in a shared-gradient
+workflow. Loss of a required member invalidates that active Clan; continuing with
+a smaller population would change both the distributed world and the scientific
+method.
 
-Milestone 2 owns the controller-level decision and Ray lifecycle. Milestone 3
-owns distributed termination behavior and diagnosis. Milestone 6 owns
-production failure and recovery qualification. No milestone may silently fall
-back to independent member recovery, a smaller DDP world, or mixed population
-generations.
+Planned completion likewise applies to the complete Clan and occurs at a
+coherent population boundary. The controller must not manufacture a valid
+population decision from incomplete input. The integration must terminate or
+invalidate broken distributed execution clearly. The industry milestone later
+qualifies operational diagnosis and recovery for its declared support envelope.
+
+These are cumulative requirements, not three different controller,
+integration, and production “recovery” subsystems.
 
 ## Resulting proposed decisions
 
-The research supports seven dated project decisions:
+The research supports six proposed cross-milestone decisions:
 
-1. One Tune trial is one concurrently resident Clan member.
-2. Lightning produces the qualifying evolutionary boundary.
-3. Synchronous Ray PBT is the evolutionary lifecycle foundation.
-4. Lightning owns checkpoint contents and restore; Ray owns source selection,
-   assignment, scheduler persistence, and experiment restoration;
-   ClanBasedTuning reconciles evolved optimizer values afterward.
-5. Training data is partitioned, while fitness data is comparable and fitness
-   remains member-local.
-6. Native PyTorch DDP owns the shared-gradient substrate.
-7. Failure and planned completion are collective.
+1. One Ray Tune trial represents one concurrently live Clan member.
+2. Lightning produces the qualifying round boundary.
+3. ClanBasedTuning decides the sole-parent population transition; native
+   frameworks execute trial state assignment and restoration.
+4. Training data is partitioned, while fitness data is comparable and remains
+   member-local.
+5. Native PyTorch distributed strategies own shared-gradient execution.
+6. Active-population validity and planned completion are collective.
 
-The decisions are stated in
-[project decisions](../decisions/project_decisions.md). Source-level support is
-in the [evidence ledger](evidence_ledger.md). Completion obligations belong to
-the [milestone gate files](../milestones/README.md), and later work is reviewed
-through the [standing framework-native review](../reviews/framework_native_review.md).
+The Milestone 2 controller implementation form remains intentionally open until
+its first work unit qualifies the available framework seams.
+
+The proposed decisions are stated in
+[project decisions](../decisions/project_decisions.md). Source and probe support
+is preserved in the [evidence ledger](evidence_ledger.md). Completion obligations
+belong to the [milestone gate system](../milestones/README.md), and implementation
+boundaries are reviewed through the
+[standing framework-native review](../reviews/framework_native_review.md).
