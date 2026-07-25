@@ -5,57 +5,93 @@ Date: 2026-07-24
 
 ## Purpose
 
-Each gate states the cumulative project result that must be true when its roadmap
-milestone closes. A gate does not own framework behavior. It requires
-ClanBasedTuning to deliver and demonstrate the project capability introduced by
-the roadmap while respecting the governing component and framework ownership.
+Each gate states the complete project condition that must be true when its
+roadmap milestone closes. A gate is an acceptance envelope over all solutions
+that would make the milestone safe, useful, and sufficient for downstream work.
 
-A milestone is not complete because its central code path runs. Its tests,
-documentation, examples or scientific work, evidence, and handoff must establish
-one coherent project result.
+A gate may constrain observable behavior, ownership, failure semantics, tests,
+documentation, examples, evidence, and handoff. It names a mechanism only when
+the roadmap or an accepted project decision makes that mechanism invariant.
 
-## Authority and detail
+## Authority
 
-The [product roadmap](../product_roadmap.md) governs product meaning, development
-criteria, and milestone sequence. Accepted project decisions govern the questions
-they resolve. An explicitly reopened clause is temporarily unavailable as
-implementation authority until human review accepts its replacement; reopening
-one clause does not demote unrelated accepted decisions.
+The [product roadmap](../product_roadmap.md) governs product meaning,
+development criteria, and milestone sequence. Accepted
+[project decisions](../decisions/project_decisions.md) govern the
+cross-milestone questions they resolve. A milestone gate translates those
+authorities into closure conditions; it does not design the implementation.
 
-Only the active milestone and the immediately executable next plan should be
-decomposed into detailed work. Later gate files state the required result, major
-responsibility boundaries, and expected evidence without pretending their final
-design or test matrix is already known.
+When evidence shows that a roadmap or accepted-decision clause is wrong, reopen
+that clause explicitly. Do not repair an awkward design or implementation by
+quietly narrowing the gate.
+
+## Gate, design, and execution separation
+
+The documentation layers have different jobs:
+
+1. The roadmap defines the capability and development sequence.
+2. The gate contracts the broadest acceptable solution space for that
+   capability.
+3. An accepted design selects one solution inside that space.
+4. Current execution planning sequences construction and validation of that
+   design.
+5. Implementation, tests, documentation, and examples produce closure evidence.
+
+A design may be narrower than its gate because it chooses one acceptable
+solution. An execution route may be narrower still. Neither may flow upward and
+become a gate requirement merely because it is the current choice.
+
+Temporary planning is not project authority. It should normally remain in the
+current conversation, issue, or pull request rather than becoming a durable
+repository artifact. Do not place execution plans or scratch designs in
+`docs/milestones/`. The project currently maintains no persistent LLM
+scratch-planning directory; create one only after explicit human approval and
+with unmistakable preliminary status.
+
+## Gate review tests
+
+Before accepting or revising a gate, apply all of these tests:
+
+- **Alternate-solution test:** could materially different implementations satisfy
+  the clause? If not, verify that the named mechanism is truly invariant.
+- **Counterfactual-validity test:** could a solution fully satisfy the roadmap
+  milestone while violating the clause? If yes, the clause is probably design
+  leakage.
+- **Plan-deletion test:** if every current plan and design vanished, would the
+  gate still be complete and usable?
+- **Downstream-sufficiency test:** if every clause is satisfied, can the next
+  milestone rely on the resulting capability without knowing its implementation?
+- **Upward-leakage test:** did a class, hook, schema, policy detail, work order, or
+  current workaround enter the gate only because a plan uses it?
+- **Unforeseen-failure test:** does the gate state the failure boundary strongly
+  enough to reject unsafe outcomes without assuming the only ways failure can
+  occur?
+
+A failed test routes back to the gate contract or its governing authority. It is
+not fixed by adding explanatory prose around the leaked design.
 
 ## Activation rule
 
-Normal roadmap progression is not deferred work. A later capability becomes
-enforceable when its milestone introduces it. Earlier gates do not disclaim,
-transfer, or predesign that capability.
+A later capability becomes enforceable when its roadmap milestone introduces
+it. Earlier gates do not disclaim, predesign, or absorb that capability.
 
-A requirement belongs in a milestone only when it is necessary to establish that
-milestone's roadmap Outcome, Work, or Exit. A framework behavior may be exercised
-as part of that proof without becoming a ClanBasedTuning-owned subsystem.
-
-The boundary between milestones should remain encapsulated. An earlier milestone
-may define the stable contract and handoff required by its immediate consumer;
-it must not choose the consumer's internal framework seam or duplicate the later
-milestone's execution design merely to appear complete.
+A requirement belongs in a milestone only when it is necessary to establish
+that milestone's roadmap Outcome, Work, or Exit. Framework behavior may be
+exercised as evidence without becoming a ClanBasedTuning-owned subsystem.
 
 ## Complete-project dimensions
 
 Every milestone considers the dimensions relevant to its result:
 
-1. **Capability and responsibility:** what project capability becomes real and
-   which owners provide its parts.
-2. **Tests and direct evidence:** what must be exercised to prove that capability
-   at its natural boundary.
+1. **Capability and responsibility:** what becomes real and which owners provide
+   its parts.
+2. **Tests and direct evidence:** what must be exercised at the capability's
+   natural boundary.
 3. **Documentation:** what the relevant engineer, user, reviewer, or operator
    must understand or be able to do.
 4. **Examples and scientific work:** what public-package behavior must become
    visible and interpretable.
-5. **Project integration and handoff:** what stable products later work may rely
-   upon.
+5. **Project handoff:** what stable result downstream work may rely on.
 6. **Closure evidence:** which artifacts and review results jointly establish
    completion.
 
@@ -66,16 +102,16 @@ in responsibilities introduced only by a later milestone.
 
 Artifact existence is not completion.
 
-- A test must exercise the ClanBasedTuning or integration contract it claims,
-  not unrelated framework behavior that merely occurs nearby.
-- Documentation must enable its named reader task without requiring
-  reconstruction from source code, audit history, or private discussion.
+- A test must exercise the contract it claims, not unrelated framework behavior
+  that merely occurs nearby.
+- Documentation must enable its named reader task without reconstruction from
+  source code, audit history, or private discussion.
 - An example must use the evolving public implementation and expose the milestone
-  behavior it claims to teach or demonstrate.
+  behavior it claims to teach.
 - Scientific work must report cost, limitations, and neutral or unfavorable
   results honestly. Closure never requires a favorable result.
-- A handoff states the stable products the next milestone may rely on; it does
-  not design that milestone in advance.
+- A handoff states the stable capability downstream work may rely on; it does not
+  design the downstream implementation.
 
 ## Exceptional reassignment
 
@@ -86,11 +122,11 @@ must identify:
 - the roadmap requirement being changed;
 - the technical evidence;
 - the destination milestone or explicit removal;
-- the consequence for the current milestone result;
+- the consequence for the current milestone result; and
 - the human decision authorizing the change.
 
-This process is for genuine roadmap or scope correction, not ordinary cumulative
-development.
+This process is for genuine roadmap or scope correction, not ordinary design
+iteration.
 
 ## Gate files
 
@@ -105,5 +141,5 @@ development.
 
 A milestone closes only after human review confirms every gate as satisfied by
 cited evidence, explicitly revised through an accepted project decision, or
-retained as a blocker. Unassigned work, vague future language, contradictory
-status, and artifacts that do not perform their stated function block closure.
+retained as a blocker. Unassigned work, contradictory status, shadow authority,
+and artifacts that do not perform their stated function block closure.
