@@ -1,21 +1,20 @@
 # Framework-alignment evidence ledger
 
-Status: Milestone 1 audit record under review  
+Status: Milestone 1 audit record under alignment review  
 Date: 2026-07-24  
 Version scope: PyTorch 2.10.x, Lightning 2.6.x, Ray Tune 2.56.x
 
 ## Purpose
 
 This ledger preserves the source observations, focused probes, inferences,
-alternatives, and unresolved questions used to evaluate the proposed
-[project decisions](../decisions/project_decisions.md). It is an audit record,
-not a decision file, milestone gate, compatibility promise, or implementation
-plan.
+alternatives, and unresolved questions used to audit the accepted
+[project decisions](../decisions/project_decisions.md) and the three clauses
+reopened by the current alignment pass.
 
-The milestone gates determine when a project capability must be demonstrated.
-This ledger records what the inspected frameworks appear to provide and what
-remains uncertain; it does not assign work merely because a framework behavior
-was discovered here.
+It is an audit record, not a decision file, milestone gate, compatibility
+promise, or implementation plan. Accepted decisions remain authoritative unless
+a concrete conflict explicitly reopens them. This ledger records the evidence
+for such a conflict; it does not reopen or reassign work by itself.
 
 Existing repository code and tests are proof-of-concept evidence. They do not
 determine the accepted architecture or support envelope merely because they
@@ -23,10 +22,12 @@ already exist or pass.
 
 ## Evidence classifications
 
-- **Direct source:** behavior visible in the pinned upstream source.
+- **Direct source:** behavior visible in the inspected upstream source revision.
 - **Probe:** behavior observed in an executable focused test.
 - **Inference:** a conclusion derived from the Clan mechanism or by combining
   direct observations.
+- **Alternative considered:** a materially different design and why the evidence
+  supports or rejects it.
 - **Open qualification question:** a material uncertainty that a later design or
   support claim must resolve before relying on it.
 
@@ -34,7 +35,7 @@ An open qualification question is not automatically assigned to the earliest
 possible milestone. Its natural home is determined by the roadmap capability
 whose completion depends on the answer.
 
-## P1. One trial represents one concurrently live member
+## P1. One trial is one fully resident member — accepted
 
 ### Ray population generation
 
@@ -68,7 +69,7 @@ before shared-gradient work begins.
 signals are sufficient for a reliable preflight in the first complete manual
 workflow?
 
-## P2. Lightning produces the qualifying round boundary
+## P2. Lightning produces the evolutionary boundary — accepted
 
 ### Native validation cadence
 
@@ -100,7 +101,7 @@ direct synchronization evidence.
 **Open qualification question.** Which validation, accumulation, loader, and
 continuation configurations preserve one coherent population boundary?
 
-## Milestone 2 design choice: PBT specialization or direct controller
+## P3. Controller form — accepted clause reopened by roadmap conflict
 
 ### Synchronous PBT lifecycle
 
@@ -120,14 +121,19 @@ maintainable than an independent controller with a thin adapter.
 
 **Alternative retained.** Implement an independently invokable controller and
 translate its decision through the narrowest Ray adapter available. This is not
-a license to reproduce Tune's pause, resume, checkpoint, resource, or trial
+permission to reproduce Tune's pause, resume, checkpoint, resource, or trial
 execution lifecycle.
+
+**Roadmap conflict.** The original P3 selected a PBT subclass before Milestone 2.
+The roadmap explicitly assigns the subclass-versus-direct-controller decision to
+Milestone 2. This is sufficient evidence to reopen only that implementation-form
+clause.
 
 **Open qualification question.** Which option expresses the Clan policy with one
 policy authority, independent invocation, minimal version-sensitive surface, and
 no substantial Tune lifecycle duplication?
 
-### Experiment restoration
+### Experiment restoration evidence
 
 **Direct source.** Ray `Tuner.restore` resumes unfinished trials and can resume
 errored trials from their latest checkpoints. Tune persistent storage retains
@@ -148,13 +154,13 @@ support-envelope question for industry qualification.
 and Lightning state restore one coherent Clan, fail clearly, or expose a
 specific gap requiring approved Clan-specific machinery?
 
-## P3. ClanBasedTuning decides the transition; frameworks execute it
+## P4. Parent-selection and state-transfer authority — accepted clause reopened
 
 ### Report and checkpoint bridge
 
 **Direct source.** Ray's Lightning integration saves a Lightning checkpoint at
-validation end and attaches it to `tune.report`. Under FunctionTrainable, a
-later save request returns the most recently reported checkpoint.
+validation end and attaches it to `tune.report`. Under FunctionTrainable, a later
+save request returns the most recently reported checkpoint.
 
 - [Ray Lightning report/checkpoint callback](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/integration/pytorch_lightning.py)
 - [Ray FunctionTrainable checkpoint bridge](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/trainable/function_trainable.py)
@@ -164,10 +170,10 @@ new configuration to target trials.
 
 - [Ray PBT exploitation](https://github.com/ray-project/ray/blob/27b0e6a7b88324eab5214a0bc65a839bfbb2dc85/python/ray/tune/schedulers/pbt.py)
 
-**Inference.** ClanBasedTuning should decide the winning parent. Native Ray
-execution can then perform checkpoint/configuration assignment. Saying that Ray
-owns “source selection” would incorrectly transfer the Clan policy back to the
-framework.
+**Mechanism inference.** The Clan mechanism requires ClanBasedTuning to select
+the sole parent. Native Ray execution can perform the resulting checkpoint and
+configuration assignment. The original wording that Ray owns “source selection”
+therefore transferred the defining Clan policy to the wrong authority.
 
 **Alternative considered.** Add a Clan checkpoint scheduler or generation
 manifest. Rejected absent direct evidence that native assignment and restoration
@@ -208,12 +214,12 @@ the final public hook or broad optimizer layouts.
 ordering for the first integration, and which optimizer/scheduler layouts can be
 claimed without conflicting authority?
 
-## P4. Training data is partitioned; fitness data is comparable
+## P5. Training data is partitioned; fitness data is comparable — accepted
 
 **Mechanism inference.** Distinct training batches contribute distributed work
-to the common gradient. Fitness must instead compare candidate models on the
-same workload; different validation samples confound ranking, while distributed
-metric reduction combines the candidate scores.
+to the common gradient. Fitness must compare candidate models on the same
+workload; different validation samples confound ranking, while distributed metric
+reduction combines the candidate scores.
 
 **Framework direction.** Standard PyTorch sampling can express repeated access
 to one deterministic evaluation set without a separate data framework.
@@ -228,7 +234,7 @@ erases the candidate differences the controller must compare.
 loader-length, boundary timing, and report path establish comparable member-local
 fitness in the complete integration?
 
-## P5. Native PyTorch distributed strategies own shared gradients
+## P6. Native distributed execution owns shared gradients — accepted
 
 **Direct source.** PyTorch DDP owns parameter verification, initial state
 synchronization, gradient hooks, bucketing, and reduction.
@@ -248,12 +254,17 @@ state transfer where native behavior fits.
 because Clan Tuning requires an ordinary common gradient, not a new collective
 algorithm.
 
+**Scope clarification.** The accepted principle is native ownership of ordinary
+distributed mechanics. DDP is the first integration target; the roadmap's later
+FSDP or other model-sharding support must preserve the same semantics through
+those native strategies.
+
 **Open qualification questions.** Which DDP precision, accumulation, buffer,
 model, and loader configurations preserve the method? Later, which native
 model-sharding strategies can preserve the same semantics without hardcoding a
 one-process-per-member architecture?
 
-## P6. Population validity and completion are collective
+## P7. Failure and planned completion are collective — core accepted, allocation reopened
 
 ### Per-trial stopping order
 
@@ -281,6 +292,12 @@ active distributed world and the population producing the shared gradient.
 recovery, and continuing with a smaller population were rejected because each
 changes the active Clan semantics.
 
+**Responsibility conflict.** The earlier P7 sentence assigned three scopes of
+“native framework recovery” to Milestones 2, 3, and 6. The roadmap instead makes
+M2 the controller, M3 the complete normal workflow, and M6 the operational
+support envelope. The collective rule survives; the recovery allocation does
+not.
+
 **Open qualification questions.** How does the complete integration terminate or
 invalidate a broken Clan without indefinite collective waits? Which operational
 failure and restoration behaviors can later be included in a published industry
@@ -289,7 +306,7 @@ support envelope?
 ## Current proof-of-concept evidence
 
 The current repository demonstrates useful mechanisms but does not certify the
-proposed architecture or later milestone exits.
+accepted architecture or later milestone exits.
 
 - `tests/framework_contracts/test_ray_native_pbt_cycle.py` exercises a small
   native Tune/Lightning/PBT exploit-and-restore cycle. It supports feasibility of
