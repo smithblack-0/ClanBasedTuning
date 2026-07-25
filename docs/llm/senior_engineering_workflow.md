@@ -52,10 +52,11 @@ consult the user before changing it.
 
 Do not place plans or scratch designs beside milestone gates. A durable plan,
 when justified, must live in a clearly identified planning or design location,
-state the active gate it serves, and stop at that gate boundary. Exploratory
-scratch normally belongs in the current conversation, issue, or pull request.
-The repository currently has no persistent LLM scratch-planning area; create one
-only with explicit human approval and unmistakable preliminary status.
+state the active gate it serves, and stop at that gate boundary. Preserve
+framework research, source observations, option fragments, tentative ideas, and
+unresolved questions in [`scratchwork/`](scratchwork/README.md) when they may help
+future work. Scratchwork is explicitly non-authoritative and disposable; it may
+not assign work, narrow a gate, or predesign a later milestone.
 
 ## Before coding
 
