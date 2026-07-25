@@ -19,6 +19,7 @@ state, manages a population runtime, or imports Ray or Lightning objects.
 import math
 import random
 from collections.abc import Mapping, Sequence
+from numbers import Real
 
 _SPEC_FIELDS = frozenset({"default", "standard_deviation", "geometry", "minimum", "maximum"})
 
@@ -90,7 +91,7 @@ class ClanController:
         defaults. Calling this method advances the controller's random stream.
         """
 
-        if not isinstance(population_size, int):
+        if isinstance(population_size, bool) or not isinstance(population_size, int):
             raise TypeError("population_size must be an integer")
         if population_size < 2:
             raise ValueError("population_size must be at least two")
@@ -220,8 +221,10 @@ class ClanController:
 
     @classmethod
     def _normalize_hyperparameters(cls, hyperparameters):
-        if not isinstance(hyperparameters, Mapping) or not hyperparameters:
-            raise ValueError("hyperparameters must be a non-empty mapping")
+        if not isinstance(hyperparameters, Mapping):
+            raise TypeError("hyperparameters must be a mapping")
+        if not hyperparameters:
+            raise ValueError("hyperparameters must be non-empty")
 
         names = list(hyperparameters)
         for name in names:
@@ -270,10 +273,9 @@ class ClanController:
 
     @staticmethod
     def _finite_float(value, label):
-        try:
-            value = float(value)
-        except (TypeError, ValueError) as error:
-            raise TypeError(f"{label} must be a real scalar") from error
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise TypeError(f"{label} must be a real scalar")
+        value = float(value)
         if not math.isfinite(value):
             raise ValueError(f"{label} must be finite")
         return value
