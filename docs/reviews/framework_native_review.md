@@ -1,6 +1,6 @@
 # Framework-native engineering review
 
-Status: proposed standing go/no-go review for Milestone 1 acceptance  
+Status: standing go/no-go review under Milestone 1 alignment review  
 Date: 2026-07-24
 
 ## Purpose
@@ -15,6 +15,10 @@ This is not a design specification or milestone plan. Detailed project
 requirements belong in the gate where the roadmap makes them enforceable;
 detailed component behavior belongs in the design artifact for the component
 that owns it.
+
+Accepted project decisions remain governing inputs unless an explicit alignment
+record reopens a clause. A reopened clause may not be used as implementation
+authority until its replacement is accepted.
 
 ## Application
 
@@ -41,9 +45,9 @@ flowchart TD
 ## 1. Preserve the Clan mechanism
 
 Confirm that the unit preserves the algorithmic properties established by the
-roadmap and accepted project decisions: the live population contributes to
-shared-gradient training, variation remains optimizer-side during a round,
-fitness is comparable, and one parent supplies the next generation.
+roadmap and governing project decisions: the complete live population
+contributes to shared-gradient training, variation remains optimizer-side during
+a round, fitness is comparable, and one parent supplies the next generation.
 
 **Fail** when engineering convenience changes one of those properties. That is
 a project decision, not a local implementation choice.
@@ -108,6 +112,6 @@ configuration before expensive work begins.
 ## Supporting documents
 
 - [Product roadmap](../product_roadmap.md)
-- [Proposed project decisions](../decisions/project_decisions.md)
+- [Project decisions and reopened clauses](../decisions/project_decisions.md)
 - [Milestone gates](../milestones/README.md)
 - [Framework evidence ledger](../framework_alignment/evidence_ledger.md)
