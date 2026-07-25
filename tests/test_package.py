@@ -1,10 +1,17 @@
-"""Package-level environment checks."""
+"""Package-level public-surface checks."""
 
 
-def test_package_imports() -> None:
+def test_declared_package_exports_are_bound():
+    """Pre: package declares __all__. Post: every declared export resolves."""
     import clan_based_tuning
 
     assert clan_based_tuning.__name__ == "clan_based_tuning"
-    assert not hasattr(clan_based_tuning, "ClanBase")
-    assert not hasattr(clan_based_tuning, "ClanSpec")
-    assert not hasattr(clan_based_tuning, "OptimizerField")
+    for name in clan_based_tuning.__all__:
+        assert getattr(clan_based_tuning, name) is not None
+
+
+def test_clan_controller_is_a_declared_export():
+    """Pre: Milestone 2 adds ClanController. Post: the package declares that surface."""
+    import clan_based_tuning
+
+    assert "ClanController" in clan_based_tuning.__all__
