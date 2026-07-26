@@ -6,8 +6,10 @@ training with member-local optimizer hyperparameters and population selection.
 ## Project status
 
 The framework-independent Clan controller is the first accepted implementation
-surface. Existing Ray/Lightning integration source and examples remain
-proof-of-concept evidence rather than an accepted construction API.
+surface. The current Milestone 3 review proposes an explicit manual Ray Tune,
+Lightning, and PyTorch DDP composition. It remains a review candidate until human
+acceptance and must not be confused with the shorter usability frontend planned for
+Milestone 4.
 
 Read [`STATUS.md`](STATUS.md) for the current durable project position.
 
@@ -21,17 +23,29 @@ Read [`STATUS.md`](STATUS.md) for the current durable project position.
   and links to the active gate.
 - [`docs/controller/README.md`](docs/controller/README.md) — controller lifecycle,
   ownership, algorithms, and API reference.
+- [`docs/milestone_3_manual_workflow.md`](docs/milestone_3_manual_workflow.md) —
+  proposed process-local integration sequence, component ownership, limitations, and
+  framework seam rationale.
 - [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
   framework research, evidence, and accepted responsibility model.
 - [`AGENTS.md`](AGENTS.md) — entry point for coding agents and contributors using
   the repository's durable engineering process.
 
-## [TODO] Accepted construction and integration API
+## Manual mechanics example under review
 
-The milestone that accepts a Ray/Lightning construction and integration contract
-will publish the corresponding usage guide. Until then, existing integration
-classes and examples should be read as implementation evidence rather than user
-contracts.
+The proposed Milestone 3 path deliberately requires explicit composition:
+
+```bash
+python -m pip install -e '.[dev,ray]'
+python examples/manual_cpu_clan.py --storage-path /tmp/clan-manual
+```
+
+The example runs repeated CPU rounds and exposes shared gradients, member divergence,
+sole-parent selection, winner-only checkpoint creation, common restoration, local
+optimizer mutation, and replay lineage.
+
+A future usability frontend may manufacture these same components. It must not conceal
+a second scheduler, training loop, checkpoint system, or gradient implementation.
 
 ## Development
 
