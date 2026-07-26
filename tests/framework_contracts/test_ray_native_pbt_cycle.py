@@ -99,7 +99,6 @@ def test_manual_cpu_clan_runs_repeated_winner_only_transitions(tmp_path):
         restore = ClanControllerRestore(controller)
         report = ClanTuneReportCallback(
             controller,
-            restore,
             metrics={
                 "fitness": "fitness",
                 "learning_rate": "learning_rate",
