@@ -23,15 +23,6 @@ def test_one_member_failure_invalidates_the_complete_clan(tmp_path):
     )
 
     def train(config):
-        del config
-        session = ClanTuneSession(tune.get_context().get_trial_resources().head_bundle_is_empty)
-        if session.member_id == 0:
-            raise RuntimeError("deliberate Clan member failure")
-        session.load_population(0)
-
-    # The trainable needs the scheduler-injected config, so retain it explicitly rather
-    # than relying on a closure that could hide the tested integration path.
-    def train_with_config(config):
         session = ClanTuneSession(config)
         if session.member_id == 0:
             raise RuntimeError("deliberate Clan member failure")
@@ -41,7 +32,7 @@ def test_one_member_failure_invalidates_the_complete_clan(tmp_path):
     ray.init(num_cpus=2, include_dashboard=False, ignore_reinit_error=True)
     try:
         results = tune.Tuner(
-            tune.with_resources(train_with_config, {"cpu": 1}),
+            tune.with_resources(train, {"cpu": 1}),
             param_space={"trial_seed": tune.grid_search([17, 23])},
             run_config=tune.RunConfig(
                 storage_path=str(tmp_path),
