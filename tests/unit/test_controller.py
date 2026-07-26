@@ -3,10 +3,10 @@ import math
 
 import pytest
 
-from clan_based_tuning import ClanController
+from clan_based_tuning import ClanController, Population
 
 
-def _controller(*, mode="min", seed=7, hyperparameters=None):
+def _controller(*, population_size=3, mode="min", seed=7, hyperparameters=None):
     if hyperparameters is None:
         hyperparameters = {
             "lr": {
@@ -17,59 +17,136 @@ def _controller(*, mode="min", seed=7, hyperparameters=None):
                 "maximum": 10.0,
             }
         }
-    return ClanController(hyperparameters=hyperparameters, mode=mode, seed=seed)
+    return ClanController(
+        population_size=population_size,
+        hyperparameters=hyperparameters,
+        mode=mode,
+        seed=seed,
+    )
 
 
-def test_initial_configurations_keep_rank_zero_at_defaults():
-    """Pre: valid policy and three ranks. Post: rank zero is exact; outputs are separate."""
-    configurations = _controller().initial_configurations(3)
-
-    assert configurations[0] == {"lr": 1.0}
-    assert len(configurations) == 3
-    assert len({id(configuration) for configuration in configurations}) == 3
+def _complete_population(controller, fitnesses):
+    population = controller.initial_population()
+    for rank, fitness in enumerate(fitnesses):
+        population.set_fitness(rank, fitness)
+    return population
 
 
-def test_initial_configurations_reject_boolean_population_size():
-    """Pre: bool masquerades as int. Post: population size is rejected explicitly."""
-    with pytest.raises(TypeError, match="must be an integer"):
-        _controller().initial_configurations(True)
+def test_population_copies_and_names_ranked_configuration_contract():
+    """Pre: contiguous rank dictionary. Post: Population owns separate configuration copies."""
+    configurations = {0: {"lr": 1.0}, 1: {"lr": 2.0}}
+
+    population = Population(configurations)
+    configurations[0]["lr"] = 9.0
+
+    assert population.ranks == range(0, 2)
+    assert population.get_configuration(0) == {"lr": 1.0}
+    assert len(population) == 2
 
 
-def test_equal_seed_and_calls_produce_equal_initial_configurations():
-    """Pre: equal policies and seeds. Post: redundant controllers produce equal output."""
+def test_population_rejects_noncontiguous_ranks_at_construction():
+    """Pre: malformed outer structure. Post: Population refuses an ambiguous rank contract."""
+    with pytest.raises(ValueError, match="contiguous from zero"):
+        Population({0: {"lr": 1.0}, 2: {"lr": 2.0}})
+
+
+def test_population_sets_and_gets_fitness_by_rank():
+    """Pre: valid Population and finite score. Post: score is associated with one rank."""
+    population = Population({0: {"lr": 1.0}, 1: {"lr": 2.0}})
+
+    population.set_fitness(1, 0.25)
+
+    assert population.get_fitness(1) == 0.25
+    assert population.missing_fitness_ranks() == (0,)
+
+
+def test_population_rejects_unknown_rank_and_nonfinite_fitness():
+    """Pre: invalid fitness writes. Post: Population state remains unambiguous."""
+    population = Population({0: {"lr": 1.0}, 1: {"lr": 2.0}})
+
+    with pytest.raises(KeyError, match="unknown population rank"):
+        population.set_fitness(2, 1.0)
+    with pytest.raises(ValueError, match="must be finite"):
+        population.set_fitness(0, float("nan"))
+
+
+def test_initial_population_uses_fixed_size_and_retains_defaults_at_rank_zero():
+    """Pre: constructed controller. Post: one complete Population is created without fitness."""
+    population = _controller(population_size=3).initial_population()
+
+    assert len(population) == 3
+    assert population.get_configuration(0) == {"lr": 1.0}
+    assert population.missing_fitness_ranks() == (0, 1, 2)
+    assert len({id(configuration) for configuration in population.configurations.values()}) == 3
+
+
+def test_equal_policy_seed_and_calls_produce_equal_initial_populations():
+    """Pre: redundant controllers. Post: their initial configuration dictionaries agree."""
     first = _controller(seed=13)
     second = _controller(seed=13)
 
-    assert first.initial_configurations(4) == second.initial_configurations(4)
+    assert first.initial_population().configurations == second.initial_population().configurations
 
 
-def test_next_generation_minimizes_fitness_and_retains_parent():
-    """Pre: complete rank-aligned input. Post: lowest-fitness rank is retained exactly."""
-    controller = _controller()
-    configurations = [{"lr": 1.0}, {"lr": 2.0}, {"lr": 3.0}]
+def test_next_generation_requires_population_contract():
+    """Pre: arbitrary dictionary. Post: controller rejects data outside the named contract."""
+    with pytest.raises(TypeError, match="must be a Population"):
+        _controller().next_generation({})
 
-    parent_rank, next_configurations = controller.next_generation([4.0, 1.0, 2.0], configurations)
+
+def test_next_generation_requires_controller_population_size():
+    """Pre: valid Population from another size. Post: fixed controller policy rejects it."""
+    population = Population({0: {"lr": 1.0}, 1: {"lr": 2.0}})
+    population.set_fitness(0, 1.0)
+    population.set_fitness(1, 2.0)
+
+    with pytest.raises(ValueError, match="exactly 3 ranks"):
+        _controller(population_size=3).next_generation(population)
+
+
+def test_missing_fitness_fails_before_random_state_advances():
+    """Pre: one rank has not reported. Post: no transition or random advancement occurs."""
+    controller = _controller(population_size=2)
+    population = controller.initial_population()
+    population.set_fitness(0, 1.0)
+    before = controller.state_dict()
+
+    with pytest.raises(RuntimeError, match="missing fitness"):
+        controller.next_generation(population)
+
+    assert controller.state_dict() == before
+
+
+def test_next_generation_minimizes_and_retains_parent_configuration():
+    """Pre: complete min-mode Population. Post: best rank is retained in a fresh Population."""
+    controller = _controller(population_size=3)
+    population = _complete_population(controller, [4.0, 1.0, 2.0])
+    expected_parent = population.get_configuration(1)
+
+    parent_rank, next_population = controller.next_generation(population)
 
     assert parent_rank == 1
-    assert next_configurations[1] == {"lr": 2.0}
-    assert next_configurations[1] is not configurations[1]
+    assert isinstance(next_population, Population)
+    assert next_population.get_configuration(1) == expected_parent
+    assert next_population.missing_fitness_ranks() == (0, 1, 2)
 
 
 def test_next_generation_maximizes_and_breaks_ties_by_lowest_rank():
-    """Pre: two equal best scores in max mode. Post: the lower rank wins."""
-    controller = _controller(mode="max")
+    """Pre: equal best scores in max mode. Post: stable lowest-rank tie behavior wins."""
+    controller = _controller(population_size=3, mode="max")
+    population = _complete_population(controller, [3.0, 3.0, 1.0])
 
-    parent_rank, _ = controller.next_generation(
-        [3.0, 3.0, 1.0],
-        [{"lr": 1.0}, {"lr": 2.0}, {"lr": 3.0}],
-    )
+    parent_rank, _ = controller.next_generation(population)
 
     assert parent_rank == 0
 
 
 def test_linear_mutation_adds_gaussian_displacement(monkeypatch):
-    """Pre: linear policy and known draw. Post: mutation adds the draw in value units."""
-    controller = _controller()
+    """Pre: linear policy and known draw. Post: child adds the draw in value units."""
+    controller = _controller(population_size=2)
+    population = Population({0: {"lr": 2.0}, 1: {"lr": 4.0}})
+    population.set_fitness(0, 0.0)
+    population.set_fitness(1, 1.0)
     calls = []
 
     def draw(mean, standard_deviation):
@@ -78,18 +155,16 @@ def test_linear_mutation_adds_gaussian_displacement(monkeypatch):
 
     monkeypatch.setattr(controller._random, "gauss", draw)
 
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
+    _, next_population = controller.next_generation(population)
 
-    assert next_configurations == [{"lr": 2.0}, {"lr": 2.3}]
+    assert next_population.configurations == {0: {"lr": 2.0}, 1: {"lr": 2.3}}
     assert calls == [(0.0, 0.2)]
 
 
 def test_log_mutation_multiplies_by_exponential_draw(monkeypatch):
-    """Pre: log policy and known draw. Post: mutation multiplies by exp(draw)."""
+    """Pre: log policy and known draw. Post: child multiplies by exp(draw)."""
     controller = _controller(
+        population_size=2,
         hyperparameters={
             "lr": {
                 "default": 2.0,
@@ -98,21 +173,22 @@ def test_log_mutation_multiplies_by_exponential_draw(monkeypatch):
                 "minimum": 0.1,
                 "maximum": 20.0,
             }
-        }
+        },
     )
+    population = Population({0: {"lr": 2.0}, 1: {"lr": 4.0}})
+    population.set_fitness(0, 0.0)
+    population.set_fitness(1, 1.0)
     monkeypatch.setattr(controller._random, "gauss", lambda mean, std: math.log(2.0))
 
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
+    _, next_population = controller.next_generation(population)
 
-    assert next_configurations == [{"lr": 2.0}, {"lr": pytest.approx(4.0)}]
+    assert next_population.get_configuration(1) == {"lr": pytest.approx(4.0)}
 
 
-def test_log_mutation_clamps_overflow_to_upper_bound(monkeypatch):
-    """Pre: an extreme log draw overflows exp. Post: mutation reaches the upper bound."""
+def test_log_mutation_overflow_clamps_to_upper_bound(monkeypatch):
+    """Pre: overflowing log draw. Post: bounded policy returns the upper limit."""
     controller = _controller(
+        population_size=2,
         hyperparameters={
             "lr": {
                 "default": 2.0,
@@ -121,108 +197,57 @@ def test_log_mutation_clamps_overflow_to_upper_bound(monkeypatch):
                 "minimum": 0.1,
                 "maximum": 20.0,
             }
-        }
+        },
     )
+    population = Population({0: {"lr": 2.0}, 1: {"lr": 4.0}})
+    population.set_fitness(0, 0.0)
+    population.set_fitness(1, 1.0)
     monkeypatch.setattr(controller._random, "gauss", lambda mean, std: 1000.0)
 
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
+    _, next_population = controller.next_generation(population)
 
-    assert next_configurations[1] == {"lr": 20.0}
+    assert next_population.get_configuration(1) == {"lr": 20.0}
 
 
-def test_mutation_clamps_to_declared_bounds(monkeypatch):
-    """Pre: draw proposes an illegal value. Post: result equals the nearest bound."""
-    controller = _controller()
-    monkeypatch.setattr(controller._random, "gauss", lambda mean, std: 50.0)
+def test_next_generation_does_not_modify_current_population():
+    """Pre: complete mutable Population. Post: transition leaves current generation unchanged."""
+    controller = _controller(population_size=2)
+    population = _complete_population(controller, [1.0, 2.0])
+    expected_configurations = copy.deepcopy(population.configurations)
+    expected_fitness = copy.deepcopy(population.fitness)
 
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
+    controller.next_generation(population)
 
-    assert next_configurations[1] == {"lr": 10.0}
-
-
-def test_invalid_generation_does_not_advance_random_state():
-    """Pre: malformed input. Post: failure occurs before the random stream advances."""
-    controller = _controller()
-    before = controller.state_dict()
-
-    with pytest.raises(ValueError, match="equal length"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}])
-
-    assert controller.state_dict() == before
+    assert population.configurations == expected_configurations
+    assert population.fitness == expected_fitness
 
 
-def test_generation_rejects_nonfinite_fitness():
-    """Pre: one nonfinite score. Post: no parent or next configuration is produced."""
-    controller = _controller()
+def test_random_state_round_trip_reproduces_next_population():
+    """Pre: saved state and equal policy. Post: restoration repeats the next transition."""
+    first = _controller(population_size=2, seed=17)
+    second = _controller(population_size=2, seed=999)
+    population = Population({0: {"lr": 1.0}, 1: {"lr": 2.0}})
+    population.set_fitness(0, 0.0)
+    population.set_fitness(1, 1.0)
+    second.load_state_dict(first.state_dict())
 
-    with pytest.raises(ValueError, match="must be finite"):
-        controller.next_generation(
-            [1.0, float("nan")],
-            [{"lr": 1.0}, {"lr": 2.0}],
-        )
+    first_result = first.next_generation(population)
+    second_result = second.next_generation(population)
 
-
-def test_generation_rejects_boolean_fitness():
-    """Pre: bool is numerically coercible. Post: it is rejected as a fitness scalar."""
-    controller = _controller()
-
-    with pytest.raises(TypeError, match="real scalar"):
-        controller.next_generation(
-            [1.0, True],
-            [{"lr": 1.0}, {"lr": 2.0}],
-        )
+    assert first_result[0] == second_result[0]
+    assert first_result[1].configurations == second_result[1].configurations
 
 
-def test_generation_rejects_wrong_hyperparameter_set():
-    """Pre: one configuration omits a declared key. Post: the input is rejected."""
-    controller = _controller()
-
-    with pytest.raises(ValueError, match="exactly the declared"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}, {}])
-
-
-def test_generation_rejects_out_of_bounds_configuration():
-    """Pre: one current value violates bounds. Post: the input is rejected."""
-    controller = _controller()
-
-    with pytest.raises(ValueError, match="must be within"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}, {"lr": 20.0}])
-
-
-def test_inputs_are_not_modified():
-    """Pre: mutable caller-owned inputs. Post: successful evolution leaves them unchanged."""
-    controller = _controller()
-    fitnesses = [1.0, 2.0]
-    configurations = [{"lr": 1.0}, {"lr": 2.0}]
-    expected_fitnesses = copy.deepcopy(fitnesses)
-    expected_configurations = copy.deepcopy(configurations)
-
-    controller.next_generation(fitnesses, configurations)
-
-    assert fitnesses == expected_fitnesses
-    assert configurations == expected_configurations
-
-
-def test_random_state_round_trip_reproduces_next_mutation():
-    """Pre: saved state and equal policy. Post: restoration repeats the next result."""
-    first = _controller(seed=17)
-    second = _controller(seed=999)
-    state = first.state_dict()
-    second.load_state_dict(state)
-    generation = ([0.0, 1.0], [{"lr": 1.0}, {"lr": 2.0}])
-
-    assert first.next_generation(*generation) == second.next_generation(*generation)
+@pytest.mark.parametrize("population_size", [True, 1, 1.5])
+def test_constructor_rejects_invalid_population_size(population_size):
+    """Pre: invalid immutable size. Post: construction fails before a policy exists."""
+    with pytest.raises((TypeError, ValueError), match="population_size"):
+        _controller(population_size=population_size)
 
 
 @pytest.mark.parametrize("seed", [None, True, 1.5, "17"])
 def test_constructor_rejects_noninteger_seed(seed):
-    """Pre: seed is not an integer. Post: construction rejects ambiguous RNG setup."""
+    """Pre: ambiguous RNG seed. Post: construction rejects it once at the boundary."""
     with pytest.raises(TypeError, match="seed must be an integer"):
         _controller(seed=seed)
 
@@ -237,7 +262,7 @@ def test_constructor_rejects_noninteger_seed(seed):
     ],
 )
 def test_constructor_rejects_invalid_hyperparameter_policy(field, value, message):
-    """Pre: one invalid policy field. Post: construction fails before state exists."""
+    """Pre: invalid immutable policy field. Post: construction fails before use."""
     specification = {
         "default": 1.0,
         "standard_deviation": 0.2,
