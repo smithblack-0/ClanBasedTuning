@@ -35,11 +35,15 @@ population. At `advance()` it briefly loads the completed rounds as an ordinary
 `list[ClanRound]`, selects the winner, manufactures only its own next round, informs
 the external runtime, and installs that prepared round.
 
-## Fake multi-process loop
+## Small manual loop
 
-The framework-independent lifecycle can be exercised with ordinary in-memory mocks:
+Milestone 2 can be exercised directly without a model, optimizer, Ray, Lightning, or
+checkpoint implementation:
 
 ```python
+from clan_based_tuning import ClanController, MutationSpec
+
+
 class RoundStore:
     def __init__(self, population_size):
         self.population_size = population_size
@@ -49,17 +53,29 @@ class RoundStore:
         self.saved[(round_.round_index, round_.member_id)] = round_
 
     def load(self, round_index):
-        return [self.saved[(round_index, member_id)] for member_id in range(self.population_size)]
+        return [
+            self.saved[(round_index, member_id)]
+            for member_id in range(self.population_size)
+            if (round_index, member_id) in self.saved
+        ]
 
 
 population_size = 3
 store = RoundStore(population_size)
 winner_calls = [[] for _ in range(population_size)]
+mutations = {
+    "lr": MutationSpec(
+        standard_deviation=0.0,
+        geometry="linear",
+        minimum=0.0,
+        maximum=10.0,
+    )
+}
 controllers = [
     ClanController(
         member_id=member_id,
         population_size=population_size,
-        initial_config=initial_configs[member_id],
+        initial_config={"lr": float(member_id + 1)},
         mutations=mutations,
         mode="min",
         seed=17,
@@ -70,19 +86,27 @@ controllers = [
     for member_id in range(population_size)
 ]
 
-for _ in range(number_of_rounds):
-    for controller in controllers:
-        train(controller.get_config())
-        controller.set_fitness(evaluate(controller))
+for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
+    controller.set_fitness(fitness)
 
-    for controller in controllers:
-        controller.advance()
+for controller in controllers:
+    controller.advance()
+
+assert winner_calls == [[1], [1], [1]]
+assert [controller.get_config() for controller in controllers] == [
+    {"lr": 2.0},
+    {"lr": 2.0},
+    {"lr": 2.0},
+]
 ```
 
-The first inner loop stands in for parallel training and reporting. The second stands
-in for every process observing the complete round, selecting the same winner,
-transferring externally owned state through `select_winner`, and installing its own
-next `ClanRound`.
+The first loop manually supplies the three completed fitness values. The second lets
+each fake process load the same completed population, select member 1, notify its
+external callback, and manufacture its own next `ClanRound` from member 1's
+configuration.
+
+This is only the framework-independent Milestone 2 contract exercise. The manual CPU
+model and optimizer implementation is a Milestone 3 acceptance gate.
 
 ## Advance sequence
 
