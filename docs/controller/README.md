@@ -128,9 +128,9 @@ controller should continue to emit that event through `select_winner`; durable l
 storage, association with checkpoints and round identities, and execution of a later
 replay run belong to Milestone 3 because they depend on the external lifecycle.
 
-No additional replay object or callback is required in Milestone 2. A Milestone 3
-`select_winner` implementation can both transfer the selected state and append the
-winning member to its durable replay history.
+No additional replay object or callback is required in Milestone 2. The Milestone 3
+integration can transfer the selected state through each local callback while one
+authority records the winner idempotently for the completed round.
 
 ## Failure boundary
 
