@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Mapping
@@ -12,20 +13,20 @@ from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 
 from clan_based_tuning.controller import ClanController
+from clan_based_tuning.optimizer import OptimizerStrategy
 from clan_based_tuning.optimizer import (
-    OptimizerStrategy,
     apply_optimizer_strategy as default_optimizer_strategy,
 )
-from clan_based_tuning.spec import CLAN_ROUND_RESULT_KEY
+from clan_based_tuning.spec import (
+    CLAN_CONFIG_KEY,
+    CLAN_MEMBER_ID_KEY,
+    CLAN_ROUND_INDEX_KEY,
+    CLAN_WINNER_ID_KEY,
+)
 
 
 class ClanControllerRestore(Callback):
-    """Checkpoint controller state and reconcile the live optimizer after restore.
-
-    Lightning owns serialization and optimizer restoration. This callback contributes
-    the selected controller parent to that checkpoint, advances the receiving local
-    controller only after restore, and applies its resulting optimizer configuration.
-    """
+    """Checkpoint controller state and reconcile the live optimizer after restore."""
 
     def __init__(
         self,
@@ -50,31 +51,16 @@ class ClanControllerRestore(Callback):
             self._loaded_winner = False
         self.apply_current_config(trainer)
 
-    def continue_selected_local_state(self, trainer: Trainer) -> None:
-        """Advance a winner that Tune resumed without reconstructing its actor."""
-
-        self.controller.accept_local_winner_checkpoint()
-        self.controller.advance()
-        self.apply_current_config(trainer)
-
     def apply_current_config(self, trainer: Trainer) -> None:
         self._apply_optimizer_strategy(trainer.optimizers, self.controller.get_config())
 
 
 class ClanTuneReportCallback(Callback):
-    """Publish one comparable result and checkpoint only the selected local winner.
-
-    The callback runs inside one Tune trial process at the qualifying Lightning event.
-    Controller callbacks exchange plain round records through Ray before this callback
-    knows whether the local state won. Only that process asks Lightning to serialize a
-    checkpoint. ``tune.report`` then hands both the result and optional checkpoint to
-    the synchronous scheduler.
-    """
+    """Report a comparable result and checkpoint only the selected local winner."""
 
     def __init__(
         self,
         controller: ClanController,
-        restore: ClanControllerRestore,
         *,
         metrics: str | list[str] | dict[str, str],
         fitness_metric: str,
@@ -85,7 +71,6 @@ class ClanTuneReportCallback(Callback):
         if isinstance(metrics, str):
             metrics = [metrics]
         self.controller = controller
-        self.restore = restore
         self._metrics = metrics
         self._fitness_metric = fitness_metric
         self._filename = filename
@@ -125,19 +110,18 @@ class ClanTuneReportCallback(Callback):
         winner_id = self.controller.winner_id
         if winner_id is None:
             raise RuntimeError("controller did not resolve a winner")
-        report[CLAN_ROUND_RESULT_KEY] = {
-            "member_id": self.controller.member_id,
-            "round_index": self.controller.round_index,
-            "winner_id": winner_id,
-            "config": self.controller.get_config(),
-        }
+        report.update(
+            {
+                CLAN_MEMBER_ID_KEY: self.controller.member_id,
+                CLAN_ROUND_INDEX_KEY: self.controller.round_index,
+                CLAN_WINNER_ID_KEY: winner_id,
+                CLAN_CONFIG_KEY: json.dumps(
+                    self.controller.get_config(), sort_keys=True, separators=(",", ":")
+                ),
+            }
+        )
 
         from ray import tune
 
         with self._winner_checkpoint(trainer, is_winner) as checkpoint:
             tune.report(report, checkpoint=checkpoint)
-
-        # Synchronous Tune normally pauses and reconstructs every process. If it
-        # resumes the selected source actor in place, its local model and optimizer
-        # are already exactly the checkpointed winner state.
-        self.restore.continue_selected_local_state(trainer)
