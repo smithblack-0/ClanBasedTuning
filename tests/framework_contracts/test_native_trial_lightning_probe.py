@@ -1,4 +1,4 @@
-"""Regression assertions for the native-trial Lightning DDP contract probe."""
+"""Regression assertions for the explicit native Lightning/DDP contract probe."""
 
 from __future__ import annotations
 
@@ -8,12 +8,11 @@ from tests.framework_contracts.native_trial_lightning_probe import run_probe
 
 
 @pytest.mark.framework_contract
-def test_native_trials_can_checkpoint_exploit_restart_and_reform_ddp(tmp_path):
+def test_native_trials_load_one_winner_checkpoint_then_mutate_locally(tmp_path):
     report = run_probe(tmp_path)
     first, second = report["window_1"], report["window_2"]
 
-    # The strategy synchronizes the fresh population once, then every trial
-    # receives the same reduced gradient and applies its own optimizer config.
+    # Fresh members receive the same reduced gradient and apply local configs.
     assert first[0]["final"]["reduced_gradient"] == pytest.approx(2.0)
     assert first[1]["final"]["reduced_gradient"] == pytest.approx(2.0)
     assert first[0]["final"]["weight"] == pytest.approx(0.8)
@@ -21,13 +20,12 @@ def test_native_trials_can_checkpoint_exploit_restart_and_reform_ddp(tmp_path):
     assert first[0]["final"]["learning_rate"] == pytest.approx(0.1)
     assert first[1]["final"]["learning_rate"] == pytest.approx(0.2)
 
-    # Every native trial has an authoritative checkpoint, even when its clan
-    # rank is nonzero and Lightning would ordinarily suppress the write.
-    assert (tmp_path / "window-1" / "trial-0" / "trial.ckpt").is_file()
-    assert (tmp_path / "window-1" / "trial-1" / "trial.ckpt").is_file()
+    # Rank 0 is the controller-selected winner. Rank 1 contributes no checkpoint.
+    assert (tmp_path / "window-1" / "trial-0" / "winner.ckpt").is_file()
+    assert not (tmp_path / "window-1" / "trial-1" / "winner.ckpt").exists()
 
-    # Both restarted processes load the source trial's complete state. The
-    # target then applies its mutated trial configuration after optimizer load.
+    # Both reconstructed processes load the same complete winner state before their
+    # local controllers manufacture next-round optimizer configurations.
     assert second[0]["start"]["global_step"] == 1
     assert second[1]["start"]["global_step"] == 1
     assert second[0]["start"]["weight"] == pytest.approx(0.8)
@@ -35,13 +33,14 @@ def test_native_trials_can_checkpoint_exploit_restart_and_reform_ddp(tmp_path):
     assert second[0]["start"]["momentum"] == pytest.approx(2.0)
     assert second[1]["start"]["momentum"] == pytest.approx(2.0)
     assert second[0]["start"]["learning_rate"] == pytest.approx(0.1)
-    assert second[1]["start"]["learning_rate"] == pytest.approx(0.3)
+    assert second[1]["start"]["learning_rate"] != pytest.approx(0.1)
 
-    # The reformed process group again supplies one common gradient, while the
-    # inherited trials diverge according to their current configurations.
+    # Reformed DDP again supplies one gradient while optimizer variation diverges.
     assert second[0]["final"]["reduced_gradient"] == pytest.approx(1.6)
     assert second[1]["final"]["reduced_gradient"] == pytest.approx(1.6)
     assert second[0]["final"]["momentum"] == pytest.approx(3.4)
     assert second[1]["final"]["momentum"] == pytest.approx(3.4)
-    assert second[0]["final"]["weight"] == pytest.approx(0.46)
-    assert second[1]["final"]["weight"] == pytest.approx(-0.22)
+    for member in second:
+        expected_weight = 0.8 - member["final"]["learning_rate"] * 3.4
+        assert member["final"]["weight"] == pytest.approx(expected_weight)
+    assert second[0]["final"]["weight"] != pytest.approx(second[1]["final"]["weight"])
