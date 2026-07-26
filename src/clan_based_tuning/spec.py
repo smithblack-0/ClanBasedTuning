@@ -8,6 +8,7 @@ from typing import Any
 from uuid import uuid4
 
 CLAN_METADATA_KEY = "__clan_based_training__"
+CLAN_ROUND_RESULT_KEY = "__clan_round_result__"
 CLAN_PROTOCOL_VERSION = 1
 
 
@@ -16,9 +17,9 @@ class _ClanMetadata:
     """Identify one fixed clan across Tune scheduling and actor restoration.
 
     This record contains only integration facts needed to rebuild the external
-    process group. Optimizer interpretation deliberately does not belong here:
-    Ray's current trial config is authoritative, and the user-supplied optimizer
-    strategy decides how that config applies to live optimizers.
+    process group and process-side result rendezvous. Optimizer configuration remains
+    controller state inside the Lightning checkpoint; stable Tune config retains only
+    trial-local construction inputs such as the mutation seed.
     """
 
     population_size: int
@@ -81,7 +82,7 @@ def _metadata_from_trial_config(config: Mapping[str, Any]) -> _ClanMetadata:
     except KeyError as error:
         raise RuntimeError(
             "Tune trial config has no Clan Based Training metadata. Construct the "
-            "Tune run with ClanBasedTraining before creating Lightning plugins."
+            "Tune run with ClanBasedTraining before resolving the trial session."
         ) from error
     if not isinstance(metadata, Mapping):
         raise TypeError(f"{CLAN_METADATA_KEY!r} must contain a mapping")
