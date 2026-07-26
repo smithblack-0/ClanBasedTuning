@@ -1,27 +1,30 @@
-"""Synchronous Ray PBT scheduler for shared-gradient native trials."""
+"""Synchronous Ray PBT execution for controller-selected Clan transitions."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from clan_based_tuning.spec import CLAN_METADATA_KEY, _ClanMetadata
+from clan_based_tuning.spec import CLAN_ROUND_RESULT_KEY, _ClanMetadata
 
 try:
+    from ray.tune.result import SHOULD_CHECKPOINT
     from ray.tune.schedulers import PopulationBasedTraining
 except ModuleNotFoundError:
     PopulationBasedTraining = object  # type: ignore[assignment,misc]
+    SHOULD_CHECKPOINT = "should_checkpoint"
     _RAY_AVAILABLE = False
 else:
     _RAY_AVAILABLE = True
 
 
 class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
-    """Run ordinary Ray PBT while keeping one complete gradient-sharing clan.
+    """Reuse synchronous PBT execution while replacing its population policy.
 
-    Ray remains authoritative for trial identity, scoring, mutation, checkpoint
-    selection and cloning, pause, resume, and scheduler persistence. This class
-    adds only the constraints and rendezvous lifecycle required for every native
-    trial to enter the same synchronous DDP window.
+    Each process-local ``ClanController`` receives the same completed population and
+    reports the same selected winner. This scheduler verifies that agreement, asks
+    native PBT to retain the winner's sole reported checkpoint, and assigns it to every
+    losing target. Target Tune configs remain unchanged because local optimizer
+    mutation occurs from controller state after Lightning restores the winner.
     """
 
     _supports_buffered_results = False
@@ -30,7 +33,6 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         self,
         population_size: int,
         *,
-        synch: bool = True,
         rendezvous_timeout_s: float = 300.0,
         rendezvous_poll_interval_s: float = 0.1,
         **pbt_kwargs: Any,
@@ -39,8 +41,13 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
             raise ModuleNotFoundError(
                 'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
             )
-        if not synch:
+        if "hyperparam_mutations" in pbt_kwargs or "custom_explore_fn" in pbt_kwargs:
+            raise TypeError(
+                "ClanController owns mutation; do not pass Ray PBT exploration policy"
+            )
+        if pbt_kwargs.get("synch", True) is not True:
             raise ValueError("ClanBasedTraining requires synchronous PBT")
+        pbt_kwargs.pop("synch", None)
 
         time_attr = pbt_kwargs.get("time_attr", "training_iteration")
         if time_attr == "time_total_s":
@@ -49,14 +56,11 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
             )
         if pbt_kwargs.get("require_attrs", True) is not True:
             raise ValueError(
-                "ClanBasedTraining requires require_attrs=True so missing fitness or "
-                "progress reports fail immediately"
+                "ClanBasedTraining requires require_attrs=True so missing round reports fail"
             )
         pbt_kwargs["time_attr"] = time_attr
         pbt_kwargs["require_attrs"] = True
-        mutations = pbt_kwargs.get("hyperparam_mutations", {})
-        if CLAN_METADATA_KEY in mutations:
-            raise ValueError(f"{CLAN_METADATA_KEY!r} is reserved integration metadata")
+        pbt_kwargs["log_config"] = False
 
         self._metadata = _ClanMetadata(
             population_size=population_size,
@@ -66,7 +70,14 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         self._member_ids: set[str] = set()
         self._canonical_resource_signature: object | None = None
         self._rendezvous_handle = None
-        super().__init__(synch=True, **pbt_kwargs)
+        self._selection_path: list[dict[str, Any]] = []
+        super().__init__(
+            synch=True,
+            hyperparam_mutations={},
+            custom_explore_fn=_identity_config,
+            quantile_fraction=0.5,
+            **pbt_kwargs,
+        )
 
     @property
     def population_size(self) -> int:
@@ -74,9 +85,15 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
 
     @property
     def progress_attribute(self) -> str:
-        """Return the monotonic progress key used for perturbation boundaries."""
+        """Return the monotonic progress key used for round boundaries."""
 
         return self._time_attr
+
+    @property
+    def selection_path(self) -> tuple[dict[str, Any], ...]:
+        """Return the controller-selected winner record for each completed round."""
+
+        return tuple(dict(item) for item in self._selection_path)
 
     def on_trial_add(self, tune_controller, trial) -> None:
         self._metadata.bind_trial_config(trial.config)
@@ -108,14 +125,69 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
                 "ensure the cluster can schedule every member simultaneously."
             )
         self._metadata.bind_trial_config(trial.config)
+        if CLAN_ROUND_RESULT_KEY not in result:
+            raise RuntimeError("Tune result is missing the Clan round decision record")
         return super().on_trial_result(tune_controller, trial, result)
 
-    def _get_new_config(self, trial, trial_to_clone):
-        """Use native Ray exploration while protecting rendezvous authority."""
+    def _quantiles(self):
+        """Return every loser as a PBT target and the sole winner as its source."""
 
-        config, operations = super()._get_new_config(trial, trial_to_clone)
+        reports = []
+        for trial, state in self._trial_state.items():
+            if trial.is_finished() or state.last_result is None:
+                continue
+            decision = state.last_result[CLAN_ROUND_RESULT_KEY]
+            reports.append((trial, state.last_result, decision))
+
+        if len(reports) != self.population_size:
+            return [], []
+
+        round_indices = {int(decision["round_index"]) for _, _, decision in reports}
+        winner_ids = {int(decision["winner_id"]) for _, _, decision in reports}
+        member_ids = {int(decision["member_id"]) for _, _, decision in reports}
+        if len(round_indices) != 1 or len(winner_ids) != 1:
+            raise RuntimeError("Clan processes disagreed on the completed round or winner")
+        if member_ids != set(range(self.population_size)):
+            raise RuntimeError("Tune results do not describe one complete Clan population")
+
+        round_index = round_indices.pop()
+        winner_id = winner_ids.pop()
+        winner_matches = [
+            (trial, result, decision)
+            for trial, result, decision in reports
+            if int(decision["member_id"]) == winner_id
+        ]
+        if len(winner_matches) != 1:
+            raise RuntimeError("selected Clan winner does not identify exactly one Tune trial")
+        winner_trial, winner_result, winner_decision = winner_matches[0]
+        if winner_result.get(SHOULD_CHECKPOINT) is not True:
+            raise RuntimeError("the controller-selected winner did not report a checkpoint")
+        if any(
+            result.get(SHOULD_CHECKPOINT) is True and trial is not winner_trial
+            for trial, result, _ in reports
+        ):
+            raise RuntimeError("a losing Clan member reported an unnecessary checkpoint")
+
+        if not self._selection_path or self._selection_path[-1]["round_index"] != round_index:
+            self._selection_path.append(
+                {
+                    "round_index": round_index,
+                    "winner_id": winner_id,
+                    "trial_id": winner_trial.trial_id,
+                    "config": dict(winner_decision["config"]),
+                }
+            )
+
+        losers = [trial for trial, _, _ in reports if trial is not winner_trial]
+        return losers, [winner_trial]
+
+    def _get_new_config(self, trial, trial_to_clone):
+        """Preserve target-local construction state while PBT assigns winner state."""
+
+        del trial_to_clone
+        config = dict(trial.config)
         self._metadata.bind_trial_config(config)
-        return config, operations
+        return config, {}
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
@@ -147,3 +219,7 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         import ray
 
         ray.get(self._rendezvous_handle.register_members.remote(sorted(self._member_ids)))
+
+
+def _identity_config(config):
+    return config
