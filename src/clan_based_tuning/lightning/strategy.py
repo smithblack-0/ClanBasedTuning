@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
-from pathlib import Path
 from typing import Any
 
 import torch
@@ -13,31 +11,21 @@ from lightning.pytorch.strategies import DDPStrategy
 from torch import nn
 
 from clan_based_tuning.lightning.environment import _ClanRuntime
-from clan_based_tuning.optimizer import OptimizerStrategy
-from clan_based_tuning.spec import _ClanMetadata
 
 
 class ClanDDPStrategy(DDPStrategy):
     """Apply Lightning's native DDP transform across independent Tune trials.
 
-    The strategy owns only the boundary where ordinary Lightning assumptions do
-    not fit Clan Based Training: divergence-safe DDP options, structural
-    compatibility, initial population synchronization, optimizer reconciliation
-    after construction and restoration, and checkpoint writes from every member.
+    The strategy owns only divergence-safe DDP configuration, structural
+    compatibility, initial model synchronization, sampler topology, and optimizer
+    topology compatibility. Controller checkpointing and optimizer-value
+    reconciliation are composed through dedicated callbacks.
 
-    PyTorch ``DistributedDataParallel`` still owns gradient bucketing and
-    collectives. Ray still owns trial configuration, selection, checkpoint
-    cloning, transport, pause, and resume.
+    PyTorch ``DistributedDataParallel`` still owns gradient bucketing and collectives.
+    Ray still owns trial checkpoint assignment, pause, resume, and scheduling.
     """
 
-    def __init__(
-        self,
-        metadata: _ClanMetadata,
-        trial_config: Mapping[str, Any],
-        runtime: _ClanRuntime,
-        apply_optimizer_strategy: OptimizerStrategy,
-        **ddp_kwargs: Any,
-    ) -> None:
+    def __init__(self, runtime: _ClanRuntime, **ddp_kwargs: Any) -> None:
         if ddp_kwargs.get("init_sync") is True:
             raise ValueError("ClanDDPStrategy requires init_sync=False")
         if ddp_kwargs.get("broadcast_buffers") is True:
@@ -45,25 +33,12 @@ class ClanDDPStrategy(DDPStrategy):
         ddp_kwargs["init_sync"] = False
         ddp_kwargs["broadcast_buffers"] = False
 
-        if runtime.world_size != metadata.population_size:
-            raise ValueError(
-                "Resolved clan world size does not match the scheduler population size"
-            )
-        self._trial_config = dict(trial_config)
         self._runtime = runtime
-        self._apply_optimizer_strategy = apply_optimizer_strategy
         super().__init__(**ddp_kwargs)
 
     @property
     def distributed_sampler_kwargs(self) -> dict[str, int]:
-        """Describe the clan topology to Lightning's automatic sampler.
-
-        Lightning's ordinary DDP strategy derives sampler topology from the
-        number of processes launched by one Trainer. Clan members are instead
-        independent Tune trials, so each Trainer launches one process while the
-        clan runtime defines the shared world. Returning that runtime here keeps
-        automatic training samplers consistent with the process group.
-        """
+        """Describe the cross-trial Clan topology to Lightning's sampler logic."""
 
         return {
             "num_replicas": self._runtime.world_size,
@@ -108,30 +83,6 @@ class ClanDDPStrategy(DDPStrategy):
     def setup_optimizers(self, trainer: Trainer) -> None:
         super().setup_optimizers(trainer)
         self._verify_optimizer_topology()
-        # Applying on construction is idempotent when the module already built
-        # its optimizer from config, and makes the default adapter fail early on
-        # unsupported layouts rather than waiting for the first PBT exploit.
-        self._apply_optimizer_strategy(self.optimizers, self._trial_config)
-
-    def load_optimizer_state_dict(self, checkpoint: Mapping[str, Any]) -> None:
-        super().load_optimizer_state_dict(checkpoint)
-        # Lightning just restored the source member's optimizer state. Ray's
-        # current target-trial config is authoritative for tuned values.
-        self._apply_optimizer_strategy(self.optimizers, self._trial_config)
-
-    def save_checkpoint(
-        self,
-        checkpoint: dict[str, Any],
-        filepath: str | Path,
-        storage_options: Any | None = None,
-    ) -> None:
-        # Each DDP rank is a separate Tune trial with a distinct checkpoint path.
-        # Lightning's normal global-zero gate would discard all but one member.
-        self.checkpoint_io.save_checkpoint(
-            checkpoint,
-            filepath,
-            storage_options=storage_options,
-        )
 
     def _verify_optimizer_topology(self) -> None:
         """Require checkpoint-compatible optimizer structure across members."""
