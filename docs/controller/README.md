@@ -1,16 +1,18 @@
 # Clan controller
 
-Status: Milestone 2 controller contract and implementation
+Status: accepted controller contract with Milestone 3 checkpoint handoff
 
 ## Lifecycle boundary
 
-One `ClanController` persists beside one training process or trial. It owns that
-member's current `ClanRound`, winner selection, local hyperparameter mutation, and
-random stream.
+One `ClanController` persists beside one training process or Tune trial. It owns that
+member's current `ClanRound`, complete-population fitness comparison, and local
+optimizer-hyperparameter mutation.
 
-The controller does not implement distributed storage, synchronization, model or
-optimizer transfer, checkpoints, or framework lifecycle. Those effects are supplied
-as callbacks.
+The controller does not implement distributed result transport, synchronization,
+checkpoint creation, checkpoint transport, framework restoration, model movement, or
+optimizer construction. Two callbacks publish completed rounds and retrieve one
+complete population. Framework checkpoint code depends on the controller to learn
+whether its local process owns the winning state.
 
 ## Objects
 
@@ -25,20 +27,56 @@ A `ClanRound` carries one member's controlled configuration into a training roun
 After evaluation, `set_fitness()` attaches the result and passes the completed round
 to `save_member_fitness`.
 
-The same object therefore carries configuration into training and fitness back out.
-It is not a population wrapper or a framework member.
+The callback name describes publication, not disk persistence. A Ray integration may
+translate the completed round into a Tune result dictionary; an in-memory test may
+store the object directly.
 
 ### `ClanController`
 
-A controller owns only its local member's progression. It never constructs an entire
-population. At `advance()` it briefly loads the completed rounds as an ordinary
-`list[ClanRound]`, selects the winner, manufactures only its own next round, informs
-the external runtime, and installs that prepared round.
+A controller owns only its local member's policy progression. At a completed round it
+can retrieve the complete population and answer `is_round_winner()`. The surrounding
+checkpoint lifecycle saves only that winner, loads the same winning checkpoint into
+every process, and then calls `advance()` so each process manufactures its own next
+`ClanRound` from the restored parent.
 
-## Small manual loop
+## Process-local sequence
 
-Milestone 2 can be exercised directly without a model, optimizer, Ray, Lightning, or
-checkpoint implementation:
+```text
+LOAD THE WINNING CHECKPOINT
+  ├── restore the completed winning model and optimizer state
+  ├── restore controller winner state while preserving local member identity
+  ├── controller.advance()
+  ├── read controller.get_config()
+  └── apply the local optimizer configuration
+  ▼
+TRAIN
+  │
+  │ qualifying round boundary
+  ▼
+controller.set_fitness(local_fitness)
+  │
+  │ completed local round is published
+  ▼
+controller.is_round_winner()
+  ├── retrieve the complete population
+  ├── select and cache one winner
+  └── return whether this process owns that winner
+  ▼
+AM I THE WINNER?
+  ├── yes → save the one shared winning checkpoint
+  └── no  → do not save
+  ▼
+WAIT UNTIL THE WINNING CHECKPOINT IS READY
+  └────────────────────────────────────────► LOAD THE WINNING CHECKPOINT
+```
+
+Selection therefore chooses a parent state. Checkpointing preserves that parent.
+Mutation occurs only after every process restores the same parent.
+
+## Small process mock
+
+The framework-independent ordering can be exercised without a model, optimizer, Ray,
+Lightning, or filesystem:
 
 ```python
 from clan_based_tuning import ClanController, MutationSpec
@@ -62,7 +100,6 @@ class RoundStore:
 
 population_size = 3
 store = RoundStore(population_size)
-winner_calls = [[] for _ in range(population_size)]
 mutations = {
     "lr": MutationSpec(
         standard_deviation=0.0,
@@ -81,7 +118,6 @@ controllers = [
         seed=17,
         save_member_fitness=store.save,
         load_population=store.load,
-        select_winner=winner_calls[member_id].append,
     )
     for member_id in range(population_size)
 ]
@@ -89,10 +125,17 @@ controllers = [
 for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
     controller.set_fitness(fitness)
 
+winner_flags = [controller.is_round_winner() for controller in controllers]
+assert winner_flags == [False, True, False]
+
+# This stands in for the single checkpoint written by the winning process.
+winning_checkpoint = controllers[1].state_dict()
+
+# This stands in for every process loading that same checkpoint.
 for controller in controllers:
+    controller.load_state_dict(winning_checkpoint)
     controller.advance()
 
-assert winner_calls == [[1], [1], [1]]
 assert [controller.get_config() for controller in controllers] == [
     {"lr": 2.0},
     {"lr": 2.0},
@@ -100,79 +143,67 @@ assert [controller.get_config() for controller in controllers] == [
 ]
 ```
 
-The first loop manually supplies the three completed fitness values. The second lets
-each fake process load the same completed population, select member 1, notify its
-external callback, and manufacture its own next `ClanRound` from member 1's
-configuration.
+With nonzero mutation, member 1 still retains the winning configuration while members
+0 and 2 derive deterministic local perturbations only after the common checkpoint is
+loaded.
 
-This is only the framework-independent Milestone 2 contract exercise. The manual CPU
-model and optimizer implementation is a Milestone 3 acceptance gate.
-
-## Advance sequence
-
-`advance()` performs:
-
-```text
-load completed rounds
-→ verify the expected population
-→ select the best round
-→ manufacture this member's complete next ClanRound
-→ tell the runtime which member won
-→ install the prepared ClanRound
-```
-
-Mutation is part of manufacturing the next round from the winning round. All local
-calculation therefore finishes before `select_winner` can transfer model, optimizer,
-or checkpoint state.
+This remains a framework-independent contract exercise. The real manual CPU
+Ray/Lightning/PyTorch workflow is a Milestone 3 acceptance gate.
 
 ## Injected effects
 
 ```python
 save_member_fitness: Callable[[ClanRound], None]
 load_population: Callable[[int], list[ClanRound]]
-select_winner: Callable[[int], None]
 ```
 
-`save_member_fitness` publishes one completed local round.
+`save_member_fitness` publishes one completed local round. It does not prescribe disk
+storage or checkpointing.
 
-`load_population` owns rendezvous, storage, and transport. It returns the completed
-records for the requested round.
+`load_population` owns the asynchronous or synchronous rendezvous needed to return the
+complete records for one round. The controller validates completeness before choosing
+a winner.
 
-`select_winner` does not choose the winner. The controller calls it with the winning
-integer member ID so the surrounding runtime can transfer model, optimizer,
-checkpoint, or other externally owned state.
+Checkpoint integration receives the controller as a dependency:
 
-A later Ray integration can implement these effects through Tune without changing
-the core controller.
+```python
+if controller.is_round_winner():
+    save_winning_checkpoint()
 
-## Replay
+wait_for_winning_checkpoint()
+load_winning_checkpoint()
+controller.advance()
+apply_optimizer_config(controller.get_config())
+```
 
-The selected winner ID is also the event needed to record a PBT replay path. The core
-controller should continue to emit that event through `select_winner`; durable lineage
-storage, association with checkpoints and round identities, and execution of a later
-replay run belong to Milestone 3 because they depend on the external lifecycle.
-
-No additional replay object or callback is required in Milestone 2. The Milestone 3
-integration can transfer the selected state through each local callback while one
-authority records the winner idempotently for the completed round.
+The exact save, wait, load, and restore hooks belong to the Milestone 3 framework
+integration.
 
 ## Failure boundary
 
 The controller intentionally performs little validation. Invalid mappings, missing
 mutation names, and unusable mutation rules fail naturally when used.
 
-`advance()` retains one explicit corruption guard. The loaded population must contain
-exactly one completed result for every expected member and all records must belong to
-the requested round. A bad population crashes before winner transfer or installation
-of a new round.
+`is_round_winner()` retains one explicit corruption guard. The loaded population must
+contain exactly one completed result for every expected member and all records must
+belong to the requested round.
 
-`ClanRound.set_fitness()` also rejects non-finite fitness because NaN can otherwise
-produce a valid-looking but meaningless winner rather than crashing.
+`advance()` refuses to run until a resolved winning checkpoint has been loaded. This
+prevents a losing process from mutating its stale local state and prevents the winner
+from advancing before the checkpoint captures the selected parent.
+
+`ClanRound.set_fitness()` rejects non-finite fitness because NaN can otherwise produce
+a valid-looking but meaningless winner.
 
 ## Randomness and persistence
 
-Each member receives a deterministic local random stream derived from the experiment
-seed and integer member ID. `state_dict()` and `load_state_dict()` preserve that stream
-together with the current round index, configuration, and optional fitness.
+The constructor seed belongs to the local trial configuration. Mutation derives a
+fresh standard-library `random.Random` stream from the seed, local member ID, and next
+round index. The stream is deterministic but is not stored in the common winning
+checkpoint.
+
+`state_dict()` contains the completed round and cached winner ID. `load_state_dict()`
+restores that shared parent while preserving local member identity, callbacks,
+mutation rules, mode, and seed.
 
 See [API reference](api.md) for the concrete call surface.
