@@ -3,8 +3,8 @@
 One controller persists beside one training process. Its callbacks publish completed
 rounds and load the completed Clan through an externally owned distributed
 implementation. Checkpoint integration asks whether this process won, saves only that
-winning state, loads the shared winning checkpoint into receiving processes, and then
-asks the controller to manufacture the local next round.
+winning state, loads the shared winning checkpoint into every next-generation process,
+and then asks the controller to manufacture the local next round.
 """
 
 import random
@@ -20,7 +20,7 @@ class ClanController:
     does not own checkpoint creation, checkpoint transport, framework restoration, or
     process synchronization. The surrounding checkpoint lifecycle depends on this
     controller to learn whether the local process won and later calls ``advance()``
-    only after the selected winning state has been accepted locally.
+    only after the selected winner checkpoint has been loaded.
     """
 
     def __init__(
@@ -50,7 +50,7 @@ class ClanController:
         self._save_member_fitness = save_member_fitness
         self._load_population = load_population
         self._winner_id = None
-        self._winning_state_accepted = False
+        self._winning_checkpoint_loaded = False
         self._round = ClanRound(
             member_id=member_id,
             round_index=0,
@@ -93,31 +93,18 @@ class ClanController:
             self._winner_id = self._find_winner(rounds).member_id
         return self.member_id == self._winner_id
 
-    def accept_local_winner_checkpoint(self):
-        """Accept the local winner after its checkpoint was reported successfully.
-
-        Losing processes acquire the same acceptance by loading the winner's controller
-        state through ``load_state_dict``. This method exists only for a winner actor
-        that Tune resumes in place after accepting its reported checkpoint.
-        """
-
-        if self._winner_id is None or self.member_id != self._winner_id:
-            raise RuntimeError("only the resolved local winner can accept its checkpoint")
-        self._winning_state_accepted = True
-
     def advance(self):
-        """Construct this process's next round from the accepted winning state.
+        """Construct this process's next round from the loaded winning state.
 
-        A losing process accepts the state by loading the winner checkpoint. A winner
-        continuing in place accepts it after the framework receives its checkpoint.
-        The winner retains the selected optimizer configuration; every other member
-        mutates it locally.
+        The supported integration reconstructs every next-generation Tune process from
+        the same winner checkpoint. The restored winner member retains the selected
+        optimizer configuration; every other member mutates it locally.
         """
 
         if self._winner_id is None:
             raise RuntimeError("the round winner must be resolved before advancing")
-        if not self._winning_state_accepted:
-            raise RuntimeError("the winning checkpoint must be accepted before advancing")
+        if not self._winning_checkpoint_loaded:
+            raise RuntimeError("the winning checkpoint must be loaded before advancing")
 
         next_round_index = self._round.round_index + 1
         config = self._round.get_config()
@@ -131,7 +118,7 @@ class ClanController:
             save_member_fitness=self._save_member_fitness,
         )
         self._winner_id = None
-        self._winning_state_accepted = False
+        self._winning_checkpoint_loaded = False
 
     def state_dict(self):
         """Return controller state to place in the winner's framework checkpoint.
@@ -159,7 +146,7 @@ class ClanController:
             fitness=state["fitness"],
         )
         self._winner_id = state["winner_id"]
-        self._winning_state_accepted = self._winner_id is not None
+        self._winning_checkpoint_loaded = self._winner_id is not None
 
     def _load_completed_population(self):
         round_index = self._round.round_index
