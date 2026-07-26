@@ -1,118 +1,154 @@
 # Clan controller API
 
-The accepted Milestone 2 surface consists of `ClanController`. It uses only Python
-real scalars, mappings, and rank-ordered sequences and has no Ray or Lightning
-dependency.
+The Milestone 2 surface consists of three framework-independent objects:
+`MutationSpec`, `ClanRound`, and `ClanController`.
 
-## Construction
+## `MutationSpec`
+
+```python
+from clan_based_tuning import MutationSpec
+
+lr_mutation = MutationSpec(
+    standard_deviation=0.25,
+    geometry="log",
+    minimum=1e-5,
+    maximum=1e-2,
+)
+```
+
+`standard_deviation`
+: Gaussian displacement scale.
+
+`geometry`
+: `"linear"` adds the displacement. `"log"` multiplies by its exponential.
+
+`minimum`, `maximum`
+: Inclusive bounds applied after mutation.
+
+`mutation.mutate(value, random_stream)` performs the mutation. Mutation specifications
+are intentionally trusted internal objects; invalid settings generally fail when the
+rule is used rather than through a separate validation subsystem.
+
+## `ClanRound`
+
+```python
+from clan_based_tuning import ClanRound
+
+round_ = ClanRound(
+    member_id=2,
+    round_index=4,
+    config={"lr": 3e-4},
+    save_member_fitness=save_member_fitness,
+)
+```
+
+`member_id`
+: Integer identity of the process or trial within the Clan.
+
+`round_index`
+: Generation represented by this record.
+
+`config`
+: Named controlled values used during this round. The round owns a copy.
+
+`fitness`
+: Comparable result. It is `None` until evaluation finishes.
+
+### `get_config()`
+
+Returns a copy of the current round configuration.
+
+### `set_fitness(fitness)`
+
+Stores a finite fitness and immediately calls:
+
+```python
+save_member_fitness(round_)
+```
+
+The callback decides how the completed round is stored or communicated.
+
+## `ClanController`
 
 ```python
 from clan_based_tuning import ClanController
 
 controller = ClanController(
-    hyperparameters={
-        "lr": {
-            "default": 3e-4,
-            "standard_deviation": 0.25,
-            "geometry": "log",
-            "minimum": 1e-5,
-            "maximum": 1e-2,
-        },
-        "weight_decay": {
-            "default": 0.01,
-            "standard_deviation": 0.005,
-            "geometry": "linear",
-            "minimum": 0.0,
-            "maximum": 0.1,
-        },
-    },
+    member_id=rank,
+    population_size=4,
+    initial_config=trial_config,
+    mutations={"lr": lr_mutation},
     mode="min",
     seed=17,
+    save_member_fitness=save_member_fitness,
+    load_population=load_population,
+    select_winner=select_winner,
 )
 ```
 
-`hyperparameters` maps optimizer-hyperparameter names to specifications with five
-required fields:
+`member_id`
+: Identity of this local member.
 
-| Field | Meaning |
-| --- | --- |
-| `default` | Initial value used before the first round. |
-| `standard_deviation` | Gaussian mutation scale in value units for `linear` or natural-log units for `log`. |
-| `geometry` | `"linear"` for additive mutation or `"log"` for multiplicative mutation. |
-| `minimum` | Inclusive lower bound. Must be positive for `log`. |
-| `maximum` | Inclusive upper bound. |
+`population_size`
+: Fixed number of members expected at every transition.
 
-Numeric fields must be finite real scalars. Strings and booleans are not accepted
-as numeric values. `mode` is `"min"` or `"max"`. `seed` must be an integer and
-initializes the controller's reproducible random stream.
+`initial_config`
+: Controlled values supplied for this trial's first round.
 
-## `initial_configurations(population_size)`
+`mutations`
+: Ordinary dictionary from controlled-value name to `MutationSpec`.
 
-Returns one new optimizer-hyperparameter mapping per rank. `population_size` must
-be an integer of at least two; booleans are not accepted as integers. Rank zero
-receives exact defaults; the remaining ranks receive independent mutations of the
-defaults.
+`mode`
+: `"min"` or `"max"`. Fitness ties select the lower member ID.
 
-```python
-configurations = controller.initial_configurations(population_size=4)
-```
+`seed`
+: Experiment seed. The controller combines it with `member_id` for a deterministic
+member-specific random stream.
 
-The returned list is rank ordered and contains no framework member objects.
+`save_member_fitness`
+: Callback used by each local `ClanRound` to publish itself.
 
-## `next_generation(fitnesses, configurations)`
+`load_population`
+: Callback receiving a round index and returning `list[ClanRound]` for that completed
+round.
 
-Selects the parent and produces the next rank-ordered configurations.
+`select_winner`
+: Callback receiving the winning integer member ID. It applies externally owned
+consequences such as model or optimizer transfer; it does not select the winner.
 
-```python
-parent_rank, configurations = controller.next_generation(
-    fitnesses=[0.83, 0.71, 0.76, 0.79],
-    configurations=configurations,
-)
-```
+### `get_config()`
 
-Preconditions:
+Returns this process's controlled values for the current round.
 
-- both arguments are rank-ordered sequences;
-- they have equal length and at least two entries;
-- `fitnesses[rank]` and `configurations[rank]` describe the same external member;
-- fitness values are finite real scalars, not strings or booleans;
-- every configuration contains exactly the declared hyperparameter names; and
-- every current hyperparameter value is a finite real scalar inside its declared
-  bounds.
+### `set_fitness(fitness)`
 
-Postconditions:
+Completes and publishes this process's current round.
 
-- the return value identifies exactly one parent rank;
-- the selected parent configuration is copied exactly at that rank;
-- every other rank is mutated independently from the selected parent;
-- the returned list has the same rank ordering and length as the input; and
-- caller-owned inputs are unchanged.
+### `advance()`
 
-The external lifecycle uses `parent_rank` to inherit model and optimizer state. The
-controller does not perform that inheritance.
+Loads the current population, checks that it contains exactly one completed record for
+every expected member, and selects the winner. The controller then manufactures this
+member's complete next `ClanRound` from the winning round, including any local
+mutation, before calling `select_winner(winner_id)` and installing the prepared round.
 
-## `state_dict()` and `load_state_dict(state)`
+The winning member keeps the winning configuration. Every other member mutates from
+that same winning configuration.
 
-`state_dict()` returns the pseudorandom stream state needed to continue mutation
-identically after external persistence. Recreate the controller with the same
-hyperparameter policy and mode, then restore before the next call:
+### `state_dict()` and `load_state_dict(state)`
 
-```python
-saved_state = controller.state_dict()
-
-restored = ClanController(
-    hyperparameters=hyperparameter_policy,
-    mode="min",
-    seed=0,
-)
-restored.load_state_dict(saved_state)
-```
-
-The state mapping intentionally does not duplicate constructor policy.
+Save and restore the local random stream together with the current round index,
+configuration, and optional fitness. Callback implementations and fixed constructor
+settings remain external configuration.
 
 ## Framework handoff
 
-A future Ray integration must translate framework-owned results into the two
-rank-ordered sequences, invoke this API, and apply the returned parent and
-configuration decision through native framework lifecycle. That integration is
-not part of this module.
+A framework integration supplies callback implementations and maps its own trial or
+process identity to the controller's integer member ID. It owns synchronization,
+checkpoint movement, model and optimizer transfer, pause and resume, and all other
+framework lifecycle operations.
+
+The integration may also persist the winning member ID for each round as a PBT replay
+path. Durable replay history and execution belong to that integration because they
+must remain aligned with framework round identity and checkpoint storage. Since every
+local controller observes the same winner, one authority should record the path or the
+write should be idempotently keyed by round.

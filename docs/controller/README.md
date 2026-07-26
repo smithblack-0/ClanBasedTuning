@@ -4,91 +4,175 @@ Status: Milestone 2 controller contract and implementation
 
 ## Lifecycle boundary
 
-`ClanController` runs between training rounds. An external training system owns the
-live members, model and optimizer state, checkpoints, data, distributed execution,
-and round timing. At a completed round it gives the controller rank-ordered fitness
-values and optimizer-hyperparameter configurations. The controller selects one
-parent rank and returns the next rank-ordered configurations.
+One `ClanController` persists beside one training process or trial. It owns that
+member's current `ClanRound`, winner selection, local hyperparameter mutation, and
+random stream.
 
-The controller is not a Lightning callback, Ray scheduler, optimizer factory,
-checkpoint manager, or population runtime. Milestone 3 will choose how Ray gathers
-the required plain data and executes the returned decision.
+The controller does not implement distributed storage, synchronization, model or
+optimizer transfer, checkpoints, or framework lifecycle. Those effects are supplied
+as callbacks.
 
-## Data model
+## Objects
 
-Rank is the only member identity inside the controller call:
+### `MutationSpec`
 
-```text
-fitnesses[rank]       -> comparable fitness for that external member
-configurations[rank]  -> that member's optimizer-hyperparameter mapping
+A `MutationSpec` applies one bounded mutation rule. Mutation names come from the keys
+in the controller's ordinary `dict[str, MutationSpec]`.
+
+### `ClanRound`
+
+A `ClanRound` carries one member's controlled configuration into a training round.
+After evaluation, `set_fitness()` attaches the result and passes the completed round
+to `save_member_fitness`.
+
+The same object therefore carries configuration into training and fitness back out.
+It is not a population wrapper or a framework member.
+
+### `ClanController`
+
+A controller owns only its local member's progression. It never constructs an entire
+population. At `advance()` it briefly loads the completed rounds as an ordinary
+`list[ClanRound]`, selects the winner, manufactures only its own next round, informs
+the external runtime, and installs that prepared round.
+
+## Small manual loop
+
+Milestone 2 can be exercised directly without a model, optimizer, Ray, Lightning, or
+checkpoint implementation:
+
+```python
+from clan_based_tuning import ClanController, MutationSpec
+
+
+class RoundStore:
+    def __init__(self, population_size):
+        self.population_size = population_size
+        self.saved = {}
+
+    def save(self, round_):
+        self.saved[(round_.round_index, round_.member_id)] = round_
+
+    def load(self, round_index):
+        return [
+            self.saved[(round_index, member_id)]
+            for member_id in range(self.population_size)
+            if (round_index, member_id) in self.saved
+        ]
+
+
+population_size = 3
+store = RoundStore(population_size)
+winner_calls = [[] for _ in range(population_size)]
+mutations = {
+    "lr": MutationSpec(
+        standard_deviation=0.0,
+        geometry="linear",
+        minimum=0.0,
+        maximum=10.0,
+    )
+}
+controllers = [
+    ClanController(
+        member_id=member_id,
+        population_size=population_size,
+        initial_config={"lr": float(member_id + 1)},
+        mutations=mutations,
+        mode="min",
+        seed=17,
+        save_member_fitness=store.save,
+        load_population=store.load,
+        select_winner=winner_calls[member_id].append,
+    )
+    for member_id in range(population_size)
+]
+
+for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
+    controller.set_fitness(fitness)
+
+for controller in controllers:
+    controller.advance()
+
+assert winner_calls == [[1], [1], [1]]
+assert [controller.get_config() for controller in controllers] == [
+    {"lr": 2.0},
+    {"lr": 2.0},
+    {"lr": 2.0},
+]
 ```
 
-The two sequences must have equal length and the same rank ordering. Every
-configuration contains exactly the optimizer-hyperparameter names declared when
-the controller was constructed. The caller owns the mapping between framework
-members and ranks and is responsible for supplying the complete live Clan.
+The first loop manually supplies the three completed fitness values. The second lets
+each fake process load the same completed population, select member 1, notify its
+external callback, and manufacture its own next `ClanRound` from member 1's
+configuration.
 
-`next_generation(...)` returns:
+This is only the framework-independent Milestone 2 contract exercise. The manual CPU
+model and optimizer implementation is a Milestone 3 acceptance gate.
+
+## Advance sequence
+
+`advance()` performs:
 
 ```text
-parent_rank, next_configurations
+load completed rounds
+→ verify the expected population
+→ select the best round
+→ manufacture this member's complete next ClanRound
+→ tell the runtime which member won
+→ install the prepared ClanRound
 ```
 
-`parent_rank` tells the external lifecycle which member's model and optimizer state
-will be inherited. `next_configurations[rank]` tells it which optimizer
-hyperparameters to apply to the corresponding next-generation member. The
-controller never receives or returns model parameters, optimizer objects, or
-checkpoints.
+Mutation is part of manufacturing the next round from the winning round. All local
+calculation therefore finishes before `select_winner` can transfer model, optimizer,
+or checkpoint state.
 
-## Evolution policy
+## Injected effects
 
-The controller performs four steps:
+```python
+save_member_fitness: Callable[[ClanRound], None]
+load_population: Callable[[int], list[ClanRound]]
+select_winner: Callable[[int], None]
+```
 
-1. Validate and normalize the complete rank-ordered input before consuming random
-   numbers.
-2. Select the lowest fitness in `mode="min"` or the highest fitness in
-   `mode="max"`. Equal scores select the lowest rank.
-3. Retain the selected parent's optimizer configuration exactly at the parent
-   rank. This preserves one incumbent control rather than risking the selected
-   policy entirely to mutation.
-4. Independently mutate every other rank from that same parent configuration.
+`save_member_fitness` publishes one completed local round.
 
-Initialization uses the same control principle: rank zero receives the declared
-defaults and every other rank receives a mutation of those defaults.
+`load_population` owns rendezvous, storage, and transport. It returns the completed
+records for the requested round.
 
-### Mutation geometry
+`select_winner` does not choose the winner. The controller calls it with the winning
+integer member ID so the surrounding runtime can transfer model, optimizer,
+checkpoint, or other externally owned state.
 
-Each optimizer hyperparameter declares one geometry:
+A later Ray integration can implement these effects through Tune without changing
+the core controller.
 
-- `linear`: add `Normal(0, standard_deviation)` in value units;
-- `log`: multiply by `exp(Normal(0, standard_deviation))`.
+## Replay
 
-The result is clamped to the declared inclusive minimum and maximum. Mutation is
-local around the selected parent; the controller does not resample from a global
-search distribution.
+The selected winner ID is also the event needed to record a PBT replay path. The core
+controller should continue to emit that event through `select_winner`; durable lineage
+storage, association with checkpoints and round identities, and execution of a later
+replay run belong to Milestone 3 because they depend on the external lifecycle.
+
+No additional replay object or callback is required in Milestone 2. The Milestone 3
+integration can transfer the selected state through each local callback while one
+authority records the winner idempotently for the completed round.
+
+## Failure boundary
+
+The controller intentionally performs little validation. Invalid mappings, missing
+mutation names, and unusable mutation rules fail naturally when used.
+
+`advance()` retains one explicit corruption guard. The loaded population must contain
+exactly one completed result for every expected member and all records must belong to
+the requested round. A bad population crashes before winner transfer or installation
+of a new round.
+
+`ClanRound.set_fitness()` also rejects non-finite fitness because NaN can otherwise
+produce a valid-looking but meaningless winner rather than crashing.
 
 ## Randomness and persistence
 
-The constructor creates a private `random.Random` stream from the supplied seed.
-Redundant controllers with the same policy, seed, and valid call sequence produce
-the same decisions. Validation completes before mutation, so a rejected generation
-does not advance the stream.
-
-`state_dict()` and `load_state_dict(...)` expose only the evolving random-stream
-state. Hyperparameter policy and selection mode remain constructor configuration
-and should be persisted by the external experiment configuration rather than
-copied into a second mutable source of truth.
-
-## Failure and ownership
-
-The controller rejects malformed hyperparameter policy, non-finite fitness,
-misaligned rank sequences, illegal configuration keys, and values outside their
-declared bounds. It produces no partial generation and does not modify caller-owned
-inputs.
-
-The controller cannot independently detect a framework member omitted before the
-call because it deliberately does not own framework population membership.
-Milestone 3 must prove that its gather boundary supplies one entry per live rank
-before invoking the controller.
+Each member receives a deterministic local random stream derived from the experiment
+seed and integer member ID. `state_dict()` and `load_state_dict()` preserve that stream
+together with the current round index, configuration, and optional fitness.
 
 See [API reference](api.md) for the concrete call surface.

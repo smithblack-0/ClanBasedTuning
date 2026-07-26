@@ -1,251 +1,196 @@
-import copy
-import math
-
 import pytest
 
-from clan_based_tuning import ClanController
+from clan_based_tuning import ClanController, ClanRound, MutationSpec
 
 
-def _controller(*, mode="min", seed=7, hyperparameters=None):
-    if hyperparameters is None:
-        hyperparameters = {
-            "lr": {
-                "default": 1.0,
-                "standard_deviation": 0.2,
-                "geometry": "linear",
-                "minimum": 0.1,
-                "maximum": 10.0,
-            }
-        }
-    return ClanController(hyperparameters=hyperparameters, mode=mode, seed=seed)
+class RoundStore:
+    def __init__(self, population_size):
+        self.population_size = population_size
+        self.saved = {}
+
+    def save(self, round_):
+        self.saved[(round_.round_index, round_.member_id)] = round_
+
+    def load(self, round_index):
+        return [
+            self.saved[(round_index, member_id)]
+            for member_id in range(self.population_size)
+            if (round_index, member_id) in self.saved
+        ]
 
 
-def test_initial_configurations_keep_rank_zero_at_defaults():
-    """Pre: valid policy and three ranks. Post: rank zero is exact; outputs are separate."""
-    configurations = _controller().initial_configurations(3)
-
-    assert configurations[0] == {"lr": 1.0}
-    assert len(configurations) == 3
-    assert len({id(configuration) for configuration in configurations}) == 3
-
-
-def test_initial_configurations_reject_boolean_population_size():
-    """Pre: bool masquerades as int. Post: population size is rejected explicitly."""
-    with pytest.raises(TypeError, match="must be an integer"):
-        _controller().initial_configurations(True)
-
-
-def test_equal_seed_and_calls_produce_equal_initial_configurations():
-    """Pre: equal policies and seeds. Post: redundant controllers produce equal output."""
-    first = _controller(seed=13)
-    second = _controller(seed=13)
-
-    assert first.initial_configurations(4) == second.initial_configurations(4)
-
-
-def test_next_generation_minimizes_fitness_and_retains_parent():
-    """Pre: complete rank-aligned input. Post: lowest-fitness rank is retained exactly."""
-    controller = _controller()
-    configurations = [{"lr": 1.0}, {"lr": 2.0}, {"lr": 3.0}]
-
-    parent_rank, next_configurations = controller.next_generation([4.0, 1.0, 2.0], configurations)
-
-    assert parent_rank == 1
-    assert next_configurations[1] == {"lr": 2.0}
-    assert next_configurations[1] is not configurations[1]
-
-
-def test_next_generation_maximizes_and_breaks_ties_by_lowest_rank():
-    """Pre: two equal best scores in max mode. Post: the lower rank wins."""
-    controller = _controller(mode="max")
-
-    parent_rank, _ = controller.next_generation(
-        [3.0, 3.0, 1.0],
-        [{"lr": 1.0}, {"lr": 2.0}, {"lr": 3.0}],
+def _mutation(standard_deviation=0.0):
+    return MutationSpec(
+        standard_deviation=standard_deviation,
+        geometry="linear",
+        minimum=0.0,
+        maximum=10.0,
     )
 
-    assert parent_rank == 0
 
-
-def test_linear_mutation_adds_gaussian_displacement(monkeypatch):
-    """Pre: linear policy and known draw. Post: mutation adds the draw in value units."""
-    controller = _controller()
-    calls = []
-
-    def draw(mean, standard_deviation):
-        calls.append((mean, standard_deviation))
-        return 0.3
-
-    monkeypatch.setattr(controller._random, "gauss", draw)
-
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
+def _controller(
+    member_id,
+    store,
+    winner_calls,
+    *,
+    initial_value,
+    mode="min",
+    seed=7,
+    standard_deviation=0.0,
+):
+    return ClanController(
+        member_id=member_id,
+        population_size=store.population_size,
+        initial_config={"lr": initial_value},
+        mutations={"lr": _mutation(standard_deviation)},
+        mode=mode,
+        seed=seed,
+        save_member_fitness=store.save,
+        load_population=store.load,
+        select_winner=winner_calls.append,
     )
 
-    assert next_configurations == [{"lr": 2.0}, {"lr": 2.3}]
-    assert calls == [(0.0, 0.2)]
+
+def test_fake_processes_publish_select_and_advance_one_local_round():
+    """Each process publishes one round and independently applies the same winner."""
+    store = RoundStore(population_size=3)
+    winner_calls = [[], [], []]
+    controllers = [
+        _controller(rank, store, winner_calls[rank], initial_value=float(rank + 1))
+        for rank in range(3)
+    ]
+
+    for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
+        controller.set_fitness(fitness)
+    for controller in controllers:
+        controller.advance()
+
+    assert winner_calls == [[1], [1], [1]]
+    assert [controller.get_config() for controller in controllers] == [
+        {"lr": 2.0},
+        {"lr": 2.0},
+        {"lr": 2.0},
+    ]
+
+    controllers[0].set_fitness(3.0)
+    assert store.saved[(1, 0)].fitness == 3.0
 
 
-def test_log_mutation_multiplies_by_exponential_draw(monkeypatch):
-    """Pre: log policy and known draw. Post: mutation multiplies by exp(draw)."""
-    controller = _controller(
-        hyperparameters={
-            "lr": {
-                "default": 2.0,
-                "standard_deviation": 0.5,
-                "geometry": "log",
-                "minimum": 0.1,
-                "maximum": 20.0,
-            }
-        }
-    )
-    monkeypatch.setattr(controller._random, "gauss", lambda mean, std: math.log(2.0))
-
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
-
-    assert next_configurations == [{"lr": 2.0}, {"lr": pytest.approx(4.0)}]
-
-
-def test_log_mutation_clamps_overflow_to_upper_bound(monkeypatch):
-    """Pre: an extreme log draw overflows exp. Post: mutation reaches the upper bound."""
-    controller = _controller(
-        hyperparameters={
-            "lr": {
-                "default": 2.0,
-                "standard_deviation": 1.0,
-                "geometry": "log",
-                "minimum": 0.1,
-                "maximum": 20.0,
-            }
-        }
-    )
-    monkeypatch.setattr(controller._random, "gauss", lambda mean, std: 1000.0)
-
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
-
-    assert next_configurations[1] == {"lr": 20.0}
-
-
-def test_mutation_clamps_to_declared_bounds(monkeypatch):
-    """Pre: draw proposes an illegal value. Post: result equals the nearest bound."""
-    controller = _controller()
-    monkeypatch.setattr(controller._random, "gauss", lambda mean, std: 50.0)
-
-    _, next_configurations = controller.next_generation(
-        [0.0, 1.0],
-        [{"lr": 2.0}, {"lr": 4.0}],
-    )
-
-    assert next_configurations[1] == {"lr": 10.0}
-
-
-def test_invalid_generation_does_not_advance_random_state():
-    """Pre: malformed input. Post: failure occurs before the random stream advances."""
-    controller = _controller()
-    before = controller.state_dict()
-
-    with pytest.raises(ValueError, match="equal length"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}])
-
-    assert controller.state_dict() == before
-
-
-def test_generation_rejects_nonfinite_fitness():
-    """Pre: one nonfinite score. Post: no parent or next configuration is produced."""
-    controller = _controller()
-
-    with pytest.raises(ValueError, match="must be finite"):
-        controller.next_generation(
-            [1.0, float("nan")],
-            [{"lr": 1.0}, {"lr": 2.0}],
+def test_max_mode_breaks_ties_by_lower_member_id():
+    """Every process reaches the same stable winner when best fitness ties."""
+    store = RoundStore(population_size=3)
+    winner_calls = [[], [], []]
+    controllers = [
+        _controller(
+            rank,
+            store,
+            winner_calls[rank],
+            initial_value=float(rank + 1),
+            mode="max",
         )
+        for rank in range(3)
+    ]
+
+    for controller, fitness in zip(controllers, [5.0, 5.0, 2.0], strict=True):
+        controller.set_fitness(fitness)
+    for controller in controllers:
+        controller.advance()
+
+    assert winner_calls == [[0], [0], [0]]
 
 
-def test_generation_rejects_boolean_fitness():
-    """Pre: bool is numerically coercible. Post: it is rejected as a fitness scalar."""
-    controller = _controller()
+def test_incomplete_population_crashes_before_winner_transfer():
+    """A missing member cannot create a next round or transfer external state."""
+    store = RoundStore(population_size=3)
+    winner_calls = []
+    controller = _controller(0, store, winner_calls, initial_value=1.0)
+    peer = _controller(1, store, [], initial_value=2.0)
+    controller.set_fitness(1.0)
+    peer.set_fitness(2.0)
+    state = controller.state_dict()
 
-    with pytest.raises(TypeError, match="real scalar"):
-        controller.next_generation(
-            [1.0, True],
-            [{"lr": 1.0}, {"lr": 2.0}],
-        )
+    with pytest.raises(RuntimeError, match="incomplete"):
+        controller.advance()
 
-
-def test_generation_rejects_wrong_hyperparameter_set():
-    """Pre: one configuration omits a declared key. Post: the input is rejected."""
-    controller = _controller()
-
-    with pytest.raises(ValueError, match="exactly the declared"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}, {}])
-
-
-def test_generation_rejects_out_of_bounds_configuration():
-    """Pre: one current value violates bounds. Post: the input is rejected."""
-    controller = _controller()
-
-    with pytest.raises(ValueError, match="must be within"):
-        controller.next_generation([1.0, 2.0], [{"lr": 1.0}, {"lr": 20.0}])
-
-
-def test_inputs_are_not_modified():
-    """Pre: mutable caller-owned inputs. Post: successful evolution leaves them unchanged."""
-    controller = _controller()
-    fitnesses = [1.0, 2.0]
-    configurations = [{"lr": 1.0}, {"lr": 2.0}]
-    expected_fitnesses = copy.deepcopy(fitnesses)
-    expected_configurations = copy.deepcopy(configurations)
-
-    controller.next_generation(fitnesses, configurations)
-
-    assert fitnesses == expected_fitnesses
-    assert configurations == expected_configurations
-
-
-def test_random_state_round_trip_reproduces_next_mutation():
-    """Pre: saved state and equal policy. Post: restoration repeats the next result."""
-    first = _controller(seed=17)
-    second = _controller(seed=999)
-    state = first.state_dict()
-    second.load_state_dict(state)
-    generation = ([0.0, 1.0], [{"lr": 1.0}, {"lr": 2.0}])
-
-    assert first.next_generation(*generation) == second.next_generation(*generation)
-
-
-@pytest.mark.parametrize("seed", [None, True, 1.5, "17"])
-def test_constructor_rejects_noninteger_seed(seed):
-    """Pre: seed is not an integer. Post: construction rejects ambiguous RNG setup."""
-    with pytest.raises(TypeError, match="seed must be an integer"):
-        _controller(seed=seed)
+    assert winner_calls == []
+    assert controller.state_dict() == state
 
 
 @pytest.mark.parametrize(
-    ("field", "value", "message"),
+    "rounds, message",
     [
-        ("standard_deviation", 0.0, "must be positive"),
-        ("geometry", "quadratic", "must be 'linear' or 'log'"),
-        ("minimum", 2.0, "must be less than maximum"),
-        ("default", "1.0", "must be a real scalar"),
+        (
+            [
+                ClanRound(0, 0, {"lr": 1.0}, lambda round_: None, 1.0),
+                ClanRound(0, 0, {"lr": 2.0}, lambda round_: None, 2.0),
+                ClanRound(2, 0, {"lr": 3.0}, lambda round_: None, 3.0),
+            ],
+            "duplicate",
+        ),
+        (
+            [
+                ClanRound(0, 0, {"lr": 1.0}, lambda round_: None, 1.0),
+                ClanRound(1, 1, {"lr": 2.0}, lambda round_: None, 2.0),
+                ClanRound(2, 0, {"lr": 3.0}, lambda round_: None, 3.0),
+            ],
+            "wrong round",
+        ),
     ],
 )
-def test_constructor_rejects_invalid_hyperparameter_policy(field, value, message):
-    """Pre: one invalid policy field. Post: construction fails before state exists."""
-    specification = {
-        "default": 1.0,
-        "standard_deviation": 0.2,
-        "geometry": "linear",
-        "minimum": 0.1,
-        "maximum": 2.0,
-    }
-    specification[field] = value
+def test_population_integrity_guard_rejects_corrupt_rounds(rounds, message):
+    winner_calls = []
+    controller = ClanController(
+        member_id=0,
+        population_size=3,
+        initial_config={"lr": 1.0},
+        mutations={"lr": _mutation()},
+        mode="min",
+        seed=7,
+        save_member_fitness=lambda round_: None,
+        load_population=lambda round_index: rounds,
+        select_winner=winner_calls.append,
+    )
 
-    with pytest.raises((TypeError, ValueError), match=message):
-        _controller(hyperparameters={"lr": specification})
+    with pytest.raises(RuntimeError, match=message):
+        controller.advance()
+
+    assert winner_calls == []
+
+
+def test_random_and_current_round_state_resume_together():
+    """Restoring one controller reproduces its local next-round mutation."""
+    saved_rounds = [
+        ClanRound(0, 0, {"lr": 2.0}, lambda round_: None, 0.0),
+        ClanRound(1, 0, {"lr": 5.0}, lambda round_: None, 1.0),
+    ]
+    first_calls = []
+    second_calls = []
+    first = ClanController(
+        member_id=1,
+        population_size=2,
+        initial_config={"lr": 9.0},
+        mutations={"lr": _mutation(standard_deviation=0.5)},
+        mode="min",
+        seed=17,
+        save_member_fitness=lambda round_: None,
+        load_population=lambda round_index: saved_rounds,
+        select_winner=first_calls.append,
+    )
+    second = ClanController(
+        member_id=1,
+        population_size=2,
+        initial_config={"lr": 0.0},
+        mutations={"lr": _mutation(standard_deviation=0.5)},
+        mode="min",
+        seed=999,
+        save_member_fitness=lambda round_: None,
+        load_population=lambda round_index: saved_rounds,
+        select_winner=second_calls.append,
+    )
+
+    second.load_state_dict(first.state_dict())
+    first.advance()
+    second.advance()
+
+    assert first_calls == second_calls == [0]
+    assert first.get_config() == second.get_config()
