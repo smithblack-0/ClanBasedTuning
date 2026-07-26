@@ -1,4 +1,10 @@
-"""Construct concrete Lightning extension units inside a native Tune trial."""
+"""Legacy proof-of-concept Lightning assembly helpers.
+
+Milestone 3's accepted path is explicit composition of ``ClanTuneSession``,
+``ClanController``, the Lightning callbacks, environment, and strategy. These helpers
+remain only as prior construction evidence until the usability milestone replaces or
+removes them.
+"""
 
 from __future__ import annotations
 
@@ -14,9 +20,7 @@ from clan_based_tuning.lightning.environment import (
     _ClanRuntime,
 )
 from clan_based_tuning.lightning.strategy import ClanDDPStrategy
-from clan_based_tuning.optimizer import (
-    OptimizerStrategy,
-)
+from clan_based_tuning.optimizer import OptimizerStrategy
 from clan_based_tuning.optimizer import (
     apply_optimizer_strategy as default_optimizer_strategy,
 )
@@ -28,7 +32,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class ClanLightningPlugins:
-    """Concrete objects for Lightning's strategy, plugin, and callback slots."""
+    """Concrete objects produced by the legacy proof-of-concept factory."""
 
     strategy: ClanDDPStrategy
     environment: ClanLightningEnvironment
@@ -44,12 +48,11 @@ def make_clan_lightning_plugins(
     on: str = "validation_end",
     **ddp_kwargs: Any,
 ) -> ClanLightningPlugins:
-    """Return the concrete Lightning units for the current Tune trial.
+    """Return the former all-member-checkpoint proof-of-concept components.
 
-    Call this inside the Tune training function, after Ray supplies ``config``.
-    The returned objects go directly into ``Trainer(strategy=...)``,
-    ``Trainer(plugins=...)``, and ``Trainer(callbacks=...)``. Model construction
-    and ``Trainer.fit(model)`` remain explicit user code.
+    This helper does not implement the controller-selected winner lifecycle and is not
+    the Milestone 3 manual path. ``apply_optimizer_strategy`` is retained only for
+    source compatibility and is deliberately not installed into ``ClanDDPStrategy``.
     """
 
     metadata = _metadata_from_trial_config(config)
@@ -57,13 +60,7 @@ def make_clan_lightning_plugins(
     if not callable(apply_optimizer_strategy):
         raise TypeError("apply_optimizer_strategy must be callable")
     environment = ClanLightningEnvironment(runtime)
-    strategy = ClanDDPStrategy(
-        metadata,
-        config,
-        runtime,
-        apply_optimizer_strategy,
-        **ddp_kwargs,
-    )
+    strategy = ClanDDPStrategy(runtime, **ddp_kwargs)
     callback = _tune_report_callback(metrics=metrics, filename=filename, on=on)
     return ClanLightningPlugins(
         strategy=strategy,
@@ -73,12 +70,7 @@ def make_clan_lightning_plugins(
 
 
 def prepare_clan_trainer(trainer: Trainer) -> Trainer:
-    """Validate explicit user composition and return the Trainer unchanged.
-
-    This function does not inject, replace, or repair components. It catches
-    topology and lifecycle conflicts that would otherwise deadlock a coupled
-    population while leaving ordinary Lightning features under user control.
-    """
+    """Validate the legacy proof-of-concept composition and return it unchanged."""
 
     if not isinstance(trainer.strategy, ClanDDPStrategy):
         raise TypeError("Trainer.strategy must be ClanDDPStrategy")
@@ -120,9 +112,7 @@ def _tune_report_callback(*, metrics, filename: str, on: str):
 
 def _tune_report_callback_type():
     try:
-        from ray.tune.integration.pytorch_lightning import (
-            TuneReportCheckpointCallback,
-        )
+        from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
     except ModuleNotFoundError as error:
         raise ModuleNotFoundError(
             'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
