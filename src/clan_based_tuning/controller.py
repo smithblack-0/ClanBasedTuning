@@ -61,11 +61,13 @@ class ClanController:
                 f"population is missing fitness for ranks {missing_ranks}"
             )
 
-        key = lambda rank: population.members[rank].fitness
+        def fitness(rank):
+            return population.members[rank].fitness
+
         if self._policy.mode == "min":
-            parent_rank = min(population.ranks, key=key)
+            parent_rank = min(population.ranks, key=fitness)
         else:
-            parent_rank = max(population.ranks, key=key)
+            parent_rank = max(population.ranks, key=fitness)
 
         parent_values = population.members[parent_rank].hyperparameters
         members = {}
