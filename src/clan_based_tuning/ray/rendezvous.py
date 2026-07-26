@@ -1,10 +1,11 @@
-"""Ray rendezvous for native Tune trials joining one DDP process group."""
+"""Ray rendezvous for Tune trials forming one Clan process group and round."""
 
 from __future__ import annotations
 
 import socket
 import time
 from dataclasses import dataclass
+from typing import Any
 from uuid import uuid4
 
 from clan_based_tuning.lightning.environment import _ClanRuntime
@@ -26,12 +27,45 @@ class _Session:
     master_port: int
 
 
+class RoundResultState:
+    """Collect plain completed-round records from one fixed process population.
+
+    This state has no model, checkpoint, scheduling, or winner-selection authority.
+    Each Tune trial publishes one record and polls until the complete population is
+    available. The per-process ``ClanController`` then performs the policy decision.
+    """
+
+    def __init__(self, population_size: int) -> None:
+        self.population_size = population_size
+        self._rounds: dict[int, dict[int, dict[str, Any]]] = {}
+
+    def submit(self, member_id: int, record: dict[str, Any]) -> None:
+        round_index = int(record["round_index"])
+        record_member_id = int(record["member_id"])
+        if record_member_id != member_id:
+            raise RuntimeError("reported ClanRound member does not match the Tune trial rank")
+        members = self._rounds.setdefault(round_index, {})
+        if member_id in members:
+            raise RuntimeError("a Clan member reported the same round more than once")
+        members[member_id] = dict(record)
+
+    def get_population(self, round_index: int) -> list[dict[str, Any]] | None:
+        members = self._rounds.get(round_index)
+        if members is None or len(members) != self.population_size:
+            return None
+        expected_ids = set(range(self.population_size))
+        if set(members) != expected_ids:
+            raise RuntimeError("completed round contains an invalid Clan membership")
+        return [dict(members[member_id]) for member_id in range(self.population_size)]
+
+
 class RendezvousState:
     """Pure state machine behind the Ray actor.
 
-    Stable Tune trial IDs receive stable clan ranks. Actor/process instances use
-    fresh tokens, allowing paused or failed trials to rejoin a later window
-    without changing their logical trial identity.
+    Stable Tune trial IDs receive stable clan ranks. Actor/process instances use fresh
+    tokens, allowing paused trials to join a later DDP window without changing their
+    logical member identity. Round-result exchange is composed as a separate state
+    owner because it synchronizes policy inputs rather than process-group endpoints.
     """
 
     def __init__(self, population_size: int) -> None:
@@ -39,6 +73,7 @@ class RendezvousState:
             raise ValueError("population_size must be at least 2")
         self.population_size = population_size
         self.member_ranks: dict[str, int] = {}
+        self.round_results = RoundResultState(population_size)
         self._pending: dict[str, _PendingMember] = {}
         self._last_tokens: dict[str, str] = {}
         self._current_session: _Session | None = None
@@ -59,6 +94,14 @@ class RendezvousState:
     def get_rank(self, trial_id: str) -> int | None:
         return self.member_ranks.get(trial_id)
 
+    def submit_round(self, trial_id: str, record: dict[str, Any]) -> None:
+        rank = self._require_rank(trial_id)
+        self.round_results.submit(rank, record)
+
+    def get_population(self, trial_id: str, round_index: int) -> list[dict[str, Any]] | None:
+        self._require_rank(trial_id)
+        return self.round_results.get_population(round_index)
+
     def announce(
         self,
         trial_id: str,
@@ -66,9 +109,7 @@ class RendezvousState:
         host: str,
         port: int | None,
     ) -> None:
-        rank = self.member_ranks.get(trial_id)
-        if rank is None:
-            raise RuntimeError(f"Unknown clan trial {trial_id!r}")
+        rank = self._require_rank(trial_id)
         if not token:
             raise ValueError("actor token must be non-empty")
         if not host:
@@ -94,6 +135,12 @@ class RendezvousState:
             "master_address": session.master_address,
             "master_port": session.master_port,
         }
+
+    def _require_rank(self, trial_id: str) -> int:
+        rank = self.member_ranks.get(trial_id)
+        if rank is None:
+            raise RuntimeError(f"Unknown clan trial {trial_id!r}")
+        return rank
 
     def _try_create_session(self) -> None:
         if len(self.member_ranks) != self.population_size:
@@ -124,7 +171,7 @@ class RendezvousState:
 
 
 class _RendezvousActor:
-    """Thin Ray actor wrapper around the deterministic rendezvous state."""
+    """Thin Ray actor wrapper around deterministic Clan rendezvous state."""
 
     def __init__(self, population_size: int) -> None:
         self._state = RendezvousState(population_size)
@@ -138,6 +185,12 @@ class _RendezvousActor:
 
     def get_rank(self, trial_id: str) -> int | None:
         return self._state.get_rank(trial_id)
+
+    def submit_round(self, trial_id: str, record: dict[str, Any]) -> None:
+        self._state.submit_round(trial_id, record)
+
+    def get_population(self, trial_id: str, round_index: int) -> list[dict[str, Any]] | None:
+        return self._state.get_population(trial_id, round_index)
 
     def announce(
         self,
@@ -181,12 +234,19 @@ def get_or_create_rendezvous(clan: _ClanMetadata):
 def resolve_tune_runtime(clan: _ClanMetadata) -> _ClanRuntime:
     """Resolve the current native Tune trial into a clan process-group rank."""
 
+    runtime, _ = resolve_tune_membership(clan)
+    return runtime
+
+
+def resolve_tune_membership(clan: _ClanMetadata):
+    """Return one trial's process-group runtime and its named rendezvous actor."""
+
     ray = _require_ray()
     from ray import tune
 
     trial_id = tune.get_context().get_trial_id()
     if not trial_id:
-        raise RuntimeError("ClanDDPStrategy must run inside a native Ray Tune trial")
+        raise RuntimeError("Clan integration must run inside a native Ray Tune trial")
     try:
         handle = ray.get_actor(
             clan.rendezvous_name,
@@ -195,7 +255,7 @@ def resolve_tune_runtime(clan: _ClanMetadata) -> _ClanRuntime:
     except ValueError as error:
         raise RuntimeError(
             "Clan rendezvous does not exist. Construct the Tune run with "
-            "ClanBasedTraining before creating Lightning plugins."
+            "ClanBasedTraining before resolving the trial session."
         ) from error
 
     deadline = time.monotonic() + clan.rendezvous_timeout_s
@@ -224,7 +284,7 @@ def resolve_tune_runtime(clan: _ClanMetadata) -> _ClanRuntime:
             "and that the cluster can schedule every member simultaneously."
         )
 
-    return _ClanRuntime(
+    runtime = _ClanRuntime(
         trial_id=trial_id,
         actor_token=token,
         session_id=int(session["session_id"]),
@@ -234,6 +294,7 @@ def resolve_tune_runtime(clan: _ClanMetadata) -> _ClanRuntime:
         master_port=int(session["master_port"]),
         checkpoint_available=tune.get_checkpoint() is not None,
     )
+    return runtime, handle
 
 
 def _find_free_port() -> int:
