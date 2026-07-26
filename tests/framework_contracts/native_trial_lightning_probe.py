@@ -188,7 +188,6 @@ def _worker(
         controller.set_fitness(float(rank))
         if controller.is_round_winner():
             trainer.save_checkpoint(trial_directory / "winner.ckpt")
-    trainer.strategy.barrier()
     (trial_directory / "result.json").write_text(
         json.dumps(result, indent=2, sort_keys=True),
         encoding="utf-8",
