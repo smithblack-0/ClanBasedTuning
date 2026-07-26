@@ -3,12 +3,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
-import torch
-from lightning.pytorch.strategies import DDPStrategy
 
-from clan_based_tuning import ClanDDPStrategy, apply_optimizer_strategy
+from clan_based_tuning import ClanDDPStrategy
 from clan_based_tuning.lightning.environment import _ClanRuntime
-from clan_based_tuning.spec import _ClanMetadata
 
 
 def _runtime(
@@ -29,16 +26,7 @@ def _runtime(
 
 
 def _strategy(**ddp_kwargs) -> ClanDDPStrategy:
-    metadata = _ClanMetadata(population_size=2, rendezvous_name="test-clan")
-    config = {"lr": 0.1}
-    metadata.bind_trial_config(config)
-    return ClanDDPStrategy(
-        metadata,
-        config,
-        _runtime(),
-        apply_optimizer_strategy,
-        **ddp_kwargs,
-    )
+    return ClanDDPStrategy(_runtime(), **ddp_kwargs)
 
 
 def test_strategy_supplies_required_ddp_settings_without_hiding_environment():
@@ -50,15 +38,7 @@ def test_strategy_supplies_required_ddp_settings_without_hiding_environment():
 
 
 def test_strategy_supplies_cross_trial_topology_to_automatic_samplers():
-    metadata = _ClanMetadata(population_size=2, rendezvous_name="test-clan")
-    config = {"lr": 0.1}
-    metadata.bind_trial_config(config)
-    strategy = ClanDDPStrategy(
-        metadata,
-        config,
-        _runtime(global_rank=1),
-        apply_optimizer_strategy,
-    )
+    strategy = ClanDDPStrategy(_runtime(global_rank=1))
 
     assert strategy.distributed_sampler_kwargs == {"num_replicas": 2, "rank": 1}
 
@@ -72,42 +52,22 @@ def test_strategy_rejects_explicit_conflicting_ddp_settings():
 
 
 def test_strategy_rejects_an_ignored_ray_checkpoint():
-    metadata = _ClanMetadata(population_size=2, rendezvous_name="test-clan")
-    config = {"lr": 0.1}
-    metadata.bind_trial_config(config)
-    strategy = ClanDDPStrategy(
-        metadata,
-        config,
-        _runtime(checkpoint_available=True),
-        apply_optimizer_strategy,
-    )
+    strategy = ClanDDPStrategy(_runtime(checkpoint_available=True))
     strategy._lightning_module = SimpleNamespace(trainer=SimpleNamespace(ckpt_path=None))
 
     with pytest.raises(RuntimeError, match="Lightning was started without ckpt_path"):
         strategy._is_fresh_trial()
 
 
-def test_target_config_is_applied_after_lightning_restores_optimizer(monkeypatch):
-    metadata = _ClanMetadata(population_size=2, rendezvous_name="test-clan")
-    config = {"lr": 0.2}
-    metadata.bind_trial_config(config)
-    applications = []
+def test_strategy_allows_controller_selected_nonzero_rank_to_write(monkeypatch):
+    strategy = ClanDDPStrategy(_runtime(global_rank=1))
+    writes = []
+    strategy._checkpoint_io = SimpleNamespace(
+        save_checkpoint=lambda checkpoint, filepath, storage_options=None: writes.append(
+            (checkpoint, filepath, storage_options)
+        )
+    )
 
-    def apply(optimizers, current_config):
-        applications.append(optimizers[0].param_groups[0]["lr"])
-        optimizers[0].param_groups[0]["lr"] = current_config["lr"]
+    strategy.save_checkpoint({"state": 1}, "winner.ckpt")
 
-    strategy = ClanDDPStrategy(metadata, config, _runtime(), apply)
-    optimizer = torch.optim.SGD([torch.nn.Parameter(torch.tensor(1.0))], lr=9.0)
-    strategy.optimizers = [optimizer]
-
-    def restore_source_state(self, checkpoint):
-        del checkpoint
-        self.optimizers[0].param_groups[0]["lr"] = 0.05
-
-    monkeypatch.setattr(DDPStrategy, "load_optimizer_state_dict", restore_source_state)
-
-    strategy.load_optimizer_state_dict({})
-
-    assert applications == [0.05]
-    assert optimizer.param_groups[0]["lr"] == pytest.approx(0.2)
+    assert writes == [({"state": 1}, "winner.ckpt", None)]
