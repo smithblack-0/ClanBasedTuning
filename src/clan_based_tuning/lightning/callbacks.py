@@ -13,6 +13,7 @@ from lightning import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
 
 from clan_based_tuning.controller import ClanController
+from clan_based_tuning.lightning.checkpoint import save_local_checkpoint
 from clan_based_tuning.optimizer import OptimizerStrategy
 from clan_based_tuning.optimizer import (
     apply_optimizer_strategy as default_optimizer_strategy,
@@ -96,7 +97,7 @@ class ClanTuneReportCallback(Callback):
         from ray.train import Checkpoint
 
         with tempfile.TemporaryDirectory() as checkpoint_dir:
-            trainer.save_checkpoint(os.path.join(checkpoint_dir, self._filename))
+            save_local_checkpoint(trainer, os.path.join(checkpoint_dir, self._filename))
             yield Checkpoint.from_directory(checkpoint_dir)
 
     def _handle(self, trainer: Trainer, pl_module: LightningModule) -> None:
