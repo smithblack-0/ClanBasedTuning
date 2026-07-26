@@ -1,8 +1,7 @@
 # Clan controller API
 
-The Milestone 2 surface consists of five framework-independent objects:
-`MutationSpec`, `ControllerPolicy`, `PopulationMember`, `Population`, and
-`ClanController`.
+The Milestone 2 surface consists of three framework-independent objects:
+`MutationSpec`, `ClanRound`, and `ClanController`.
 
 ## `MutationSpec`
 
@@ -10,7 +9,6 @@ The Milestone 2 surface consists of five framework-independent objects:
 from clan_based_tuning import MutationSpec
 
 lr_mutation = MutationSpec(
-    default=3e-4,
     standard_deviation=0.25,
     geometry="log",
     minimum=1e-5,
@@ -18,133 +16,132 @@ lr_mutation = MutationSpec(
 )
 ```
 
-A spec owns the initialization, mutation geometry, and bounds for one value. The
-hyperparameter name is supplied by its key in `ControllerPolicy.mutations`.
+`standard_deviation`
+: Gaussian displacement scale.
 
-`mutation.mutate(value, random_stream)` applies one bounded local mutation. Most
-users call this indirectly through `ClanController`.
+`geometry`
+: `"linear"` adds the displacement. `"log"` multiplies by its exponential.
 
-## `ControllerPolicy`
+`minimum`, `maximum`
+: Inclusive bounds applied after mutation.
+
+`mutation.mutate(value, random_stream)` performs the mutation. Mutation specifications
+are intentionally trusted internal objects; invalid settings generally fail when the
+rule is used rather than through a separate validation subsystem.
+
+## `ClanRound`
 
 ```python
-from clan_based_tuning import ControllerPolicy
+from clan_based_tuning import ClanRound
 
-policy = ControllerPolicy(
-    population_size=4,
-    mutations={"lr": lr_mutation},
-    mode="min",
-    seed=17,
+round_ = ClanRound(
+    member_id=2,
+    round_index=4,
+    config={"lr": 3e-4},
+    save_member_fitness=save_member_fitness,
 )
 ```
 
-`population_size`
-: Fixed number of ranks.
+`member_id`
+: Integer identity of the process or trial within the Clan.
 
-`mutations`
-: Dictionary from the controller's hyperparameter name to a `MutationSpec`.
+`round_index`
+: Generation represented by this record.
 
-`mode`
-: `"min"` or `"max"`. Equal fitness values select the lowest rank.
+`config`
+: Named controlled values used during this round. The round owns a copy.
 
-`seed`
-: Seed passed to the controller's private random stream.
+`fitness`
+: Comparable result. It is `None` until evaluation finishes.
 
-## `PopulationMember`
+### `get_config()`
 
-```python
-from clan_based_tuning import PopulationMember
+Returns a copy of the current round configuration.
 
-member = PopulationMember(
-    hyperparameters={"lr": 3e-4},
-)
-member.set_fitness(0.71)
-```
+### `set_fitness(fitness)`
 
-`hyperparameters` is the controller-side projection of current values for the names
-in the policy. It is not a full optimizer configuration. The class copies the
-supplied dictionary but deliberately does not interpret its origin or inspect every
-contained value.
-
-`fitness` is `None` until reported. `set_fitness(value)` records one finite
-comparable score.
-
-## `Population`
+Stores a finite fitness and immediately calls:
 
 ```python
-from clan_based_tuning import Population
-
-population = Population(
-    members={
-        0: PopulationMember({"lr": 3e-4}),
-        1: PopulationMember({"lr": 4e-4}),
-    }
-)
+save_member_fitness(round_)
 ```
 
-`members[rank]` associates one stable controller rank with one `PopulationMember`.
-Ranks must be contiguous from zero.
-
-`population.ranks`
-: Stable `range` covering every rank.
-
-`len(population)`
-: Number of ranks.
-
-`population.set_fitness(rank, value)`
-: Delegate one reported score to that rank's member.
-
-`population.missing_fitness_ranks()`
-: Return ranks whose members still have `fitness is None`.
+The callback decides how the completed round is stored or communicated.
 
 ## `ClanController`
 
 ```python
 from clan_based_tuning import ClanController
 
-controller = ClanController(policy)
-population = controller.initial_population()
+controller = ClanController(
+    member_id=rank,
+    population_size=4,
+    initial_config=trial_config,
+    mutations={"lr": lr_mutation},
+    mode="min",
+    seed=17,
+    save_member_fitness=save_member_fitness,
+    load_population=load_population,
+    select_winner=select_winner,
+)
 ```
 
-The constructor requires a `ControllerPolicy`. `initial_population()` creates one
-member per policy rank. Rank zero receives exact defaults; the remaining ranks
-receive independent mutations of those defaults.
+`member_id`
+: Identity of this local member.
 
-### `next_generation(population)`
+`population_size`
+: Fixed number of members expected at every transition.
 
-```python
-for rank in population.ranks:
-    population.set_fitness(rank, measured_fitness[rank])
+`initial_config`
+: Controlled values supplied for this trial's first round.
 
-parent_rank, next_population = controller.next_generation(population)
-```
+`mutations`
+: Ordinary dictionary from controlled-value name to `MutationSpec`.
 
-The method checks only the trusted boundary:
+`mode`
+: `"min"` or `"max"`. Fitness ties select the lower member ID.
 
-- the argument is a `Population`;
-- its size equals `policy.population_size`; and
-- every member has reported fitness.
+`seed`
+: Experiment seed. The controller combines it with `member_id` for a deterministic
+member-specific random stream.
 
-It selects one parent, copies that parent's hyperparameter values at the parent
-rank, mutates every other rank, and returns a fresh population with no fitness set.
-It does not inspect external optimizer structure or revalidate every member value.
+`save_member_fitness`
+: Callback used by each local `ClanRound` to publish itself.
+
+`load_population`
+: Callback receiving a round index and returning `list[ClanRound]` for that completed
+round.
+
+`select_winner`
+: Callback receiving the winning integer member ID. It applies externally owned
+consequences such as model or optimizer transfer; it does not select the winner.
+
+### `get_config()`
+
+Returns this process's controlled values for the current round.
+
+### `set_fitness(fitness)`
+
+Completes and publishes this process's current round.
+
+### `advance()`
+
+Loads the current population, checks that it contains exactly one completed record for
+every expected member, selects the winner, calculates this member's next configuration,
+calls `select_winner(winner_id)`, and installs the next local `ClanRound`.
+
+The winning member keeps the winning configuration. Every other member mutates from
+that same winning configuration.
 
 ### `state_dict()` and `load_state_dict(state)`
 
-These methods save and restore only the private random-stream state. Recreate the
-controller with the same immutable `ControllerPolicy` before loading the state.
+Save and restore the local random stream together with the current round index,
+configuration, and optional fitness. Callback implementations and fixed constructor
+settings remain external configuration.
 
-## Milestone 3 handoff
+## Framework handoff
 
-Milestone 3 orchestration must:
-
-1. establish the complete live member set and authoritative rank mapping;
-2. determine the controller hyperparameter values represented by each framework
-   member;
-3. validate those external values and other framework invariants;
-4. construct `PopulationMember` and `Population` objects;
-5. attach reported fitness;
-6. call `next_generation`; and
-7. apply the parent and evolved values through the native framework lifecycle.
-
-Those responsibilities are not duplicated inside the trusted Milestone 2 data
-objects or controller transition.
+A framework integration supplies callback implementations and maps its own trial or
+process identity to the controller's integer member ID. It owns synchronization,
+checkpoint movement, model and optimizer transfer, pause and resume, and all other
+framework lifecycle operations.
