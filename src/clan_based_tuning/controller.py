@@ -32,10 +32,7 @@ class ClanController:
     def initial_population(self):
         """Create the first population from the policy defaults."""
 
-        defaults = {
-            name: mutation.default
-            for name, mutation in self._policy.mutations.items()
-        }
+        defaults = {name: mutation.default for name, mutation in self._policy.mutations.items()}
         members = {0: PopulationMember(defaults)}
         for rank in range(1, self.population_size):
             members[rank] = PopulationMember(self._mutate(defaults))
@@ -52,14 +49,10 @@ class ClanController:
         if not isinstance(population, Population):
             raise TypeError("population must be a Population")
         if len(population) != self.population_size:
-            raise ValueError(
-                f"population must contain exactly {self.population_size} ranks"
-            )
+            raise ValueError(f"population must contain exactly {self.population_size} ranks")
         missing_ranks = population.missing_fitness_ranks()
         if missing_ranks:
-            raise RuntimeError(
-                f"population is missing fitness for ranks {missing_ranks}"
-            )
+            raise RuntimeError(f"population is missing fitness for ranks {missing_ranks}")
 
         def fitness(rank):
             return population.members[rank].fitness
@@ -72,11 +65,7 @@ class ClanController:
         parent_values = population.members[parent_rank].hyperparameters
         members = {}
         for rank in population.ranks:
-            values = (
-                dict(parent_values)
-                if rank == parent_rank
-                else self._mutate(parent_values)
-            )
+            values = dict(parent_values) if rank == parent_rank else self._mutate(parent_values)
             members[rank] = PopulationMember(values)
         return parent_rank, Population(members)
 
