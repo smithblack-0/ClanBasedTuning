@@ -231,8 +231,7 @@ class ClanController:
         """Create the first Population with defaults retained at rank zero."""
 
         defaults = {
-            name: specification["default"]
-            for name, specification in self._hyperparameters.items()
+            name: specification["default"] for name, specification in self._hyperparameters.items()
         }
         configurations = {0: dict(defaults)}
         for rank in range(1, self._population_size):
@@ -251,9 +250,7 @@ class ClanController:
         if not isinstance(population, Population):
             raise TypeError("population must be a Population")
         if len(population) != self._population_size:
-            raise ValueError(
-                f"population must contain exactly {self._population_size} ranks"
-            )
+            raise ValueError(f"population must contain exactly {self._population_size} ranks")
         missing_ranks = population.missing_fitness_ranks()
         if missing_ranks:
             raise RuntimeError(f"population is missing fitness for ranks {missing_ranks}")
@@ -266,9 +263,7 @@ class ClanController:
         parent = population.configurations[parent_rank]
         configurations = {}
         for rank in population.ranks:
-            configurations[rank] = (
-                dict(parent) if rank == parent_rank else self._mutate(parent)
-            )
+            configurations[rank] = dict(parent) if rank == parent_rank else self._mutate(parent)
         return parent_rank, Population(configurations)
 
     def state_dict(self):
