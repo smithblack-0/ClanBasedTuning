@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import torch
@@ -16,13 +17,14 @@ from clan_based_tuning.lightning.environment import _ClanRuntime
 class ClanDDPStrategy(DDPStrategy):
     """Apply Lightning's native DDP transform across independent Tune trials.
 
-    The strategy owns only divergence-safe DDP configuration, structural
-    compatibility, initial model synchronization, sampler topology, and optimizer
-    topology compatibility. Controller checkpointing and optimizer-value
-    reconciliation are composed through dedicated callbacks.
+    The strategy owns only Lightning/DDP assumptions that fail for a Clan spanning
+    independent Tune trials: divergence-safe DDP configuration, structural
+    compatibility, initial model synchronization, sampler topology, optimizer topology,
+    and permission for a controller-selected nonzero rank to write its checkpoint.
 
-    PyTorch ``DistributedDataParallel`` still owns gradient bucketing and collectives.
-    Ray still owns trial checkpoint assignment, pause, resume, and scheduling.
+    A separate callback decides whether a process won and is therefore the only caller
+    of ``Trainer.save_checkpoint``. PyTorch still owns gradient collectives; Ray owns
+    checkpoint assignment, pause, resume, and scheduling.
     """
 
     def __init__(self, runtime: _ClanRuntime, **ddp_kwargs: Any) -> None:
@@ -83,6 +85,25 @@ class ClanDDPStrategy(DDPStrategy):
     def setup_optimizers(self, trainer: Trainer) -> None:
         super().setup_optimizers(trainer)
         self._verify_optimizer_topology()
+
+    def save_checkpoint(
+        self,
+        checkpoint: dict[str, Any],
+        filepath: str | Path,
+        storage_options: Any | None = None,
+    ) -> None:
+        """Write the selected local winner even when it is not Clan rank zero.
+
+        Lightning's base distributed strategy gates checkpoint writes on global zero.
+        That rank is a transport role, not the controller-selected state source. The
+        winner-only report callback supplies the policy gate before reaching this hook.
+        """
+
+        self.checkpoint_io.save_checkpoint(
+            checkpoint,
+            filepath,
+            storage_options=storage_options,
+        )
 
     def _verify_optimizer_topology(self) -> None:
         """Require checkpoint-compatible optimizer structure across members."""
