@@ -150,7 +150,7 @@ def test_manual_cpu_clan_runs_repeated_winner_only_transitions(tmp_path):
             param_space={"trial_seed": tune.grid_search([17, 23])},
             run_config=tune.RunConfig(
                 storage_path=str(tmp_path),
-                stop={"training_iteration": 2},
+                stop={"training_iteration": 3},
                 checkpoint_config=tune.CheckpointConfig(num_to_keep=4),
                 failure_config=tune.FailureConfig(max_failures=0, fail_fast=True),
                 verbose=0,
