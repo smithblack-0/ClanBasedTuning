@@ -127,8 +127,9 @@ Completes and publishes this process's current round.
 ### `advance()`
 
 Loads the current population, checks that it contains exactly one completed record for
-every expected member, selects the winner, calculates this member's next configuration,
-calls `select_winner(winner_id)`, and installs the next local `ClanRound`.
+every expected member, and selects the winner. The controller then manufactures this
+member's complete next `ClanRound` from the winning round, including any local
+mutation, before calling `select_winner(winner_id)` and installing the prepared round.
 
 The winning member keeps the winning configuration. Every other member mutates from
 that same winning configuration.
@@ -145,3 +146,7 @@ A framework integration supplies callback implementations and maps its own trial
 process identity to the controller's integer member ID. It owns synchronization,
 checkpoint movement, model and optimizer transfer, pause and resume, and all other
 framework lifecycle operations.
+
+The integration may also persist the winning member ID for each round as a PBT replay
+path. Durable replay history and execution belong to that integration because they
+must remain aligned with framework round identity and checkpoint storage.
