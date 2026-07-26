@@ -49,10 +49,7 @@ class RoundStore:
         self.saved[(round_.round_index, round_.member_id)] = round_
 
     def load(self, round_index):
-        return [
-            self.saved[(round_index, member_id)]
-            for member_id in range(self.population_size)
-        ]
+        return [self.saved[(round_index, member_id)] for member_id in range(self.population_size)]
 
 
 population_size = 3
