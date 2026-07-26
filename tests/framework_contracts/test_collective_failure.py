@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Ray is optional, so the module-level skip necessarily precedes Ray-dependent imports.
+# ruff: noqa: E402
 import time
 
 import pytest
