@@ -69,19 +69,19 @@ class ClanController:
 
         rounds = self._load_completed_population()
         winner = self._find_winner(rounds)
-        next_config = (
-            winner.get_config()
-            if self.member_id == winner.member_id
-            else self._mutate(winner.config)
+        next_round = ClanRound(
+            member_id=self.member_id,
+            round_index=self._round.round_index + 1,
+            config=(
+                winner.get_config()
+                if self.member_id == winner.member_id
+                else self._mutate(winner.config)
+            ),
+            save_member_fitness=self._save_member_fitness,
         )
 
         self._select_winner(winner.member_id)
-        self._round = ClanRound(
-            member_id=self.member_id,
-            round_index=self._round.round_index + 1,
-            config=next_config,
-            save_member_fitness=self._save_member_fitness,
-        )
+        self._round = next_round
 
     def state_dict(self):
         """Return the local state required to resume this controller."""
