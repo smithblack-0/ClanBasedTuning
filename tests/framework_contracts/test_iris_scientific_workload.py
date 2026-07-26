@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+# Ray is optional, so the module-level skip necessarily precedes the public experiment.
+# ruff: noqa: E402
 import pytest
 
 pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
