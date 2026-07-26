@@ -149,4 +149,6 @@ framework lifecycle operations.
 
 The integration may also persist the winning member ID for each round as a PBT replay
 path. Durable replay history and execution belong to that integration because they
-must remain aligned with framework round identity and checkpoint storage.
+must remain aligned with framework round identity and checkpoint storage. Since every
+local controller observes the same winner, one authority should record the path or the
+write should be idempotently keyed by round.
