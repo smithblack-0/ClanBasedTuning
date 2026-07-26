@@ -22,25 +22,29 @@ def test_population_is_unavailable_until_every_member_publishes():
     store.publish(1, completed_record(1, 0, 2.0, learning_rate=0.2))
     population = store.read_population(member_id=0, round_index=0)
 
+    assert population is not None
     assert [record["member_id"] for record in population] == [0, 1, 2]
     assert [record["fitness"] for record in population] == [1.0, 2.0, 3.0]
 
 
 def test_every_member_receives_an_independent_snapshot_before_round_closes():
     store = CompletedRoundStore(population_size=2)
-    store.publish(0, completed_record(0, 4, 1.0, learning_rate=0.1))
-    store.publish(1, completed_record(1, 4, 2.0, learning_rate=0.2))
+    store.publish(0, completed_record(0, 0, 1.0, learning_rate=0.1))
+    store.publish(1, completed_record(1, 0, 2.0, learning_rate=0.2))
 
-    first = store.read_population(member_id=0, round_index=4)
+    first = store.read_population(member_id=0, round_index=0)
+    assert first is not None
     first[0]["config"]["lr"] = 9.0
 
-    repeated = store.read_population(member_id=0, round_index=4)
-    second = store.read_population(member_id=1, round_index=4)
+    repeated = store.read_population(member_id=0, round_index=0)
+    second = store.read_population(member_id=1, round_index=0)
 
+    assert repeated is not None
+    assert second is not None
     assert repeated[0]["config"] == {"lr": 0.1}
     assert second[0]["config"] == {"lr": 0.1}
     with pytest.raises(RuntimeError, match="already closed"):
-        store.read_population(member_id=0, round_index=4)
+        store.read_population(member_id=0, round_index=0)
 
 
 def test_duplicate_or_mismatched_publication_fails_before_population_release():
@@ -52,6 +56,16 @@ def test_duplicate_or_mismatched_publication_fails_before_population_release():
         store.publish(0, record)
     with pytest.raises(RuntimeError, match="does not match"):
         store.publish(1, record)
+
+
+def test_future_round_cannot_overlap_the_active_round():
+    store = CompletedRoundStore(population_size=2)
+    store.publish(0, completed_record(0, 0, 1.0, learning_rate=0.1))
+
+    with pytest.raises(RuntimeError, match="previous completed round has not closed"):
+        store.publish(1, completed_record(1, 1, 2.0, learning_rate=0.2))
+    with pytest.raises(RuntimeError, match="previous completed round has not closed"):
+        store.read_population(member_id=1, round_index=1)
 
 
 def test_closed_round_rejects_late_publication_without_blocking_the_next_round():
