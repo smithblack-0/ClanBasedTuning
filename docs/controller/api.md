@@ -1,115 +1,115 @@
 # Clan controller API
 
-The Milestone 2 surface consists of `Population` and `ClanController`. Both use
-ordinary Python dictionaries and scalars and have no Ray or Lightning dependency.
+The Milestone 2 surface consists of five framework-independent objects:
+`MutationSpec`, `ControllerPolicy`, `PopulationMember`, `Population`, and
+`ClanController`.
 
-## `Population`
-
-`Population(configurations, fitness={})` represents one complete rank-indexed
-generation.
+## `MutationSpec`
 
 ```python
-from clan_based_tuning import Population
+from clan_based_tuning import MutationSpec
 
-population = Population(
-    configurations={
-        0: {"lr": 3e-4, "weight_decay": 0.01},
-        1: {"lr": 4e-4, "weight_decay": 0.008},
-    }
+lr_mutation = MutationSpec(
+    default=3e-4,
+    standard_deviation=0.25,
+    geometry="log",
+    minimum=1e-5,
+    maximum=1e-2,
 )
 ```
 
-### Structure
+A spec owns the initialization, mutation geometry, and bounds for one value. The
+hyperparameter name is supplied by its key in `ControllerPolicy.mutations`.
 
-```text
-configurations[rank] = optimizer-hyperparameter dictionary
-fitness[rank]        = finite comparable score, when available
-```
+`mutation.mutate(value, random_stream)` applies one bounded local mutation. Most
+users call this indirectly through `ClanController`.
 
-Configuration keys must be contiguous ranks beginning at zero. Population
-construction copies the supplied configuration dictionaries and validates only this
-outer structure. It deliberately trusts the contained optimizer values; a future
-framework adapter must validate external values before construction.
-
-### Methods
-
-`population.ranks`
-: Stable `range` covering all ranks.
-
-`len(population)`
-: Number of ranks.
-
-`population.get_configuration(rank)`
-: Return a copy of one rank's optimizer configuration.
-
-`population.set_fitness(rank, value)`
-: Record a finite real fitness for an existing rank.
-
-`population.get_fitness(rank)`
-: Return the rank's score, or raise if it has not been set.
-
-`population.missing_fitness_ranks()`
-: Return a tuple of ranks that have not reported fitness.
-
-## `ClanController` construction
+## `ControllerPolicy`
 
 ```python
-from clan_based_tuning import ClanController
+from clan_based_tuning import ControllerPolicy
 
-controller = ClanController(
+policy = ControllerPolicy(
     population_size=4,
-    hyperparameters={
-        "lr": {
-            "default": 3e-4,
-            "standard_deviation": 0.25,
-            "geometry": "log",
-            "minimum": 1e-5,
-            "maximum": 1e-2,
-        },
-        "weight_decay": {
-            "default": 0.01,
-            "standard_deviation": 0.005,
-            "geometry": "linear",
-            "minimum": 0.0,
-            "maximum": 0.1,
-        },
-    },
+    mutations={"lr": lr_mutation},
     mode="min",
     seed=17,
 )
 ```
 
 `population_size`
-: Fixed number of ranks expected by every population passed to this controller.
+: Fixed number of ranks.
 
-`hyperparameters`
-: Dictionary mapping controlled optimizer-hyperparameter names to specifications.
-  Each specification contains exactly `default`, `standard_deviation`, `geometry`,
-  `minimum`, and `maximum`.
+`mutations`
+: Dictionary from the controller's hyperparameter name to a `MutationSpec`.
 
 `mode`
-: `"min"` or `"max"`. Equal scores select the lowest rank.
+: `"min"` or `"max"`. Equal fitness values select the lowest rank.
 
 `seed`
-: Integer used to create the reproducible private random stream.
+: Seed passed to the controller's private random stream.
 
-The constructor validates this immutable policy once. Numeric policy fields must be
-finite real scalars; logarithmic bounds must be positive.
-
-## `initial_population()`
-
-Create a `Population` with exactly `population_size` ranks.
+## `PopulationMember`
 
 ```python
+from clan_based_tuning import PopulationMember
+
+member = PopulationMember(
+    hyperparameters={"lr": 3e-4},
+)
+member.set_fitness(0.71)
+```
+
+`hyperparameters` is the controller-side projection of current values for the names
+in the policy. It is not a full optimizer configuration. The class copies the
+supplied dictionary but deliberately does not interpret its origin or inspect every
+contained value.
+
+`fitness` is `None` until reported. `set_fitness(value)` records one finite
+comparable score.
+
+## `Population`
+
+```python
+from clan_based_tuning import Population
+
+population = Population(
+    members={
+        0: PopulationMember({"lr": 3e-4}),
+        1: PopulationMember({"lr": 4e-4}),
+    }
+)
+```
+
+`members[rank]` associates one stable controller rank with one `PopulationMember`.
+Ranks must be contiguous from zero.
+
+`population.ranks`
+: Stable `range` covering every rank.
+
+`len(population)`
+: Number of ranks.
+
+`population.set_fitness(rank, value)`
+: Delegate one reported score to that rank's member.
+
+`population.missing_fitness_ranks()`
+: Return ranks whose members still have `fitness is None`.
+
+## `ClanController`
+
+```python
+from clan_based_tuning import ClanController
+
+controller = ClanController(policy)
 population = controller.initial_population()
 ```
 
-Rank zero receives exact defaults. Remaining ranks receive independent local
-mutations. The returned population has no fitness values set.
+The constructor requires a `ControllerPolicy`. `initial_population()` creates one
+member per policy rank. Rank zero receives exact defaults; the remaining ranks
+receive independent mutations of those defaults.
 
-## `next_generation(population)`
-
-Select one parent and create the next `Population`.
+### `next_generation(population)`
 
 ```python
 for rank in population.ranks:
@@ -118,59 +118,33 @@ for rank in population.ranks:
 parent_rank, next_population = controller.next_generation(population)
 ```
 
-Preconditions enforced here:
+The method checks only the trusted boundary:
 
-- `population` is a `Population`;
-- its size equals the constructor-declared population size; and
-- every rank has a fitness value.
+- the argument is a `Population`;
+- its size equals `policy.population_size`; and
+- every member has reported fitness.
 
-The method does not revalidate every configuration field. Controller-generated
-populations are trusted; Milestone 3 must validate externally constructed
-populations at its framework boundary.
+It selects one parent, copies that parent's hyperparameter values at the parent
+rank, mutates every other rank, and returns a fresh population with no fitness set.
+It does not inspect external optimizer structure or revalidate every member value.
 
-Postconditions:
+### `state_dict()` and `load_state_dict(state)`
 
-- exactly one parent rank is returned;
-- the parent configuration is copied exactly at that rank;
-- every other rank is independently mutated from the parent;
-- a fresh `Population` of the same size is returned; and
-- the new population has no fitness values set.
-
-The external lifecycle uses `parent_rank` to inherit model and optimizer state. The
-controller does not perform that inheritance.
-
-## `state_dict()` and `load_state_dict(state)`
-
-`state_dict()` returns the pseudorandom stream state needed to continue mutation
-identically after external persistence. Recreate the controller with the same
-population size, hyperparameter policy, and mode, then restore before the next
-transition:
-
-```python
-saved_state = controller.state_dict()
-
-restored = ClanController(
-    population_size=4,
-    hyperparameters=hyperparameter_policy,
-    mode="min",
-    seed=0,
-)
-restored.load_state_dict(saved_state)
-```
-
-The state mapping intentionally does not duplicate constructor policy.
+These methods save and restore only the private random-stream state. Recreate the
+controller with the same immutable `ControllerPolicy` before loading the state.
 
 ## Milestone 3 handoff
 
 Milestone 3 orchestration must:
 
-1. establish the complete live trial set and authoritative trial-to-rank mapping;
-2. validate and extract controlled optimizer configurations from framework state;
-3. construct or update the corresponding `Population`;
-4. write each reported fitness through `set_fitness`;
-5. invoke `next_generation`; and
-6. apply the returned parent and configuration decision through native framework
-   lifecycle.
+1. establish the complete live member set and authoritative rank mapping;
+2. determine the controller hyperparameter values represented by each framework
+   member;
+3. validate those external values and other framework invariants;
+4. construct `PopulationMember` and `Population` objects;
+5. attach reported fitness;
+6. call `next_generation`; and
+7. apply the parent and evolved values through the native framework lifecycle.
 
-Those framework checks are intentionally not duplicated inside the trusted
-controller path.
+Those responsibilities are not duplicated inside the trusted Milestone 2 data
+objects or controller transition.
