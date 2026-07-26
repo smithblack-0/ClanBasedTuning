@@ -1,14 +1,14 @@
-"""CPU contract probe for native trials joined by a Lightning DDP strategy.
+"""CPU contract probe for explicit winner-only Lightning/DDP composition.
 
-This does not emulate Ray Tune scheduling. It isolates the framework seam that
-ClanBasedTuning would rely on inside each native Tune trial:
+This does not emulate Ray Tune scheduling. It isolates the trial-local framework seam:
 
-1. independently launched trial processes join one DDP group;
-2. DDP reduces their gradients without synchronizing their parameters;
-3. every trial writes its own Lightning checkpoint, including nonzero ranks;
-4. a target trial restarts from a source trial's checkpoint;
-5. the target's mutated optimizer configuration is applied after restore; and
-6. restarted trials reform the DDP group and continue diverging.
+1. independently launched processes join one DDP group;
+2. DDP reduces gradients without synchronizing divergent parameters;
+3. each controller reaches the same winner decision;
+4. only that winning process writes the shared Lightning checkpoint;
+5. every next-generation process loads the same winner checkpoint;
+6. controller restore advances each local optimizer configuration; and
+7. restarted processes reform DDP and continue diverging.
 """
 
 from __future__ import annotations
@@ -26,14 +26,16 @@ from torch import Tensor, nn
 from torch.utils.data import DataLoader, TensorDataset
 
 from clan_based_tuning import (
+    ClanController,
+    ClanControllerRestore,
     ClanDDPStrategy,
-    apply_optimizer_strategy,
+    ClanRound,
+    MutationSpec,
 )
 from clan_based_tuning.lightning.environment import (
     ClanLightningEnvironment,
     _ClanRuntime,
 )
-from clan_based_tuning.spec import _ClanMetadata
 
 
 class ProbeScalarTrial(LightningModule):
@@ -67,8 +69,7 @@ class ProbeScalarTrial(LightningModule):
         }
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        # Deliberately wrong runtime LR: the strategy is authoritative for the
-        # optimizer fields supplied by the trial configuration.
+        # Deliberately wrong. ClanControllerRestore owns live config reconciliation.
         return torch.optim.SGD([self.weight], lr=9.0, momentum=0.9)
 
 
@@ -78,15 +79,27 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _completed_population(round_index: int) -> list[ClanRound]:
+    return [
+        ClanRound(0, round_index, {"lr": 0.1}, _discard_round, 0.0),
+        ClanRound(1, round_index, {"lr": 0.2}, _discard_round, 1.0),
+    ]
+
+
+def _discard_round(round_: ClanRound) -> None:
+    del round_
+
+
 def _worker(
     rank: int,
     world_size: int,
     port: int,
     stage_directory: str,
     initial_weights: tuple[float, ...],
-    learning_rates: tuple[float, ...],
+    initial_learning_rates: tuple[float, ...],
     restore_paths: tuple[str | None, ...],
     max_steps: int,
+    save_winner: bool,
 ) -> None:
     os.environ.update(
         {
@@ -102,13 +115,24 @@ def _worker(
     trial_directory = Path(stage_directory) / f"trial-{rank}"
     trial_directory.mkdir(parents=True, exist_ok=True)
 
-    model = ProbeScalarTrial(initial_weight=initial_weights[rank])
-    metadata = _ClanMetadata(
+    controller = ClanController(
+        member_id=rank,
         population_size=world_size,
-        rendezvous_name="cpu-probe",
+        initial_config={"lr": initial_learning_rates[rank]},
+        mutations={
+            "lr": MutationSpec(
+                standard_deviation=0.05,
+                geometry="linear",
+                minimum=0.01,
+                maximum=0.5,
+            )
+        },
+        mode="min",
+        seed=17 + rank,
+        save_member_fitness=_discard_round,
+        load_population=_completed_population,
     )
-    config = {"lr": learning_rates[rank]}
-    metadata.bind_trial_config(config)
+    restore = ClanControllerRestore(controller)
     runtime = _ClanRuntime(
         trial_id=f"trial-{rank}",
         actor_token=f"stage-{stage_directory}-rank-{rank}",
@@ -117,21 +141,18 @@ def _worker(
         world_size=world_size,
         master_address="127.0.0.1",
         master_port=port,
+        checkpoint_available=restore_paths[rank] is not None,
     )
+    model = ProbeScalarTrial(initial_weight=initial_weights[rank])
     environment = ClanLightningEnvironment(runtime)
-    strategy = ClanDDPStrategy(
-        metadata,
-        config,
-        runtime,
-        apply_optimizer_strategy,
-        process_group_backend="gloo",
-    )
+    strategy = ClanDDPStrategy(runtime, process_group_backend="gloo")
     trainer = Trainer(
         accelerator="cpu",
         devices=1,
         num_nodes=1,
         strategy=strategy,
         plugins=[environment],
+        callbacks=[restore],
         max_steps=max_steps,
         max_epochs=10,
         logger=False,
@@ -163,8 +184,10 @@ def _worker(
         },
     }
 
-    checkpoint_path = trial_directory / "trial.ckpt"
-    trainer.save_checkpoint(checkpoint_path)
+    if save_winner:
+        controller.set_fitness(float(rank))
+        if controller.is_round_winner():
+            trainer.save_checkpoint(trial_directory / "winner.ckpt")
     trainer.strategy.barrier()
     (trial_directory / "result.json").write_text(
         json.dumps(result, indent=2, sort_keys=True),
@@ -176,9 +199,10 @@ def _run_stage(
     stage_directory: Path,
     *,
     initial_weights: tuple[float, float],
-    learning_rates: tuple[float, float],
+    initial_learning_rates: tuple[float, float],
     restore_paths: tuple[str | None, str | None],
     max_steps: int,
+    save_winner: bool,
 ) -> list[dict[str, Any]]:
     stage_directory.mkdir(parents=True, exist_ok=True)
     world_size = len(initial_weights)
@@ -189,9 +213,10 @@ def _run_stage(
             _free_port(),
             str(stage_directory),
             initial_weights,
-            learning_rates,
+            initial_learning_rates,
             restore_paths,
             max_steps,
+            save_winner,
         ),
         nprocs=world_size,
         join=True,
@@ -203,29 +228,29 @@ def _run_stage(
 
 
 def run_probe(output_directory: Path) -> dict[str, Any]:
-    """Run two windows separated by an exploit-style checkpoint transition."""
+    """Run two windows separated by one winner-only checkpoint transition."""
 
     stage_one = _run_stage(
         output_directory / "window-1",
         initial_weights=(1.0, 3.0),
-        learning_rates=(0.1, 0.2),
+        initial_learning_rates=(0.1, 0.2),
         restore_paths=(None, None),
         max_steps=1,
+        save_winner=True,
     )
 
-    source_checkpoint = output_directory / "window-1" / "trial-0" / "trial.ckpt"
-    target_checkpoint = output_directory / "window-1" / "trial-1" / "trial.ckpt"
-    if not source_checkpoint.is_file() or not target_checkpoint.is_file():
-        raise AssertionError("Every native trial, including nonzero rank, must checkpoint")
+    source_checkpoint = output_directory / "window-1" / "trial-0" / "winner.ckpt"
+    losing_checkpoint = output_directory / "window-1" / "trial-1" / "winner.ckpt"
+    if not source_checkpoint.is_file() or losing_checkpoint.exists():
+        raise AssertionError("Exactly the selected process must write the winner checkpoint")
 
-    # Simulate PBT: both source and target restart from the source checkpoint,
-    # but the target receives a mutated optimizer configuration.
     stage_two = _run_stage(
         output_directory / "window-2",
         initial_weights=(-100.0, 100.0),
-        learning_rates=(0.1, 0.3),
+        initial_learning_rates=(9.0, 9.0),
         restore_paths=(str(source_checkpoint), str(source_checkpoint)),
         max_steps=2,
+        save_winner=False,
     )
 
     report = {"window_1": stage_one, "window_2": stage_two}
