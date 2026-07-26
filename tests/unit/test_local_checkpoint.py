@@ -11,8 +11,7 @@ def test_local_checkpoint_uses_lightning_dump_and_strategy_write_without_barrier
     trainer = SimpleNamespace(
         model=object(),
         _checkpoint_connector=SimpleNamespace(
-            dump_checkpoint=lambda weights_only: calls.append(("dump", weights_only))
-            or checkpoint
+            dump_checkpoint=lambda weights_only: calls.append(("dump", weights_only)) or checkpoint
         ),
         strategy=SimpleNamespace(
             save_checkpoint=lambda state, path, storage_options=None: calls.append(
