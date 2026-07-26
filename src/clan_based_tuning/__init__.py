@@ -1,12 +1,7 @@
 """Clan Tuning policy and framework-integration research surfaces."""
 
 from clan_based_tuning.controller import ClanController
-from clan_based_tuning.controller_types import (
-    ControllerPolicy,
-    MutationSpec,
-    Population,
-    PopulationMember,
-)
+from clan_based_tuning.controller_types import ClanRound, MutationSpec
 from clan_based_tuning.factory import (
     ClanLightningPlugins,
     make_clan_lightning_plugins,
@@ -26,10 +21,8 @@ __all__ = [
     "ClanDDPStrategy",
     "ClanLightningEnvironment",
     "ClanLightningPlugins",
-    "ControllerPolicy",
+    "ClanRound",
     "MutationSpec",
-    "Population",
-    "PopulationMember",
     "apply_optimizer_strategy",
     "make_clan_lightning_plugins",
     "prepare_clan_trainer",
