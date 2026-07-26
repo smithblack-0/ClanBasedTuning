@@ -1,7 +1,7 @@
 # Clan controller API
 
-The Milestone 2 surface consists of three framework-independent objects:
-`MutationSpec`, `ClanRound`, and `ClanController`.
+The framework-independent surface consists of three objects: `MutationSpec`,
+`ClanRound`, and `ClanController`.
 
 ## `MutationSpec`
 
@@ -66,7 +66,8 @@ Stores a finite fitness and immediately calls:
 save_member_fitness(round_)
 ```
 
-The callback decides how the completed round is stored or communicated.
+The callback decides how the completed round is stored or communicated. Its name does
+not imply checkpoint or filesystem persistence.
 
 ## `ClanController`
 
@@ -79,10 +80,9 @@ controller = ClanController(
     initial_config=trial_config,
     mutations={"lr": lr_mutation},
     mode="min",
-    seed=17,
+    seed=trial_seed,
     save_member_fitness=save_member_fitness,
     load_population=load_population,
-    select_winner=select_winner,
 )
 ```
 
@@ -102,19 +102,17 @@ controller = ClanController(
 : `"min"` or `"max"`. Fitness ties select the lower member ID.
 
 `seed`
-: Experiment seed. The controller combines it with `member_id` for a deterministic
-member-specific random stream.
+: Stable local trial seed. Mutation combines it with `member_id` and the next round
+index. The seed remains constructor configuration and is not inherited through the
+common winner checkpoint.
 
 `save_member_fitness`
 : Callback used by each local `ClanRound` to publish itself.
 
 `load_population`
 : Callback receiving a round index and returning `list[ClanRound]` for that completed
-round.
-
-`select_winner`
-: Callback receiving the winning integer member ID. It applies externally owned
-consequences such as model or optimizer transfer; it does not select the winner.
+round. It may block or yield through an external asynchronous runtime until the
+complete population exists.
 
 ### `get_config()`
 
@@ -124,31 +122,62 @@ Returns this process's controlled values for the current round.
 
 Completes and publishes this process's current round.
 
+### `is_round_winner()`
+
+Loads and validates the complete current population, selects one stable winner, caches
+its integer member ID, and returns whether the local process is that winner. Repeated
+calls for the same round use the cached decision rather than reloading the population.
+
+Checkpoint lifecycle code uses the answer before mutation:
+
+```python
+if controller.is_round_winner():
+    save_winning_checkpoint()
+```
+
 ### `advance()`
 
-Loads the current population, checks that it contains exactly one completed record for
-every expected member, and selects the winner. The controller then manufactures this
-member's complete next `ClanRound` from the winning round, including any local
-mutation, before calling `select_winner(winner_id)` and installing the prepared round.
+Constructs this member's next `ClanRound` only after the common winning checkpoint has
+been loaded. The restored winner member retains the winning optimizer configuration;
+every other member mutates from that same restored configuration.
 
-The winning member keeps the winning configuration. Every other member mutates from
-that same winning configuration.
+Calling `advance()` before winner resolution or before loading the winning checkpoint
+raises `RuntimeError`.
 
-### `state_dict()` and `load_state_dict(state)`
+### `state_dict()`
 
-Save and restore the local random stream together with the current round index,
-configuration, and optional fitness. Callback implementations and fixed constructor
-settings remain external configuration.
+Returns:
+
+```python
+{
+    "round_index": int,
+    "config": dict[str, float],
+    "fitness": float | None,
+    "winner_id": int | None,
+}
+```
+
+The winner saves this state after `is_round_winner()` and before `advance()`. The
+common checkpoint intentionally excludes mutable RNG state and local member identity.
+
+### `load_state_dict(state)`
+
+Restores the common completed winner state and cached winner ID while preserving the
+receiving process's local member identity, trial seed, callbacks, mutation rules, and
+mode. A later `advance()` derives that process's next configuration.
 
 ## Framework handoff
 
-A framework integration supplies callback implementations and maps its own trial or
-process identity to the controller's integer member ID. It owns synchronization,
-checkpoint movement, model and optimizer transfer, pause and resume, and all other
-framework lifecycle operations.
+A framework integration supplies the two callbacks, injects the controller into its
+checkpoint lifecycle, and maps framework trial/process identity to integer member ID.
+It owns:
 
-The integration may also persist the winning member ID for each round as a PBT replay
-path. Durable replay history and execution belong to that integration because they
-must remain aligned with framework round identity and checkpoint storage. Since every
-local controller observes the same winner, one authority should record the path or the
-write should be idempotently keyed by round.
+- result transport and complete-population rendezvous;
+- deciding when the winner saves;
+- making the winning checkpoint available;
+- restoring that checkpoint in every process;
+- applying `controller.get_config()` to the restored optimizer;
+- pause, resume, and distributed execution; and
+- durable replay history aligned with framework round and checkpoint identity.
+
+The controller owns only the winner decision and local next-configuration policy.
