@@ -1,7 +1,6 @@
 import pytest
 
 from clan_based_tuning.ray.scheduler import ClanBasedTraining
-from clan_based_tuning.spec import CLAN_METADATA_KEY
 
 
 def test_scheduler_disables_buffered_results():
@@ -13,11 +12,11 @@ def test_scheduler_does_not_own_optimizer_mapping_schema():
 
 
 @pytest.mark.requires_ray
-def test_scheduler_reserves_only_its_integration_metadata_key():
-    with pytest.raises(ValueError, match="reserved integration metadata"):
+def test_scheduler_rejects_ray_exploration_policy():
+    with pytest.raises(TypeError, match="ClanController owns mutation"):
         ClanBasedTraining(
             population_size=2,
             metric="fitness",
             mode="min",
-            hyperparam_mutations={CLAN_METADATA_KEY: [1, 2]},
+            hyperparam_mutations={"lr": [0.1, 0.2]},
         )
