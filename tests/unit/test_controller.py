@@ -67,9 +67,7 @@ def _load_winner_and_advance(controllers, winner_index):
 def test_fake_processes_save_one_winner_then_start_from_its_checkpoint():
     """Only the winner contributes state; every process loads it before mutation."""
     store = RoundStore(population_size=3)
-    controllers = [
-        _controller(rank, store, initial_value=float(rank + 1)) for rank in range(3)
-    ]
+    controllers = [_controller(rank, store, initial_value=float(rank + 1)) for rank in range(3)]
 
     _publish_round(controllers, [4.0, 1.0, 2.0])
     winner_flags = [controller.is_round_winner() for controller in controllers]
@@ -102,9 +100,7 @@ def test_fake_processes_save_one_winner_then_start_from_its_checkpoint():
 def test_winner_query_is_cached_for_checkpoint_code():
     """Repeated save-hook checks do not reload the distributed population."""
     store = RoundStore(population_size=2)
-    controllers = [
-        _controller(rank, store, initial_value=float(rank + 1)) for rank in range(2)
-    ]
+    controllers = [_controller(rank, store, initial_value=float(rank + 1)) for rank in range(2)]
     _publish_round(controllers, [0.0, 1.0])
 
     assert controllers[0].is_round_winner()
