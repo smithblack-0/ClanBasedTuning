@@ -53,6 +53,7 @@ class ClanControllerRestore(Callback):
     def continue_selected_local_state(self, trainer: Trainer) -> None:
         """Advance a winner that Tune resumed without reconstructing its actor."""
 
+        self.controller.accept_local_winner_checkpoint()
         self.controller.advance()
         self.apply_current_config(trainer)
 
@@ -93,8 +94,8 @@ class ClanTuneReportCallback(Callback):
             raise ValueError(f"unknown Lightning callback hook: {on!r}")
         setattr(self, hook_name, self._handle)
 
-    def _report_dict(self, trainer: Trainer) -> dict[str, float]:
-        report: dict[str, float] = {}
+    def _report_dict(self, trainer: Trainer) -> dict[str, Any]:
+        report: dict[str, Any] = {}
         keys = self._metrics.keys() if isinstance(self._metrics, Mapping) else self._metrics
         for key in keys:
             metric = self._metrics[key] if isinstance(self._metrics, Mapping) else key
