@@ -143,6 +143,4 @@ class Population:
     def missing_fitness_ranks(self):
         """Return ranks whose members have not reported fitness."""
 
-        return tuple(
-            rank for rank in self.ranks if self.members[rank].fitness is None
-        )
+        return tuple(rank for rank in self.ranks if self.members[rank].fitness is None)
