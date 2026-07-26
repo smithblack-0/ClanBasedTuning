@@ -32,45 +32,77 @@ It is not a population wrapper or a framework member.
 
 A controller owns only its local member's progression. It never constructs an entire
 population. At `advance()` it briefly loads the completed rounds as an ordinary
-`list[ClanRound]`, selects the winner, informs the external runtime, and constructs
-only its own next round.
+`list[ClanRound]`, selects the winner, manufactures only its own next round, informs
+the external runtime, and installs that prepared round.
 
-## Per-process sequence
+## Fake multi-process loop
 
-Each process follows the same loop:
+The framework-independent lifecycle can be exercised with ordinary in-memory mocks:
 
 ```python
-controller = ClanController(
-    member_id=rank,
-    population_size=4,
-    initial_config=trial_config,
-    mutations=mutations,
-    mode="min",
-    seed=17,
-    save_member_fitness=save_member_fitness,
-    load_population=load_population,
-    select_winner=select_winner,
-)
+class RoundStore:
+    def __init__(self, population_size):
+        self.population_size = population_size
+        self.saved = {}
+
+    def save(self, round_):
+        self.saved[(round_.round_index, round_.member_id)] = round_
+
+    def load(self, round_index):
+        return [
+            self.saved[(round_index, member_id)]
+            for member_id in range(self.population_size)
+        ]
+
+
+population_size = 3
+store = RoundStore(population_size)
+winner_calls = [[] for _ in range(population_size)]
+controllers = [
+    ClanController(
+        member_id=member_id,
+        population_size=population_size,
+        initial_config=initial_configs[member_id],
+        mutations=mutations,
+        mode="min",
+        seed=17,
+        save_member_fitness=store.save,
+        load_population=store.load,
+        select_winner=winner_calls[member_id].append,
+    )
+    for member_id in range(population_size)
+]
 
 for _ in range(number_of_rounds):
-    train(controller.get_config())
-    controller.set_fitness(evaluate())
-    controller.advance()
+    for controller in controllers:
+        train(controller.get_config())
+        controller.set_fitness(evaluate(controller))
+
+    for controller in controllers:
+        controller.advance()
 ```
 
-`set_fitness()` publishes this process's completed round. `advance()` then performs:
+The first inner loop stands in for parallel training and reporting. The second stands
+in for every process observing the complete round, selecting the same winner,
+transferring externally owned state through `select_winner`, and installing its own
+next `ClanRound`.
+
+## Advance sequence
+
+`advance()` performs:
 
 ```text
 load completed rounds
 → verify the expected population
 → select the best round
-→ calculate this member's next configuration
+→ manufacture this member's complete next ClanRound
 → tell the runtime which member won
-→ install this member's next ClanRound
+→ install the prepared ClanRound
 ```
 
-All processes load the same completed round and therefore select the same winner.
-Each controller calculates only its own next configuration.
+Mutation is part of manufacturing the next round from the winning round. All local
+calculation therefore finishes before `select_winner` can transfer model, optimizer,
+or checkpoint state.
 
 ## Injected effects
 
@@ -89,9 +121,19 @@ records for the requested round.
 integer member ID so the surrounding runtime can transfer model, optimizer,
 checkpoint, or other externally owned state.
 
-A test can implement these callbacks with an in-memory dictionary. A later Ray
-integration can implement the same effects through Tune without changing the core
-controller.
+A later Ray integration can implement these effects through Tune without changing
+the core controller.
+
+## Replay
+
+The selected winner ID is also the event needed to record a PBT replay path. The core
+controller should continue to emit that event through `select_winner`; durable lineage
+storage, association with checkpoints and round identities, and execution of a later
+replay run belong to Milestone 3 because they depend on the external lifecycle.
+
+No additional replay object or callback is required in Milestone 2. A Milestone 3
+`select_winner` implementation can both transfer the selected state and append the
+winning member to its durable replay history.
 
 ## Failure boundary
 
