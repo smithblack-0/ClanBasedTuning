@@ -1,14 +1,9 @@
 """CPU contract probe for explicit winner-only Lightning/DDP composition.
 
-This does not emulate Ray Tune scheduling. It isolates the trial-local framework seam:
-
-1. independently launched processes join one DDP group;
-2. DDP reduces gradients without synchronizing divergent parameters;
-3. each controller reaches the same winner decision;
-4. only that winning process writes the shared Lightning checkpoint;
-5. every next-generation process loads the same winner checkpoint;
-6. controller restore advances each local optimizer configuration; and
-7. restarted processes reform DDP and continue diverging.
+This isolates the trial-local framework seam without emulating Ray scheduling. Two
+independently launched processes share gradients, select one parent, write one complete
+Lightning checkpoint, restore both next-generation processes from it, apply their local
+controller configurations, reform DDP, and diverge again.
 """
 
 from __future__ import annotations
@@ -32,14 +27,12 @@ from clan_based_tuning import (
     ClanRound,
     MutationSpec,
 )
-from clan_based_tuning.lightning.environment import (
-    ClanLightningEnvironment,
-    _ClanRuntime,
-)
+from clan_based_tuning.lightning.checkpoint import save_local_checkpoint
+from clan_based_tuning.lightning.environment import ClanLightningEnvironment, _ClanRuntime
 
 
 class ProbeScalarTrial(LightningModule):
-    """One-parameter trial whose state is easy to audit exactly."""
+    """One-parameter trial whose complete state is easy to audit."""
 
     def __init__(self, initial_weight: float) -> None:
         super().__init__()
@@ -59,8 +52,7 @@ class ProbeScalarTrial(LightningModule):
 
     def on_train_start(self) -> None:
         optimizer = self.trainer.optimizers[0]
-        optimizer_state = optimizer.state.get(self.weight, {})
-        momentum = optimizer_state.get("momentum_buffer")
+        momentum = optimizer.state.get(self.weight, {}).get("momentum_buffer")
         self.start_state = {
             "global_step": self.trainer.global_step,
             "weight": float(self.weight.item()),
@@ -79,15 +71,15 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
+def _discard_round(round_: ClanRound) -> None:
+    del round_
+
+
 def _completed_population(round_index: int) -> list[ClanRound]:
     return [
         ClanRound(0, round_index, {"lr": 0.1}, _discard_round, 0.0),
         ClanRound(1, round_index, {"lr": 0.2}, _discard_round, 1.0),
     ]
-
-
-def _discard_round(round_: ClanRound) -> None:
-    del round_
 
 
 def _worker(
@@ -111,7 +103,6 @@ def _worker(
             "NODE_RANK": str(rank),
         }
     )
-
     trial_directory = Path(stage_directory) / f"trial-{rank}"
     trial_directory.mkdir(parents=True, exist_ok=True)
 
@@ -144,14 +135,12 @@ def _worker(
         checkpoint_available=restore_paths[rank] is not None,
     )
     model = ProbeScalarTrial(initial_weight=initial_weights[rank])
-    environment = ClanLightningEnvironment(runtime)
-    strategy = ClanDDPStrategy(runtime, process_group_backend="gloo")
     trainer = Trainer(
         accelerator="cpu",
         devices=1,
         num_nodes=1,
-        strategy=strategy,
-        plugins=[environment],
+        strategy=ClanDDPStrategy(runtime, process_group_backend="gloo"),
+        plugins=[ClanLightningEnvironment(runtime)],
         callbacks=[restore],
         max_steps=max_steps,
         max_epochs=10,
@@ -163,15 +152,14 @@ def _worker(
         use_distributed_sampler=False,
         default_root_dir=trial_directory,
     )
-    train_loader = DataLoader(TensorDataset(torch.zeros(1)), batch_size=1)
     trainer.fit(
         model,
-        train_dataloaders=train_loader,
+        train_dataloaders=DataLoader(TensorDataset(torch.zeros(1)), batch_size=1),
         ckpt_path=restore_paths[rank],
     )
 
     optimizer = trainer.optimizers[0]
-    momentum_buffer = optimizer.state[model.weight]["momentum_buffer"]
+    momentum = optimizer.state[model.weight]["momentum_buffer"]
     result = {
         "rank": rank,
         "start": model.start_state,
@@ -179,7 +167,7 @@ def _worker(
             "global_step": trainer.global_step,
             "weight": float(model.weight.item()),
             "learning_rate": float(optimizer.param_groups[0]["lr"]),
-            "momentum": float(momentum_buffer.item()),
+            "momentum": float(momentum.item()),
             "reduced_gradient": model.reduced_gradient,
         },
     }
@@ -187,10 +175,9 @@ def _worker(
     if save_winner:
         controller.set_fitness(float(rank))
         if controller.is_round_winner():
-            trainer.save_checkpoint(trial_directory / "winner.ckpt")
+            save_local_checkpoint(trainer, trial_directory / "winner.ckpt")
     (trial_directory / "result.json").write_text(
-        json.dumps(result, indent=2, sort_keys=True),
-        encoding="utf-8",
+        json.dumps(result, indent=2, sort_keys=True), encoding="utf-8"
     )
 
 
@@ -237,25 +224,22 @@ def run_probe(output_directory: Path) -> dict[str, Any]:
         max_steps=1,
         save_winner=True,
     )
-
-    source_checkpoint = output_directory / "window-1" / "trial-0" / "winner.ckpt"
-    losing_checkpoint = output_directory / "window-1" / "trial-1" / "winner.ckpt"
-    if not source_checkpoint.is_file() or losing_checkpoint.exists():
+    source = output_directory / "window-1" / "trial-0" / "winner.ckpt"
+    losing = output_directory / "window-1" / "trial-1" / "winner.ckpt"
+    if not source.is_file() or losing.exists():
         raise AssertionError("Exactly the selected process must write the winner checkpoint")
 
     stage_two = _run_stage(
         output_directory / "window-2",
         initial_weights=(-100.0, 100.0),
         initial_learning_rates=(9.0, 9.0),
-        restore_paths=(str(source_checkpoint), str(source_checkpoint)),
+        restore_paths=(str(source), str(source)),
         max_steps=2,
         save_winner=False,
     )
-
     report = {"window_1": stage_one, "window_2": stage_two}
     (output_directory / "report.json").write_text(
-        json.dumps(report, indent=2, sort_keys=True),
-        encoding="utf-8",
+        json.dumps(report, indent=2, sort_keys=True), encoding="utf-8"
     )
     return report
 
