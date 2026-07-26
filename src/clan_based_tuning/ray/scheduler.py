@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
-from clan_based_tuning.spec import CLAN_ROUND_RESULT_KEY, _ClanMetadata
+from clan_based_tuning.spec import (
+    CLAN_CONFIG_KEY,
+    CLAN_MEMBER_ID_KEY,
+    CLAN_ROUND_INDEX_KEY,
+    CLAN_WINNER_ID_KEY,
+    _ClanMetadata,
+)
 
 try:
     from ray.tune.result import SHOULD_CHECKPOINT
@@ -41,9 +48,16 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
             raise ModuleNotFoundError(
                 'Ray Tune support requires: pip install "clan-based-tuning[ray]"'
             )
-        if "hyperparam_mutations" in pbt_kwargs or "custom_explore_fn" in pbt_kwargs:
+        forbidden = {
+            "hyperparam_mutations",
+            "custom_explore_fn",
+            "quantile_fraction",
+        }
+        supplied = forbidden.intersection(pbt_kwargs)
+        if supplied:
+            names = ", ".join(sorted(supplied))
             raise TypeError(
-                "ClanController owns mutation; do not pass Ray PBT exploration policy"
+                f"ClanController owns selection and mutation; do not pass Ray PBT policy: {names}"
             )
         if pbt_kwargs.get("synch", True) is not True:
             raise ValueError("ClanBasedTraining requires synchronous PBT")
@@ -125,8 +139,16 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
                 "ensure the cluster can schedule every member simultaneously."
             )
         self._metadata.bind_trial_config(trial.config)
-        if CLAN_ROUND_RESULT_KEY not in result:
-            raise RuntimeError("Tune result is missing the Clan round decision record")
+        required = {
+            CLAN_MEMBER_ID_KEY,
+            CLAN_ROUND_INDEX_KEY,
+            CLAN_WINNER_ID_KEY,
+            CLAN_CONFIG_KEY,
+        }
+        missing = required.difference(result)
+        if missing:
+            names = ", ".join(sorted(missing))
+            raise RuntimeError(f"Tune result is missing Clan transition fields: {names}")
         return super().on_trial_result(tune_controller, trial, result)
 
     def _quantiles(self):
@@ -136,15 +158,14 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         for trial, state in self._trial_state.items():
             if trial.is_finished() or state.last_result is None:
                 continue
-            decision = state.last_result[CLAN_ROUND_RESULT_KEY]
-            reports.append((trial, state.last_result, decision))
+            reports.append((trial, state.last_result))
 
         if len(reports) != self.population_size:
             return [], []
 
-        round_indices = {int(decision["round_index"]) for _, _, decision in reports}
-        winner_ids = {int(decision["winner_id"]) for _, _, decision in reports}
-        member_ids = {int(decision["member_id"]) for _, _, decision in reports}
+        round_indices = {int(result[CLAN_ROUND_INDEX_KEY]) for _, result in reports}
+        winner_ids = {int(result[CLAN_WINNER_ID_KEY]) for _, result in reports}
+        member_ids = {int(result[CLAN_MEMBER_ID_KEY]) for _, result in reports}
         if len(round_indices) != 1 or len(winner_ids) != 1:
             raise RuntimeError("Clan processes disagreed on the completed round or winner")
         if member_ids != set(range(self.population_size)):
@@ -153,18 +174,18 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
         round_index = round_indices.pop()
         winner_id = winner_ids.pop()
         winner_matches = [
-            (trial, result, decision)
-            for trial, result, decision in reports
-            if int(decision["member_id"]) == winner_id
+            (trial, result)
+            for trial, result in reports
+            if int(result[CLAN_MEMBER_ID_KEY]) == winner_id
         ]
         if len(winner_matches) != 1:
             raise RuntimeError("selected Clan winner does not identify exactly one Tune trial")
-        winner_trial, winner_result, winner_decision = winner_matches[0]
+        winner_trial, winner_result = winner_matches[0]
         if winner_result.get(SHOULD_CHECKPOINT) is not True:
             raise RuntimeError("the controller-selected winner did not report a checkpoint")
         if any(
             result.get(SHOULD_CHECKPOINT) is True and trial is not winner_trial
-            for trial, result, _ in reports
+            for trial, result in reports
         ):
             raise RuntimeError("a losing Clan member reported an unnecessary checkpoint")
 
@@ -174,11 +195,11 @@ class ClanBasedTraining(PopulationBasedTraining):  # type: ignore[misc]
                     "round_index": round_index,
                     "winner_id": winner_id,
                     "trial_id": winner_trial.trial_id,
-                    "config": dict(winner_decision["config"]),
+                    "config": json.loads(winner_result[CLAN_CONFIG_KEY]),
                 }
             )
 
-        losers = [trial for trial, _, _ in reports if trial is not winner_trial]
+        losers = [trial for trial, _ in reports if trial is not winner_trial]
         return losers, [winner_trial]
 
     def _get_new_config(self, trial, trial_to_clone):
