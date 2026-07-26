@@ -1,8 +1,10 @@
 """Framework-independent per-process lifecycle for Clan Tuning.
 
 One controller persists beside one training process. Its callbacks publish completed
-rounds, load the completed Clan, and apply the selected winner through an externally
-owned distributed implementation.
+rounds and load the completed Clan through an externally owned distributed
+implementation. Checkpoint integration asks whether this process won, saves only that
+winning state, loads the shared winning checkpoint into every process, and then asks
+the controller to manufacture the local next round.
 """
 
 import random
@@ -12,7 +14,14 @@ from clan_based_tuning.controller_types import ClanRound, MutationSpec
 
 
 class ClanController:
-    """Advance one local clan member between training rounds."""
+    """Progress one local member around the shared winner-checkpoint boundary.
+
+    The controller owns fitness comparison and optimizer-configuration mutation. It
+    does not own checkpoint creation, checkpoint transport, framework restoration, or
+    process synchronization. The surrounding checkpoint lifecycle depends on this
+    controller to learn whether the local process won and later calls ``advance()``
+    only after the common winning checkpoint has been loaded.
+    """
 
     def __init__(
         self,
@@ -25,7 +34,6 @@ class ClanController:
         seed: int,
         save_member_fitness: Callable[[ClanRound], None],
         load_population: Callable[[int], list[ClanRound]],
-        select_winner: Callable[[int], None],
     ):
         if population_size < 2:
             raise ValueError("population_size must be at least two")
@@ -38,10 +46,11 @@ class ClanController:
         self.population_size = population_size
         self._mutations = dict(mutations)
         self._mode = mode
-        self._random = random.Random(f"{seed}:{member_id}")
+        self._seed = seed
         self._save_member_fitness = save_member_fitness
         self._load_population = load_population
-        self._select_winner = select_winner
+        self._winner_id = None
+        self._winning_checkpoint_loaded = False
         self._round = ClanRound(
             member_id=member_id,
             round_index=0,
@@ -59,44 +68,66 @@ class ClanController:
 
         self._round.set_fitness(fitness)
 
-    def advance(self):
-        """Adopt the winner and construct this process's next round.
+    def is_round_winner(self):
+        """Return whether this process owns the state selected for checkpointing.
 
-        The load callback owns rendezvous and transport. The controller retains one
-        corruption guard: it refuses to advance unless the callback returns exactly
-        one completed record for every expected member and for the requested round.
+        The population callback may block until all member results are available. The
+        selected member ID is cached because checkpoint creation and later restoration
+        belong to framework lifecycle code outside the controller.
         """
 
-        rounds = self._load_completed_population()
-        winner = self._find_winner(rounds)
-        next_round = ClanRound(
+        if self._winner_id is None:
+            rounds = self._load_completed_population()
+            self._winner_id = self._find_winner(rounds).member_id
+        return self.member_id == self._winner_id
+
+    def advance(self):
+        """Construct this process's next round from the restored winning state.
+
+        Every process must first load the one checkpoint saved by the winning process.
+        Loading restores the completed winning configuration and selected member ID
+        while preserving this process's local member identity and trial seed. The
+        selected member retains the winning configuration; every other member mutates
+        it locally for the next round.
+        """
+
+        if self._winner_id is None:
+            raise RuntimeError("the round winner must be resolved before advancing")
+        if not self._winning_checkpoint_loaded:
+            raise RuntimeError("the winning checkpoint must be loaded before advancing")
+
+        next_round_index = self._round.round_index + 1
+        config = self._round.get_config()
+        if self.member_id != self._winner_id:
+            config = self._mutate(config, next_round_index)
+
+        self._round = ClanRound(
             member_id=self.member_id,
-            round_index=self._round.round_index + 1,
-            config=(
-                winner.get_config()
-                if self.member_id == winner.member_id
-                else self._mutate(winner.config)
-            ),
+            round_index=next_round_index,
+            config=config,
             save_member_fitness=self._save_member_fitness,
         )
-
-        self._select_winner(winner.member_id)
-        self._round = next_round
+        self._winner_id = None
+        self._winning_checkpoint_loaded = False
 
     def state_dict(self):
-        """Return the local state required to resume this controller."""
+        """Return controller state to place in a framework checkpoint.
+
+        The winner saves this state after selection and before mutation. The trial seed
+        is intentionally absent: it belongs to the receiving process configuration,
+        not to the common winning checkpoint.
+        """
 
         return {
-            "random_state": self._random.getstate(),
             "round_index": self._round.round_index,
             "config": self._round.get_config(),
             "fitness": self._round.fitness,
+            "winner_id": self._winner_id,
         }
 
     def load_state_dict(self, state):
-        """Restore a state previously returned by ``state_dict``."""
+        """Load common winner state while preserving process-local identity and seed."""
 
-        self._random.setstate(state["random_state"])
         self._round = ClanRound(
             member_id=self.member_id,
             round_index=state["round_index"],
@@ -104,6 +135,8 @@ class ClanController:
             save_member_fitness=self._save_member_fitness,
             fitness=state["fitness"],
         )
+        self._winner_id = state["winner_id"]
+        self._winning_checkpoint_loaded = self._winner_id is not None
 
     def _load_completed_population(self):
         round_index = self._round.round_index
@@ -124,8 +157,9 @@ class ClanController:
             return min(rounds, key=lambda round_: (round_.fitness, round_.member_id))
         return max(rounds, key=lambda round_: (round_.fitness, -round_.member_id))
 
-    def _mutate(self, base_values):
+    def _mutate(self, base_values, round_index):
+        random_stream = random.Random(f"{self._seed}:{self.member_id}:{round_index}")
         return {
-            name: mutation.mutate(base_values[name], self._random)
+            name: mutation.mutate(base_values[name], random_stream)
             for name, mutation in self._mutations.items()
         }
