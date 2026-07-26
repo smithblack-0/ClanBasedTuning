@@ -1,86 +1,131 @@
-"""Framework-independent population transition for Clan Tuning.
+"""Framework-independent per-process lifecycle for Clan Tuning.
 
-The named data contracts live in :mod:`clan_based_tuning.controller_types`.
-``ClanController`` assumes those internal objects are trusted. It owns only the
-selection, mutation, and random-stream transition between generations.
+One controller persists beside one training process. Its callbacks publish completed
+rounds, load the completed Clan, and apply the selected winner through an externally
+owned distributed implementation.
 """
 
 import random
+from collections.abc import Callable
 
-from clan_based_tuning.controller_types import (
-    ControllerPolicy,
-    Population,
-    PopulationMember,
-)
+from clan_based_tuning.controller_types import ClanRound, MutationSpec
 
 
 class ClanController:
-    """Select one parent and produce the next trusted ``Population``."""
+    """Advance one local clan member between training rounds."""
 
-    def __init__(self, policy):
-        if not isinstance(policy, ControllerPolicy):
-            raise TypeError("policy must be a ControllerPolicy")
-        self._policy = policy
-        self._random = random.Random(policy.seed)
+    def __init__(
+        self,
+        *,
+        member_id: int,
+        population_size: int,
+        initial_config: dict[str, float],
+        mutations: dict[str, MutationSpec],
+        mode: str,
+        seed: int,
+        save_member_fitness: Callable[[ClanRound], None],
+        load_population: Callable[[int], list[ClanRound]],
+        select_winner: Callable[[int], None],
+    ):
+        if population_size < 2:
+            raise ValueError("population_size must be at least two")
+        if not 0 <= member_id < population_size:
+            raise ValueError("member_id must identify one member of the population")
+        if mode not in {"min", "max"}:
+            raise ValueError("mode must be 'min' or 'max'")
 
-    @property
-    def population_size(self):
-        """Return the fixed number of ranks in this policy."""
+        self.member_id = member_id
+        self.population_size = population_size
+        self._mutations = dict(mutations)
+        self._mode = mode
+        self._random = random.Random(f"{seed}:{member_id}")
+        self._save_member_fitness = save_member_fitness
+        self._load_population = load_population
+        self._select_winner = select_winner
+        self._round = ClanRound(
+            member_id=member_id,
+            round_index=0,
+            config=initial_config,
+            save_member_fitness=save_member_fitness,
+        )
 
-        return self._policy.population_size
+    def get_config(self):
+        """Return this process's controlled values for the current round."""
 
-    def initial_population(self):
-        """Create the first population from the policy defaults."""
+        return self._round.get_config()
 
-        defaults = {name: mutation.default for name, mutation in self._policy.mutations.items()}
-        members = {0: PopulationMember(defaults)}
-        for rank in range(1, self.population_size):
-            members[rank] = PopulationMember(self._mutate(defaults))
-        return Population(members)
+    def set_fitness(self, fitness):
+        """Publish this process's completed current round."""
 
-    def next_generation(self, population):
-        """Select the sole parent and return the next population.
+        self._round.set_fitness(fitness)
 
-        The external lifecycle supplies one trusted ``Population`` of the configured
-        size and attaches one fitness to every member. Milestone 3 owns validation
-        of the framework data used to construct that population.
+    def advance(self):
+        """Adopt the winner and construct this process's next round.
+
+        The load callback owns rendezvous and transport. The controller retains one
+        corruption guard: it refuses to advance unless the callback returns exactly
+        one completed record for every expected member and for the requested round.
         """
 
-        if not isinstance(population, Population):
-            raise TypeError("population must be a Population")
-        if len(population) != self.population_size:
-            raise ValueError(f"population must contain exactly {self.population_size} ranks")
-        missing_ranks = population.missing_fitness_ranks()
-        if missing_ranks:
-            raise RuntimeError(f"population is missing fitness for ranks {missing_ranks}")
+        rounds = self._load_completed_population()
+        winner = self._find_winner(rounds)
+        next_config = (
+            winner.get_config()
+            if self.member_id == winner.member_id
+            else self._mutate(winner.config)
+        )
 
-        def fitness(rank):
-            return population.members[rank].fitness
-
-        if self._policy.mode == "min":
-            parent_rank = min(population.ranks, key=fitness)
-        else:
-            parent_rank = max(population.ranks, key=fitness)
-
-        parent_values = population.members[parent_rank].hyperparameters
-        members = {}
-        for rank in population.ranks:
-            values = dict(parent_values) if rank == parent_rank else self._mutate(parent_values)
-            members[rank] = PopulationMember(values)
-        return parent_rank, Population(members)
+        self._select_winner(winner.member_id)
+        self._round = ClanRound(
+            member_id=self.member_id,
+            round_index=self._round.round_index + 1,
+            config=next_config,
+            save_member_fitness=self._save_member_fitness,
+        )
 
     def state_dict(self):
-        """Return the random-stream state required for identical continuation."""
+        """Return the local state required to resume this controller."""
 
-        return {"random_state": self._random.getstate()}
+        return {
+            "random_state": self._random.getstate(),
+            "round_index": self._round.round_index,
+            "config": self._round.get_config(),
+            "fitness": self._round.fitness,
+        }
 
     def load_state_dict(self, state):
         """Restore a state previously returned by ``state_dict``."""
 
         self._random.setstate(state["random_state"])
+        self._round = ClanRound(
+            member_id=self.member_id,
+            round_index=state["round_index"],
+            config=state["config"],
+            save_member_fitness=self._save_member_fitness,
+            fitness=state["fitness"],
+        )
+
+    def _load_completed_population(self):
+        round_index = self._round.round_index
+        rounds = self._load_population(round_index)
+        expected_ids = set(range(self.population_size))
+        actual_ids = {round_.member_id for round_ in rounds}
+
+        if len(rounds) != self.population_size or actual_ids != expected_ids:
+            raise RuntimeError("population is incomplete or contains duplicate members")
+        if any(round_.round_index != round_index for round_ in rounds):
+            raise RuntimeError("population contains results from the wrong round")
+        if any(round_.fitness is None for round_ in rounds):
+            raise RuntimeError("population contains a member without fitness")
+        return rounds
+
+    def _find_winner(self, rounds):
+        if self._mode == "min":
+            return min(rounds, key=lambda round_: (round_.fitness, round_.member_id))
+        return max(rounds, key=lambda round_: (round_.fitness, -round_.member_id))
 
     def _mutate(self, base_values):
         return {
             name: mutation.mutate(base_values[name], self._random)
-            for name, mutation in self._policy.mutations.items()
+            for name, mutation in self._mutations.items()
         }
