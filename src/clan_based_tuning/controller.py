@@ -3,8 +3,8 @@
 One controller persists beside one training process. Its callbacks publish completed
 rounds and load the completed Clan through an externally owned distributed
 implementation. Checkpoint integration asks whether this process won, saves only that
-winning state, loads the shared winning checkpoint into every process, and then asks
-the controller to manufacture the local next round.
+winning state, loads the shared winning checkpoint into receiving processes, and then
+asks the controller to manufacture the local next round.
 """
 
 import random
@@ -20,7 +20,7 @@ class ClanController:
     does not own checkpoint creation, checkpoint transport, framework restoration, or
     process synchronization. The surrounding checkpoint lifecycle depends on this
     controller to learn whether the local process won and later calls ``advance()``
-    only after the common winning checkpoint has been loaded.
+    from the selected local state or from the loaded common winner state.
     """
 
     def __init__(
@@ -58,6 +58,18 @@ class ClanController:
             save_member_fitness=save_member_fitness,
         )
 
+    @property
+    def round_index(self):
+        """Return the current completed-or-training round index."""
+
+        return self._round.round_index
+
+    @property
+    def winner_id(self):
+        """Return the cached current-round winner, or ``None`` before comparison."""
+
+        return self._winner_id
+
     def get_config(self):
         """Return this process's controlled values for the current round."""
 
@@ -82,18 +94,17 @@ class ClanController:
         return self.member_id == self._winner_id
 
     def advance(self):
-        """Construct this process's next round from the restored winning state.
+        """Construct this process's next round from the selected winning state.
 
-        Every process must first load the one checkpoint saved by the winning process.
-        Loading restores the completed winning configuration and selected member ID
-        while preserving this process's local member identity and trial seed. The
-        selected member retains the winning configuration; every other member mutates
-        it locally for the next round.
+        A losing process must first load the one checkpoint saved by the winner. The
+        winning process may continue from its identical local state after its
+        checkpoint has been accepted by the framework. The winner retains the selected
+        optimizer configuration; every other member mutates it locally.
         """
 
         if self._winner_id is None:
             raise RuntimeError("the round winner must be resolved before advancing")
-        if not self._winning_checkpoint_loaded:
+        if self.member_id != self._winner_id and not self._winning_checkpoint_loaded:
             raise RuntimeError("the winning checkpoint must be loaded before advancing")
 
         next_round_index = self._round.round_index + 1
@@ -111,7 +122,7 @@ class ClanController:
         self._winning_checkpoint_loaded = False
 
     def state_dict(self):
-        """Return controller state to place in a framework checkpoint.
+        """Return controller state to place in the winner's framework checkpoint.
 
         The winner saves this state after selection and before mutation. The trial seed
         is intentionally absent: it belongs to the receiving process configuration,
