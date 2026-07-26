@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from clan_based_tuning.ray.rendezvous import RendezvousState
+from clan_based_tuning.ray.rendezvous import RendezvousState, RoundResultState
 
 
 def test_rendezvous_assigns_one_session_after_full_population_arrives():
@@ -46,3 +46,24 @@ def test_rendezvous_assigns_ranks_from_complete_sorted_trial_ids():
     state.register_members(["trial-c", "trial-a", "trial-b"])
 
     assert state.member_ranks == {"trial-a": 0, "trial-b": 1, "trial-c": 2}
+
+
+def test_round_result_state_returns_plain_population_only_when_complete():
+    state = RoundResultState(population_size=2)
+    first = {"member_id": 0, "round_index": 3, "config": {"lr": 0.1}, "fitness": 2.0}
+    second = {"member_id": 1, "round_index": 3, "config": {"lr": 0.2}, "fitness": 1.0}
+
+    state.submit(0, first)
+    assert state.get_population(3) is None
+    state.submit(1, second)
+
+    assert state.get_population(3) == [first, second]
+
+
+def test_round_result_state_rejects_duplicate_scientific_result():
+    state = RoundResultState(population_size=2)
+    record = {"member_id": 0, "round_index": 0, "config": {"lr": 0.1}, "fitness": 1.0}
+    state.submit(0, record)
+
+    with pytest.raises(RuntimeError, match="more than once"):
+        state.submit(0, record)
