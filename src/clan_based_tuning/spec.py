@@ -8,7 +8,10 @@ from typing import Any
 from uuid import uuid4
 
 CLAN_METADATA_KEY = "__clan_based_training__"
-CLAN_ROUND_RESULT_KEY = "__clan_round_result__"
+CLAN_MEMBER_ID_KEY = "clan/member_id"
+CLAN_ROUND_INDEX_KEY = "clan/round_index"
+CLAN_WINNER_ID_KEY = "clan/winner_id"
+CLAN_CONFIG_KEY = "clan/config_json"
 CLAN_PROTOCOL_VERSION = 1
 
 
