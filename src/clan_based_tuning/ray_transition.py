@@ -179,9 +179,17 @@ def apply_ray_transition(
 class ClanTrialScheduler(FIFOScheduler):
     """Collect process-local decisions and execute one native Tune transition."""
 
-    def __init__(self, *, apply_transition: ApplyTransition = apply_ray_transition):
+    def __init__(
+        self,
+        *,
+        apply_transition: ApplyTransition = apply_ray_transition,
+        final_round_index: int | None = None,
+    ):
         super().__init__()
+        if final_round_index is not None and final_round_index < 0:
+            raise ValueError("the final Clan round index cannot be negative")
         self._apply_transition = apply_transition
+        self._final_round_index = final_round_index
         self._pending_round: int | None = None
         self._arrivals: dict[int, _Arrival] = {}
         self._last_completed_round: int | None = None
@@ -232,7 +240,10 @@ class ClanTrialScheduler(FIFOScheduler):
         if winner_id not in expected_members:
             raise RuntimeError("the selected winner is outside the Ray population")
 
-        self._apply_transition(tune_controller, arrivals)
+        if self._pending_round == self._final_round_index:
+            tune_controller.request_stop_experiment()
+        else:
+            self._apply_transition(tune_controller, arrivals)
         self._last_completed_round = self._pending_round
         self._pending_round = None
         self._arrivals.clear()

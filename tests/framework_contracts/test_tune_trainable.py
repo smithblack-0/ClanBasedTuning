@@ -203,6 +203,27 @@ def test_trainable_step_runs_one_window_and_returns_local_transition(
     assert trainable._exchange.announcements == [{"round_index": 0, "member_id": 0, "winner_id": 0}]
 
 
+def test_trainable_exposes_assigned_identity_and_round(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "ray.tune.trainable.trainable.DEFAULT_STORAGE_PATH",
+        str(tmp_path),
+    )
+    exchange = FakeRuntimeExchange()
+    trainable = FakeClanTrainable(
+        config={
+            MEMBER_ID: 1,
+            RUNTIME_EXCHANGE: exchange,
+            NEXT_MEMBER_STATE: {
+                CONTROLLER_STATE: {"round_index": 4},
+                OPTIMIZER_CONFIG: {"lr": 0.2},
+            },
+        }
+    )
+
+    assert trainable.member_id == 1
+    assert trainable.current_round_index == 4
+
+
 def test_trainable_load_checkpoint_requires_lightning_artifact(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "ray.tune.trainable.trainable.DEFAULT_STORAGE_PATH",

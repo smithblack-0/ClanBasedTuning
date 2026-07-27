@@ -40,6 +40,7 @@ class FakeTuneController:
         self.checkpoint_directory = checkpoint_directory
         self.save_calls = []
         self.pause_calls = []
+        self.stop_experiment_calls = 0
 
     def get_trials(self):
         return self.trials
@@ -52,6 +53,9 @@ class FakeTuneController:
     def pause_trial(self, trial, should_checkpoint=True):
         self.pause_calls.append((trial.config[MEMBER_ID], should_checkpoint))
         trial.set_status(Trial.PAUSED)
+
+    def request_stop_experiment(self):
+        self.stop_experiment_calls += 1
 
 
 def _trial(member_id, tune_controller):
@@ -204,6 +208,32 @@ def test_scheduler_composes_with_an_independent_transition_function():
     assert applied_members == [[0, 1]]
     assert tune_controller.save_calls == []
     assert tune_controller.pause_calls == []
+
+
+@pytest.mark.framework_contract
+@pytest.mark.requires_ray
+def test_scheduler_requests_collective_completion_only_after_the_final_population():
+    scheduler = ClanTrialScheduler(final_round_index=0)
+    with tempfile.TemporaryDirectory() as checkpoint_directory:
+        tune_controller = FakeTuneController(checkpoint_directory)
+        trials = [_trial(member_id, tune_controller) for member_id in range(2)]
+
+        scheduler.on_trial_result(
+            tune_controller,
+            trials[0],
+            _result(0, 1, {"lr": 0.5}),
+        )
+        assert tune_controller.stop_experiment_calls == 0
+
+        scheduler.on_trial_result(
+            tune_controller,
+            trials[1],
+            _result(1, 1, {"lr": 1.0}),
+        )
+
+        assert tune_controller.stop_experiment_calls == 1
+        assert tune_controller.save_calls == []
+        assert tune_controller.pause_calls == []
 
 
 @pytest.mark.framework_contract

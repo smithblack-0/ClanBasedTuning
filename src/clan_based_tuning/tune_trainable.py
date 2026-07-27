@@ -107,11 +107,22 @@ class ClanLightningTrainable(Trainable, ABC):
         self._trainer: Trainer | None = None
         self._checkpoint_path: Path | None = None
 
-    def step(self) -> dict[str, Any]:
+    @property
+    def member_id(self) -> int:
+        """Return the stable Clan identity assigned by Tune."""
+
+        return self._member_id
+
+    @property
+    def current_round_index(self) -> int:
+        """Return the round the next Lightning window must execute."""
+
         if self._next_member_state is None:
-            completed_round_index = self._controller.state_dict()["round_index"]
-        else:
-            completed_round_index = self._next_member_state[CONTROLLER_STATE]["round_index"]
+            return self._controller.state_dict()["round_index"]
+        return self._next_member_state[CONTROLLER_STATE]["round_index"]
+
+    def step(self) -> dict[str, Any]:
+        completed_round_index = self.current_round_index
         process_group = self.join_process_group()
         restore = MemberStateRestore(
             controller=self._controller,

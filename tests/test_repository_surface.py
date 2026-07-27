@@ -45,6 +45,7 @@ def test_test_suite_contains_only_current_surface_contracts():
         "tests/framework_contracts/test_tune_trainable.py",
         "tests/framework_contracts/test_lightning_transition.py",
         "tests/framework_contracts/test_lightning_ddp.py",
+        "tests/framework_contracts/test_manual_clan_tuning.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
@@ -52,11 +53,13 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
 
-def test_no_active_training_example_survives_the_reset():
-    """Milestone 3 examples must be rebuilt from accepted integration primitives."""
+def test_active_training_examples_use_only_the_rebuilt_manual_composition():
+    """Historical examples must not return beside the accepted manual path."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"
-    example_files = list(examples_root.rglob("*.py")) if examples_root.exists() else []
+    example_files = {
+        path.relative_to(repository_root).as_posix() for path in examples_root.rglob("*.py")
+    }
 
-    assert example_files == []
+    assert example_files == {"examples/manual_clan_tuning.py"}
