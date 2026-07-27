@@ -39,6 +39,7 @@ store.publish(
 )
 
 population = store.read_population(member_id=0, round_index=0)
+assert population is not None
 assert [record["member_id"] for record in population] == [0, 1]
 ```
 
@@ -46,10 +47,11 @@ The caller supplies an already resolved integer member identity. The store does 
 about Tune trial IDs, actors, retries, polling, timeouts, winner selection, checkpoints,
 or optimizer state.
 
-A population remains unavailable until every member publishes. Once complete, every
-member receives a fresh member-ordered copy. After every member has read the population,
-the payload is released and the round is permanently closed so late duplicate records
-cannot silently create a second scientific event.
+Exactly one logical round is active. A population remains unavailable until every member
+publishes. Once complete, every member receives a fresh member-ordered copy. The final
+reader releases the payload and advances the store to the next round. Late results for the
+closed round and premature results for a future round fail instead of creating overlapping
+population state.
 
 ## Next integration unit
 
