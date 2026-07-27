@@ -13,9 +13,14 @@ from clan_based_tuning.lightning import (
     replicated_sampler,
 )
 from clan_based_tuning.optimizer import apply_optimizer_strategy
-from clan_based_tuning.ray import ClanBasedTraining, tune_checkpoint_path
+from clan_based_tuning.ray import (
+    CLAN_MEMBER_ID_KEY,
+    ClanBasedTraining,
+    tune_checkpoint_path,
+)
 
 __all__ = [
+    "CLAN_MEMBER_ID_KEY",
     "ClanBasedTraining",
     "ClanController",
     "ClanDDPStrategy",
