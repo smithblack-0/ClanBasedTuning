@@ -1,4 +1,4 @@
-"""Private durable metadata shared by the Ray and Lightning integrations."""
+"""Stable configuration keys and private Ray/Lightning integration metadata."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass, field
 from typing import Any
 from uuid import uuid4
 
+CLAN_MEMBER_ID_KEY = "clan_member_id"
 CLAN_METADATA_KEY = "__clan_based_training__"
 CLAN_PROTOCOL_VERSION = 1
 
