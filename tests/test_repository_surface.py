@@ -16,6 +16,7 @@ def test_active_package_contains_only_accepted_controller_and_ray_transition_cod
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/controller_types.py",
+        "src/clan_based_tuning/ray_exchange.py",
         "src/clan_based_tuning/ray_transition.py",
     }
 
@@ -34,6 +35,7 @@ def test_test_suite_contains_only_current_surface_contracts():
     assert test_files == {
         "tests/framework_contracts/test_removed_integration_surface.py",
         "tests/framework_contracts/test_ray_transition.py",
+        "tests/framework_contracts/test_ray_exchange.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
