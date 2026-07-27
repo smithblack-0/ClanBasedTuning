@@ -19,6 +19,26 @@ def test_active_package_contains_only_the_milestone_2_implementation():
     }
 
 
+def test_test_suite_contains_only_current_surface_contracts():
+    """Removed integration tests must not continue asserting obsolete architecture."""
+
+    repository_root = Path(__file__).resolve().parents[1]
+    tests_root = repository_root / "tests"
+    test_files = {
+        path.relative_to(repository_root).as_posix()
+        for path in tests_root.rglob("*.py")
+        if path.name != "__init__.py"
+    }
+
+    assert test_files == {
+        "tests/framework_contracts/test_removed_integration_surface.py",
+        "tests/test_package.py",
+        "tests/test_repository_surface.py",
+        "tests/unit/test_controller.py",
+        "tests/unit/test_controller_types.py",
+    }
+
+
 def test_no_active_training_example_survives_the_reset():
     """Milestone 3 examples must be rebuilt from accepted integration primitives."""
 
