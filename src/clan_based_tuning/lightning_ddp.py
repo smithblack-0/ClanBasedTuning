@@ -23,12 +23,15 @@ __all__ = [
 class ClanProcessGroup:
     """Externally resolved identity for one member in a Clan process group."""
 
+    session_id: int
     global_rank: int
     world_size: int
     master_address: str
     master_port: int
 
     def __post_init__(self) -> None:
+        if self.session_id < 0:
+            raise ValueError("process-group session identity must be non-negative")
         if self.world_size < 2:
             raise ValueError("Clan DDP requires at least two members")
         if not 0 <= self.global_rank < self.world_size:

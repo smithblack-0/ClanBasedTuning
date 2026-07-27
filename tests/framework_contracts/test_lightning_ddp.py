@@ -76,6 +76,7 @@ def _controller(rank):
 def _worker(rank, port, output_directory):
     os.environ["GLOO_SOCKET_IFNAME"] = "lo"
     process_group = ClanProcessGroup(
+        session_id=0,
         global_rank=rank,
         world_size=2,
         master_address="127.0.0.1",
@@ -152,6 +153,7 @@ def test_native_ddp_shares_gradient_then_local_optimizers_diverge(tmp_path):
 @pytest.mark.framework_contract
 def test_strategy_requires_native_init_sync_and_disables_buffer_broadcast():
     process_group = ClanProcessGroup(
+        session_id=0,
         global_rank=0,
         world_size=2,
         master_address="127.0.0.1",
@@ -167,6 +169,7 @@ def test_strategy_requires_native_init_sync_and_disables_buffer_broadcast():
 @pytest.mark.framework_contract
 def test_strategy_rejects_non_bf16_and_ordinary_checkpoint_callbacks():
     process_group = ClanProcessGroup(
+        session_id=0,
         global_rank=0,
         world_size=2,
         master_address="127.0.0.1",
