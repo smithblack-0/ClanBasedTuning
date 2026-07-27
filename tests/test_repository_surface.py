@@ -9,8 +9,7 @@ def test_active_package_contains_only_the_milestone_2_implementation():
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
     source_files = {
-        path.relative_to(repository_root).as_posix()
-        for path in package_root.rglob("*.py")
+        path.relative_to(repository_root).as_posix() for path in package_root.rglob("*.py")
     }
 
     assert source_files == {
