@@ -3,8 +3,8 @@
 from pathlib import Path
 
 
-def test_active_package_contains_only_the_milestone_2_implementation():
-    """Historical framework code must remain outside the importable source tree."""
+def test_active_package_contains_only_accepted_controller_and_ray_transition_code():
+    """Historical framework code must remain outside the active implementation."""
 
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
@@ -16,6 +16,7 @@ def test_active_package_contains_only_the_milestone_2_implementation():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/controller_types.py",
+        "src/clan_based_tuning/ray_transition.py",
     }
 
 
@@ -32,6 +33,7 @@ def test_test_suite_contains_only_current_surface_contracts():
 
     assert test_files == {
         "tests/framework_contracts/test_removed_integration_surface.py",
+        "tests/framework_contracts/test_ray_transition.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
