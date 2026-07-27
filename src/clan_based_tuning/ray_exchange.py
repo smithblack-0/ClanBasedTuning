@@ -163,6 +163,7 @@ class RayControllerCallbacks:
         self._member_id = member_id
         self._resolve = resolve
         self._loaded_round: int | None = None
+        self._selected_winner: int | None = None
 
     def save_member_fitness(self, round_: ClanRound) -> None:
         if round_.member_id != self._member_id:
@@ -186,4 +187,12 @@ class RayControllerCallbacks:
                 winner_id=winner_id,
             )
         )
+        self._selected_winner = winner_id
         self._loaded_round = None
+
+    def take_selected_winner(self) -> int:
+        if self._selected_winner is None:
+            raise RuntimeError("controller did not select a winner")
+        winner_id = self._selected_winner
+        self._selected_winner = None
+        return winner_id

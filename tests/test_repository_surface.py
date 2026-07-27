@@ -22,6 +22,7 @@ def test_active_package_contains_only_accepted_controller_and_ray_transition_cod
         "src/clan_based_tuning/ray_exchange.py",
         "src/clan_based_tuning/ray_rendezvous.py",
         "src/clan_based_tuning/ray_transition.py",
+        "src/clan_based_tuning/tune_trainable.py",
     }
 
 
@@ -41,6 +42,7 @@ def test_test_suite_contains_only_current_surface_contracts():
         "tests/framework_contracts/test_ray_transition.py",
         "tests/framework_contracts/test_ray_exchange.py",
         "tests/framework_contracts/test_ray_rendezvous.py",
+        "tests/framework_contracts/test_tune_trainable.py",
         "tests/framework_contracts/test_lightning_transition.py",
         "tests/framework_contracts/test_lightning_ddp.py",
         "tests/test_package.py",
