@@ -1,39 +1,31 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-07-25
+Last updated: 2026-07-27
 
 ## Current position
 
-The framework-alignment responsibility model, project decisions, milestone gate
-system, and durable working-process documents are present and remain subject to
-ordinary correction through their owning artifacts.
+Milestone 1 established the accepted framework-alignment research, project decisions,
+roadmap, milestone gates, and durable engineering process.
 
-The framework-independent `ClanController` is the first accepted implementation
-surface. Existing Ray/Lightning integration source and examples remain
-proof-of-concept evidence rather than an accepted construction API.
+Milestone 2 established the accepted framework-independent evolutionary subsystem:
+`MutationSpec`, `ClanRound`, and `ClanController`, with focused tests and controller
+documentation.
+
+The active repository surface has been reset to those accepted Milestone 1 and
+Milestone 2 products. Earlier Ray, Lightning, DDP, checkpoint, optimizer-application,
+factory, framework-contract, and end-to-end example implementations have been removed
+from the active tree. They remain available through git history only and are not an
+accepted foundation for later work.
 
 ## Current work
 
-Milestone 2 is completing the framework-independent evolutionary controller.
-Human review has accepted the responsibility boundary:
+Milestone 3 is paused while its integration design is reconsidered from the clean
+Milestone 1 and Milestone 2 boundary. No active Ray or Lightning implementation is
+currently accepted.
 
-- Milestone 2 owns the independent population policy.
-- Milestone 3 chooses and qualifies the Ray Tune invocation seam and completes the
-  real Ray/Lightning/PyTorch workflow.
-
-The controller contract, implementation, focused tests, and engineering reference
-are complete. The remaining Milestone 2 review unit is the repeated synthetic pet
-loop and Milestone 3 integration handoff.
-
-## Active plan
-
-The [Milestone 2 controller plan](docs/plans/milestone_2_controller.md) now has two
-stable review units:
-
-1. controller contract, implementation, focused tests, and engineering reference;
-2. repeated synthetic demonstration and Milestone 3 handoff.
-
-Tentative alternatives and framework notes are not project authority.
+Future Milestone 3 work must begin from the accepted controller and framework ownership
+contracts, introduce one reviewable improvement at a time, and may revise earlier
+increments when new framework evidence changes the design.
 
 ## Governing references
 
@@ -41,17 +33,16 @@ Tentative alternatives and framework notes are not project authority.
 - [Project decisions](docs/decisions/project_decisions.md)
 - [Milestone gate system](docs/milestones/README.md)
 - [Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
-- [Milestone 2 controller plan](docs/plans/milestone_2_controller.md)
+- [Milestone 3 gate](docs/milestones/gates/milestone_3_integratable_orchestration.md)
 - [Controller lifecycle and reference](docs/controller/README.md)
 - [Framework-alignment package](docs/framework_alignment/README.md)
 - [LLM operating context](docs/llm/README.md)
 
 ## Known limitations
 
-- The repeated synthetic demonstration and Milestone 3 handoff are not yet
-  complete, so Milestone 2 is not closed.
-- The Ray invocation path, Lightning lifecycle integration, checkpoint transfer,
-  distributed reformation, and live optimizer application remain Milestone 3
-  work.
-- Existing integration classes and examples must not be presented as accepted
-  public contracts until the owning milestone accepts and documents them.
+- There is no active Ray Tune invocation path.
+- There is no active Lightning lifecycle or checkpoint integration.
+- There is no package-managed DDP, model-wrapping, or distributed-data setup.
+- There is no live optimizer-configuration application system.
+- Historical proof-of-concept code must not be imported, copied forward wholesale, or
+  treated as an accepted design merely because it once passed tests.

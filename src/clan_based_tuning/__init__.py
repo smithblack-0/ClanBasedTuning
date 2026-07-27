@@ -1,31 +1,10 @@
-"""Clan Tuning policy and framework-integration research surfaces."""
+"""Framework-independent Clan Tuning evolutionary subsystem."""
 
 from clan_based_tuning.controller import ClanController
 from clan_based_tuning.controller_types import ClanRound, MutationSpec
-from clan_based_tuning.factory import (
-    ClanLightningPlugins,
-    make_clan_lightning_plugins,
-    prepare_clan_trainer,
-)
-from clan_based_tuning.lightning import (
-    ClanDDPStrategy,
-    ClanLightningEnvironment,
-    replicated_sampler,
-)
-from clan_based_tuning.optimizer import apply_optimizer_strategy
-from clan_based_tuning.ray import ClanBasedTraining, tune_checkpoint_path
 
 __all__ = [
-    "ClanBasedTraining",
     "ClanController",
-    "ClanDDPStrategy",
-    "ClanLightningEnvironment",
-    "ClanLightningPlugins",
     "ClanRound",
     "MutationSpec",
-    "apply_optimizer_strategy",
-    "make_clan_lightning_plugins",
-    "prepare_clan_trainer",
-    "replicated_sampler",
-    "tune_checkpoint_path",
 ]
