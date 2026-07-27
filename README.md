@@ -21,6 +21,8 @@ Read [`STATUS.md`](STATUS.md) for the current durable project position.
   and links to the active gate.
 - [`docs/controller/README.md`](docs/controller/README.md) — controller lifecycle,
   ownership, algorithms, and API reference.
+- [`docs/ray/README.md`](docs/ray/README.md) — incremental Ray member-identity
+  contract; controller invocation and checkpoint execution remain under review.
 - [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
   framework research, evidence, and accepted responsibility model.
 - [`AGENTS.md`](AGENTS.md) — entry point for coding agents and contributors using
