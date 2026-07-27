@@ -26,6 +26,10 @@ dependencies = []
 ray = [
     "ray[tune]>=2.56,<2.57",
 ]
+lightning = [
+    "lightning>=2.6,<2.7",
+    "torch>=2.10,<2.11",
+]
 dev = [
     "pytest>=8.3",
     "ruff>=0.9",
@@ -43,6 +47,7 @@ addopts = ["-ra", "--strict-config", "--strict-markers"]
 testpaths = ["tests"]
 markers = [
     "framework_contract: executable contract with an upstream framework",
+    "requires_lightning: requires a local Lightning installation",
     "requires_ray: requires a local Ray installation",
 ]
 

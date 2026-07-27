@@ -19,6 +19,13 @@ from ray.tune.experiment import Trial
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler
 from ray.tune.utils.util import unflatten_dict
 
+from clan_based_tuning.member_state import (
+    CONTROLLER_STATE,
+    NEXT_MEMBER_STATE,
+    OPTIMIZER_CONFIG,
+    WINNER_ID,
+)
+
 if TYPE_CHECKING:
     from ray.tune.execution.tune_controller import TuneController
 
@@ -27,11 +34,7 @@ if TYPE_CHECKING:
 
 MEMBER_ID = "clan_member_id"
 ROUND_INDEX = "clan_round_index"
-WINNER_ID = "clan_winner_id"
 FITNESS = "clan_fitness"
-CONTROLLER_STATE = "clan_controller_state"
-OPTIMIZER_CONFIG = "clan_optimizer_config"
-NEXT_MEMBER_STATE = "clan_next_member_state"
 
 __all__ = [
     "MEMBER_ID",
