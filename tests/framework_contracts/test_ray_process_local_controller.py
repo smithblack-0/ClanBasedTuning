@@ -16,7 +16,7 @@ from clan_based_tuning import ClanController, ClanRound, MutationSpec
 pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 ray = pytest.importorskip("ray")
 
-from ray import train, tune  # noqa: E402
+from ray import tune  # noqa: E402
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler  # noqa: E402
 from ray.tune.trainable.function_trainable import FunctionTrainable  # noqa: E402
 
@@ -86,7 +86,7 @@ class _ControllerFunctionTrainable(FunctionTrainable):
     def _trainable_func(self, config):
         member = config["member"]
         self.controller.set_fitness(member["fitness"])
-        train.report(
+        tune.report(
             {
                 "member_id": self.member_id,
                 "round_index": self._published_round.round_index,
