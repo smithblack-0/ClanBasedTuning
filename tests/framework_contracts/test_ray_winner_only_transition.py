@@ -31,6 +31,7 @@ class _StatefulMember(tune.Trainable):
 
     def setup(self, config):
         self.model_value = 10.0
+        self.optimizer_velocity = 0.0
         self.source_member = None
         _append_event(
             config["audit_path"],
@@ -43,7 +44,8 @@ class _StatefulMember(tune.Trainable):
         )
 
     def step(self):
-        self.model_value -= self.config["lr"]
+        self.optimizer_velocity = 0.9 * self.optimizer_velocity + 1.0
+        self.model_value -= self.config["lr"] * self.optimizer_velocity
         _append_event(
             self.config["audit_path"],
             {
@@ -51,6 +53,7 @@ class _StatefulMember(tune.Trainable):
                 "member_id": self.config[CLAN_MEMBER_ID],
                 "lr": self.config["lr"],
                 "model_value": self.model_value,
+                "optimizer_velocity": self.optimizer_velocity,
                 "restored_from": self.source_member,
                 "round_index": self.config[CLAN_ROUND_INDEX],
             },
@@ -88,6 +91,7 @@ class _StatefulMember(tune.Trainable):
             json.dumps(
                 {
                     "model_value": self.model_value,
+                    "optimizer_velocity": self.optimizer_velocity,
                     "source_member": self.config[CLAN_MEMBER_ID],
                 }
             ),
@@ -98,6 +102,7 @@ class _StatefulMember(tune.Trainable):
     def load_checkpoint(self, checkpoint_dir):
         state = json.loads((Path(checkpoint_dir) / "member_state.json").read_text(encoding="utf-8"))
         self.model_value = state["model_value"]
+        self.optimizer_velocity = state["optimizer_velocity"]
         self.source_member = state["source_member"]
         _append_event(
             self.config["audit_path"],
@@ -202,4 +207,5 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
     assert len(second_round_steps) == 3
     assert {event["member_id"] for event in second_round_steps} == {0, 1, 2}
     assert {event["restored_from"] for event in second_round_steps} == {1}
+    assert {event["optimizer_velocity"] for event in second_round_steps} == {1.9}
     assert sorted(event["lr"] for event in second_round_steps) == pytest.approx([0.2, 0.21, 0.23])
