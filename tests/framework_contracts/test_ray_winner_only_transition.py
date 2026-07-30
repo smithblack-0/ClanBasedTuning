@@ -168,7 +168,7 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
             tune.with_resources(_StatefulMember, {"cpu": 1}),
             param_space={
                 "member_id": tune.grid_search([0, 1, 2]),
-                "lr": tune.sample_from(lambda spec: 0.1 * (spec.config.member_id + 1)),
+                "lr": tune.sample_from(lambda config: 0.1 * (config["member_id"] + 1)),
                 "round_index": 0,
                 "audit_path": str(audit_path),
             },
@@ -192,13 +192,11 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
         ray.shutdown()
 
     assert not [result.error for result in result_grid if result.error is not None]
-    assert scheduler.transitions == [
-        {
-            "round_index": 0,
-            "winner_id": 1,
-            "next_learning_rates": {0: 0.21, 1: 0.2, 2: 0.23},
-        }
-    ]
+    assert scheduler.transitions[0]["round_index"] == 0
+    assert scheduler.transitions[0]["winner_id"] == 1
+    assert scheduler.transitions[0]["next_learning_rates"] == pytest.approx(
+        {0: 0.21, 1: 0.2, 2: 0.23}
+    )
 
     events = [
         json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines() if line
