@@ -1,10 +1,10 @@
-"""Repository-level guard for the accepted Milestone 1 and 2 active surface."""
+"""Repository-level guard for the accepted active implementation surface."""
 
 from pathlib import Path
 
 
-def test_active_package_contains_only_the_milestone_2_implementation():
-    """Historical framework code must remain outside the importable source tree."""
+def test_active_package_contains_only_the_accepted_implementation():
+    """Only accepted controller and collective-failure code is importable."""
 
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
@@ -16,6 +16,7 @@ def test_active_package_contains_only_the_milestone_2_implementation():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/controller_types.py",
+        "src/clan_based_tuning/ray_schedulers.py",
     }
 
 
@@ -31,11 +32,13 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
     assert test_files == {
+        "tests/framework_contracts/test_ray_collective_failure_scheduler.py",
         "tests/framework_contracts/test_removed_integration_surface.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
         "tests/unit/test_controller_types.py",
+        "tests/unit/test_ray_schedulers.py",
     }
 
 
