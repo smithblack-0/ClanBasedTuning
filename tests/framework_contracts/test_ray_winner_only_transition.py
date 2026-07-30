@@ -118,10 +118,6 @@ class _WinnerOnlyScheduler(FIFOScheduler):
         if len(round_results) < self.population_size:
             return TrialScheduler.NOOP
 
-        if round_index == 1:
-            tune_controller.request_stop_experiment()
-            return TrialScheduler.NOOP
-
         winner_id = min(
             round_results,
             key=lambda candidate: (round_results[candidate][1]["fitness"], candidate),
@@ -174,6 +170,7 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
             },
             run_config=tune.RunConfig(
                 storage_path=str(tmp_path / "ray-results"),
+                stop={"training_iteration": 2},
                 checkpoint_config=tune.CheckpointConfig(
                     checkpoint_frequency=0,
                     checkpoint_at_end=False,
@@ -210,4 +207,4 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
     assert len(second_round_steps) == 3
     assert {event["member_id"] for event in second_round_steps} == {0, 1, 2}
     assert {event["restored_from"] for event in second_round_steps} == {1}
-    assert {event["lr"] for event in second_round_steps} == {0.2, 0.21, 0.23}
+    assert sorted(event["lr"] for event in second_round_steps) == pytest.approx([0.2, 0.21, 0.23])
