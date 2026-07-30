@@ -34,29 +34,29 @@ class ClanTransitionScheduler(FIFOScheduler):
         if population_size < 2:
             raise ValueError("population_size must be at least two")
         self.population_size = population_size
-        self._reports_by_round = {}
-        self._completed_rounds = set()
+        self._round_index = 0
+        self._reports = {}
 
     def on_trial_result(self, tune_controller, trial, result):
         """Hold the population at one boundary, then execute its agreed transition."""
 
         report = self._read_report(trial, result)
         round_index = report["round_index"]
-        if round_index in self._completed_rounds:
-            raise RuntimeError(f"round {round_index} reported after its transition completed")
-
-        round_reports = self._reports_by_round.setdefault(round_index, {})
+        if round_index != self._round_index:
+            raise RuntimeError(
+                f"expected Clan round {self._round_index}, received round {round_index}"
+            )
         member_id = report["member_id"]
-        if member_id in round_reports:
+        if member_id in self._reports:
             raise RuntimeError(f"member {member_id} reported round {round_index} twice")
-        round_reports[member_id] = (trial, report, dict(result))
+        self._reports[member_id] = (trial, report, dict(result))
 
-        if len(round_reports) < self.population_size:
+        if len(self._reports) < self.population_size:
             return TrialScheduler.NOOP
 
-        self._execute_transition(tune_controller, round_index, round_reports)
-        del self._reports_by_round[round_index]
-        self._completed_rounds.add(round_index)
+        self._execute_transition(tune_controller, round_index, self._reports)
+        self._reports = {}
+        self._round_index += 1
         return TrialScheduler.NOOP
 
     def _read_report(self, trial, result):
@@ -117,6 +117,9 @@ class ClanTransitionScheduler(FIFOScheduler):
             if target_trial.status == target_trial.RUNNING:
                 tune_controller.pause_trial(target_trial, should_checkpoint=False)
             target_trial.set_config(next_trial_config)
+            # Ray PBT uses this checkpoint-manager slot to make a prepared source
+            # checkpoint the target trial's continuation. Reusing the same native
+            # assignment seam avoids a parallel Clan checkpoint transfer system.
             target_trial.run_metadata.checkpoint_manager._latest_checkpoint_result = copy.copy(
                 winner_checkpoint
             )
