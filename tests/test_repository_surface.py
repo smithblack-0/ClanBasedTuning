@@ -16,6 +16,8 @@ def test_active_package_contains_only_the_milestone_2_implementation():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/controller_types.py",
+        "src/clan_based_tuning/ray/__init__.py",
+        "src/clan_based_tuning/ray/scheduler.py",
     }
 
 
