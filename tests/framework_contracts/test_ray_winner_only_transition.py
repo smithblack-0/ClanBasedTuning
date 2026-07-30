@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import copy
 import json
 from pathlib import Path
 
@@ -12,7 +11,14 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 ray = pytest.importorskip("ray")
 
 from ray import tune  # noqa: E402
-from ray.tune.schedulers import FIFOScheduler, TrialScheduler  # noqa: E402
+
+from clan_based_tuning.ray import (  # noqa: E402
+    CLAN_MEMBER_ID,
+    CLAN_NEXT_CONFIG,
+    CLAN_ROUND_INDEX,
+    CLAN_WINNER_ID,
+    ClanTransitionScheduler,
+)
 
 
 def _append_event(audit_path, event):
@@ -30,9 +36,9 @@ class _StatefulMember(tune.Trainable):
             config["audit_path"],
             {
                 "event": "setup",
-                "member_id": config["member_id"],
+                "member_id": config[CLAN_MEMBER_ID],
                 "lr": config["lr"],
-                "round_index": config["round_index"],
+                "round_index": config[CLAN_ROUND_INDEX],
             },
         )
 
@@ -42,19 +48,28 @@ class _StatefulMember(tune.Trainable):
             self.config["audit_path"],
             {
                 "event": "step",
-                "member_id": self.config["member_id"],
+                "member_id": self.config[CLAN_MEMBER_ID],
                 "lr": self.config["lr"],
                 "model_value": self.model_value,
                 "restored_from": self.source_member,
-                "round_index": self.config["round_index"],
+                "round_index": self.config[CLAN_ROUND_INDEX],
             },
         )
         return {
-            "member_id": self.config["member_id"],
-            "round_index": self.config["round_index"],
+            CLAN_MEMBER_ID: self.config[CLAN_MEMBER_ID],
+            CLAN_ROUND_INDEX: self.config[CLAN_ROUND_INDEX],
+            CLAN_WINNER_ID: 1,
+            CLAN_NEXT_CONFIG: {
+                "lr": (
+                    0.2
+                    if self.config[CLAN_MEMBER_ID] == 1
+                    else 0.2 + 0.01 * (self.config[CLAN_MEMBER_ID] + 1)
+                )
+            },
+            "round_index": self.config[CLAN_ROUND_INDEX],
             "fitness": (
-                [3.0, 1.0, 2.0][self.config["member_id"]]
-                if self.config["round_index"] == 0
+                [3.0, 1.0, 2.0][self.config[CLAN_MEMBER_ID]]
+                if self.config[CLAN_ROUND_INDEX] == 0
                 else self.model_value
             ),
         }
@@ -64,8 +79,8 @@ class _StatefulMember(tune.Trainable):
             self.config["audit_path"],
             {
                 "event": "save",
-                "member_id": self.config["member_id"],
-                "round_index": self.config["round_index"],
+                "member_id": self.config[CLAN_MEMBER_ID],
+                "round_index": self.config[CLAN_ROUND_INDEX],
             },
         )
         checkpoint_path = Path(checkpoint_dir) / "member_state.json"
@@ -73,7 +88,7 @@ class _StatefulMember(tune.Trainable):
             json.dumps(
                 {
                     "model_value": self.model_value,
-                    "source_member": self.config["member_id"],
+                    "source_member": self.config[CLAN_MEMBER_ID],
                 }
             ),
             encoding="utf-8",
@@ -88,84 +103,59 @@ class _StatefulMember(tune.Trainable):
             self.config["audit_path"],
             {
                 "event": "load",
-                "member_id": self.config["member_id"],
+                "member_id": self.config[CLAN_MEMBER_ID],
                 "lr": self.config["lr"],
                 "restored_from": self.source_member,
-                "round_index": self.config["round_index"],
+                "round_index": self.config[CLAN_ROUND_INDEX],
             },
         )
 
 
-class _WinnerOnlyScheduler(FIFOScheduler):
-    """Hold one population, save its sole winner, and assign that checkpoint."""
+class _TrialStub:
+    def __init__(self, member_id, round_index=0):
+        self.config = {
+            CLAN_MEMBER_ID: member_id,
+            CLAN_ROUND_INDEX: round_index,
+        }
 
-    _supports_buffered_results = False
 
-    def __init__(self, population_size):
-        super().__init__()
-        self.population_size = population_size
-        self.results = {}
-        self.transitions = []
+def _reported_transition(member_id, winner_id, *, round_index=0):
+    return {
+        CLAN_MEMBER_ID: member_id,
+        CLAN_ROUND_INDEX: round_index,
+        CLAN_WINNER_ID: winner_id,
+        f"{CLAN_NEXT_CONFIG}/lr": 0.1 * (member_id + 1),
+    }
 
-    def on_trial_result(self, tune_controller, trial, result):
-        round_index = result["round_index"]
-        round_results = self.results.setdefault(round_index, {})
-        member_id = result["member_id"]
-        if member_id in round_results:
-            raise RuntimeError(f"member {member_id} reported round {round_index} twice")
-        round_results[member_id] = (trial, dict(result))
 
-        if len(round_results) < self.population_size:
-            return TrialScheduler.NOOP
+def test_scheduler_rejects_process_disagreement_before_checkpointing():
+    scheduler = ClanTransitionScheduler(population_size=3)
+    scheduler.on_trial_result(None, _TrialStub(0), _reported_transition(0, 1))
+    scheduler.on_trial_result(None, _TrialStub(1), _reported_transition(1, 1))
 
-        winner_id = min(
-            round_results,
-            key=lambda candidate: (round_results[candidate][1]["fitness"], candidate),
-        )
-        winner_trial, winner_result = round_results[winner_id]
-        checkpoint_future = tune_controller._schedule_trial_save(
-            winner_trial,
-            result=winner_result,
-        )
-        winner_checkpoint = checkpoint_future.resolve()
-        if winner_checkpoint is None or winner_checkpoint.checkpoint is None:
-            raise RuntimeError("winner did not produce an assignable checkpoint")
+    with pytest.raises(RuntimeError, match="disagree"):
+        scheduler.on_trial_result(None, _TrialStub(2), _reported_transition(2, 0))
 
-        next_learning_rates = {}
-        for target_id, (target_trial, _) in sorted(round_results.items()):
-            next_config = dict(target_trial.config)
-            next_config["round_index"] = round_index + 1
-            next_config["lr"] = 0.2 if target_id == winner_id else 0.2 + 0.01 * (target_id + 1)
-            next_learning_rates[target_id] = next_config["lr"]
 
-            if target_trial.status == target_trial.RUNNING:
-                tune_controller.pause_trial(target_trial, should_checkpoint=False)
-            target_trial.set_config(next_config)
-            target_trial.run_metadata.checkpoint_manager._latest_checkpoint_result = copy.copy(
-                winner_checkpoint
-            )
+def test_scheduler_rejects_a_duplicate_process_report():
+    scheduler = ClanTransitionScheduler(population_size=3)
+    scheduler.on_trial_result(None, _TrialStub(0), _reported_transition(0, 1))
 
-        self.transitions.append(
-            {
-                "round_index": round_index,
-                "winner_id": winner_id,
-                "next_learning_rates": next_learning_rates,
-            }
-        )
-        return TrialScheduler.NOOP
+    with pytest.raises(RuntimeError, match="reported round 0 twice"):
+        scheduler.on_trial_result(None, _TrialStub(0), _reported_transition(0, 1))
 
 
 def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
-    scheduler = _WinnerOnlyScheduler(population_size=3)
+    scheduler = ClanTransitionScheduler(population_size=3)
     audit_path = tmp_path / "events.jsonl"
     ray.init(num_cpus=3, include_dashboard=False, ignore_reinit_error=True)
     try:
         tuner = tune.Tuner(
             tune.with_resources(_StatefulMember, {"cpu": 1}),
             param_space={
-                "member_id": tune.grid_search([0, 1, 2]),
-                "lr": tune.sample_from(lambda config: 0.1 * (config["member_id"] + 1)),
-                "round_index": 0,
+                CLAN_MEMBER_ID: tune.grid_search([0, 1, 2]),
+                "lr": tune.sample_from(lambda config: 0.1 * (config[CLAN_MEMBER_ID] + 1)),
+                CLAN_ROUND_INDEX: 0,
                 "audit_path": str(audit_path),
             },
             run_config=tune.RunConfig(
@@ -189,12 +179,6 @@ def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
         ray.shutdown()
 
     assert not [result.error for result in result_grid if result.error is not None]
-    assert scheduler.transitions[0]["round_index"] == 0
-    assert scheduler.transitions[0]["winner_id"] == 1
-    assert scheduler.transitions[0]["next_learning_rates"] == pytest.approx(
-        {0: 0.21, 1: 0.2, 2: 0.23}
-    )
-
     events = [
         json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines() if line
     ]
