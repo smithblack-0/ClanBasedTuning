@@ -145,6 +145,17 @@ def test_scheduler_rejects_a_duplicate_process_report():
         scheduler.on_trial_result(None, _TrialStub(0), _reported_transition(0, 1))
 
 
+def test_scheduler_rejects_a_process_from_the_wrong_round():
+    scheduler = ClanTransitionScheduler(population_size=3)
+
+    with pytest.raises(RuntimeError, match="expected Clan round 0"):
+        scheduler.on_trial_result(
+            None,
+            _TrialStub(0, round_index=1),
+            _reported_transition(0, 1, round_index=1),
+        )
+
+
 def test_ray_saves_only_winner_then_restores_every_target(tmp_path):
     scheduler = ClanTransitionScheduler(population_size=3)
     audit_path = tmp_path / "events.jsonl"
