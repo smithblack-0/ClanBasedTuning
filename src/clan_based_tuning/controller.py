@@ -3,6 +3,8 @@
 import math
 from collections.abc import Callable, Sequence
 
+from clan_based_tuning.controller_types import select_winner_id
+
 
 class ClanController:
     """Resolve whether this Tune worker should provide the round checkpoint.
@@ -61,12 +63,6 @@ class ClanController:
         if any(not math.isfinite(fitness) for fitness in population):
             raise RuntimeError("fitness collective returned a non-finite value")
 
-        winner_id = self._select_winner(population)
+        winner_id = select_winner_id(population, self._mode)
         self._save_checkpoint = self.member_id == winner_id
         return self._save_checkpoint
-
-    def _select_winner(self, population):
-        ranked = enumerate(population)
-        if self._mode == "min":
-            return min(ranked, key=lambda item: (item[1], item[0]))[0]
-        return max(ranked, key=lambda item: (item[1], -item[0]))[0]
