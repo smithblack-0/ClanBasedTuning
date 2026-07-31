@@ -1,56 +1,68 @@
 # ClanBasedTuning system design
 
-Status: proposed design package under human review  
+Status: active Milestone 3 design  
 Date: 2026-07-31
 
 ## Purpose
 
-This directory translates the governing roadmap, accepted project decisions,
-framework evidence, and behavioral test contracts into one coherent proposed
-system design.
+This directory defines the accepted behavioral target and system lifecycle for
+composing the framework-independent CBT policy with Ray Tune and Lightning DDP.
+It governs Milestone 3 implementation unless direct framework evidence or human
+review explicitly reopens a clause.
 
-The design is not implementation and does not establish milestone completion.
-Until human review accepts it, it is a proposal. After acceptance, it governs the
-component responsibilities and lifecycle described here unless later evidence
-reopens a specific clause.
+The design does not replace the product roadmap, project decisions, milestone
+gates, or framework-alignment research. It translates them into the concrete
+round lifecycle and responsibility boundaries that implementation must follow.
 
 ## Reader path
 
 1. Read the [behavioral test contracts](behavioral_test_contracts.md) for the
-   outcomes any acceptable implementation must prove.
-2. Read the [system architecture](system_architecture.md) for the proposed owners,
-   state partitions, framework seams, and complete round lifecycle.
+   black-box training outcomes the completed system must prove.
+2. Read the [system architecture](system_architecture.md) from the lifecycle
+   diagram forward. It explains the complete flow before assigning component
+   responsibilities.
 3. Consult the governing [product roadmap](../product_roadmap.md), accepted
    [project decisions](../decisions/project_decisions.md), and
    [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md)
-   when judging scope or authority.
+   when judging scope or milestone completion.
 4. Consult the accepted
    [framework-alignment research](../framework_alignment/README.md) for the
-   evidence and responsibility model behind the design.
+   evidence and ownership model behind the design.
 
 ## Artifact roles
 
 ### Behavioral test contracts
 
-The contracts state observations whose failure would prove that the implemented
-Clan behavior is wrong. They partition state explicitly and avoid prescribing a
-class, callback, scheduler, public facade, or framework extension point merely to
-make a test convenient.
+The contracts observe CBT as part of an ordinary training system. They may supply
+fitness to CBT and inspect model state, optimizer state, training progress,
+checkpoints, and later updates. They do not freeze internal winner identifiers,
+comparison option names, callback order, or scheduler methods.
 
 ### System architecture
 
-The architecture assigns every material responsibility and state transition to
-one owner. It identifies the narrow custom seams required to compose Ray Tune,
-Lightning, and PyTorch DDP without introducing a second training loop,
-checkpoint system, population policy, or gradient implementation.
+The architecture begins with the governing lifecycle:
 
-## Review boundary
+```text
+load preferred continuation
+→ rebase and mutate locally
+→ train through Lightning DDP
+→ compare the complete population through a Ray collective
+→ persist one preferred Lightning checkpoint
+→ report and transfer it through Tune
+→ load it everywhere
+```
 
-This design PR should answer one review question:
+It then explains why the order is necessary, maps it onto inspected framework
+source, identifies the minimal components, and states the evidence required from
+implementation.
 
-> Does this responsibility and lifecycle model provide a coherent foundation for
-> implementing Clan Tuning through the accepted frameworks?
+## Design boundary
 
-Implementation sequencing, milestone-sized PR decomposition, and executable test
-construction follow after the design is accepted. They should not be inferred
-from document section order.
+The design fixes system behavior, lifecycle order, state authority, and framework
+ownership. It intentionally leaves ordinary implementation details—method
+signatures, file layout, and milestone-sized issue order—to the implementation
+plan, provided they do not change those contracts.
+
+The core package does not define a Ray `Trainable` subclass. Ray may internally
+wrap the supplied function in its own `FunctionTrainable`; that remains Ray's
+implementation detail.
