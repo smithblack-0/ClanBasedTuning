@@ -152,9 +152,15 @@ def test_winner_checkpoint_rebases_into_deterministic_member_local_next_rounds()
     assert first_configs[0] != first_configs[1]
     assert first_configs[2] != first_configs[1]
     assert first_configs[0] != first_configs[2]
-    assert [controller.state_dict()["round_index"] for controller in first_generation] == [1, 1, 1]
-    assert [controller.state_dict()["fitness"] for controller in first_generation] == [None, None, None]
-    assert all(controller.state_dict()["selected_winner"] is None for controller in first_generation)
+    round_indexes = [controller.state_dict()["round_index"] for controller in first_generation]
+    fitnesses = [controller.state_dict()["fitness"] for controller in first_generation]
+    selected_winners = [
+        controller.state_dict()["selected_winner"] for controller in first_generation
+    ]
+
+    assert round_indexes == [1, 1, 1]
+    assert fitnesses == [None, None, None]
+    assert selected_winners == [None, None, None]
 
 
 def _restored_generation(winner_state, *, initial_value, seed):
