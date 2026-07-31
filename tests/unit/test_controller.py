@@ -15,12 +15,23 @@ class FitnessExchange:
         return list(self.population)
 
 
-def _controller(member_id, population, *, mode="min"):
+class MetadataCheckpoint:
+    def __init__(self, metadata=None):
+        self.metadata = dict(metadata or {})
+        self.updates = []
+
+    def update_metadata(self, metadata):
+        self.updates.append(metadata)
+        self.metadata.update(metadata)
+
+
+def _controller(member_id, population, *, mode="min", genome=None):
     exchange = FitnessExchange(population)
     controller = ClanController(
         member_id=member_id,
         population_size=len(population),
         mode=mode,
+        genome={"lr": 0.001 * (member_id + 1)} if genome is None else genome,
         exchange_fitness=exchange,
     )
     return controller, exchange
@@ -72,6 +83,50 @@ def test_should_save_checkpoint_is_one_collective_decision():
     assert exchange.calls == [1.0]
 
 
+def test_winner_saves_its_copied_genome_without_another_collective():
+    genome = {"lr": 0.003, "weight_decay": 0.1}
+    controller, exchange = _controller(1, [3.0, 1.0, 2.0], genome=genome)
+    genome["lr"] = 9.0
+    controller.set_fitness(1.0)
+    assert controller.should_save_checkpoint() is True
+
+    checkpoint = MetadataCheckpoint({"lightning": {"format": "ckpt"}})
+    returned = controller.save_genome(checkpoint)
+
+    assert returned is checkpoint
+    assert exchange.calls == [1.0]
+    assert checkpoint.metadata == {
+        "lightning": {"format": "ckpt"},
+        "clan_based_tuning": {
+            "schema_version": 1,
+            "member_id": 1,
+            "genome": {"lr": 0.003, "weight_decay": 0.1},
+        },
+    }
+
+
+def test_save_genome_requires_a_resolved_winning_decision():
+    unresolved, unresolved_exchange = _controller(0, [1.0, 2.0])
+    unresolved_checkpoint = MetadataCheckpoint()
+
+    with pytest.raises(RuntimeError, match="resolved"):
+        unresolved.save_genome(unresolved_checkpoint)
+
+    assert unresolved_exchange.calls == []
+    assert unresolved_checkpoint.updates == []
+
+    loser, loser_exchange = _controller(1, [1.0, 2.0])
+    loser.set_fitness(2.0)
+    assert loser.should_save_checkpoint() is False
+    loser_checkpoint = MetadataCheckpoint()
+
+    with pytest.raises(RuntimeError, match="selected"):
+        loser.save_genome(loser_checkpoint)
+
+    assert loser_exchange.calls == [2.0]
+    assert loser_checkpoint.updates == []
+
+
 def test_fitness_must_be_set_before_collective_resolution():
     controller, exchange = _controller(0, [1.0, 2.0])
 
@@ -106,6 +161,7 @@ def test_collective_must_return_the_configured_population():
         member_id=0,
         population_size=3,
         mode="min",
+        genome={"lr": 0.001},
         exchange_fitness=lambda local_fitness: [local_fitness, 2.0],
     )
     controller.set_fitness(1.0)
@@ -114,7 +170,7 @@ def test_collective_must_return_the_configured_population():
         controller.should_save_checkpoint()
 
 
-def test_controller_has_no_evolution_genome_or_checkpoint_state_api():
+def test_controller_exposes_no_evolution_or_serialization_api():
     controller, _ = _controller(0, [1.0, 2.0])
 
     assert not hasattr(controller, "advance")
