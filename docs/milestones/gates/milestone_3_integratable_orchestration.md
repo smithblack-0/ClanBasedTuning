@@ -1,148 +1,221 @@
 # Milestone 3 gates — integratable orchestration subsystems
 
-Status: future milestone gate
+Status: active milestone gate  
+Date: 2026-07-31
 
 ## Milestone result
 
-The accepted evolutionary controller and Clan-specific integration primitives can
-be manually composed into a real distributed Lightning workflow in which Clan
-Tuning completes multiple rounds end to end through native Ray Tune, Lightning,
-and PyTorch behavior.
+ClanBasedTuning can be composed through an ordinary Ray Tune function into a real
+Lightning DDP workflow that completes multiple generations end to end.
 
-This milestone chooses and qualifies the Ray invocation path that supplies the
-controller with one complete population and executes its decision. The detailed
-integration design and test matrix are produced when Milestone 3 becomes active.
+The supported design uses:
+
+- one Tune trial per live Clan member;
+- one Lightning DDP world spanning those trials;
+- a thin worker `ClanController` that performs only the pre-report fitness collective
+  and local checkpoint-source decision;
+- a CBT Tune scheduler that owns genomes, mutation, lineage, and checkpoint assignment;
+- one selected Lightning checkpoint carrying the common training continuation; and
+- target-local child genomes carried through each target `Trial.config`.
+
+CBT defines no package-owned `Trainable` subclass, no second training loop, no public
+`ClanRound`, and no checkpointed worker controller.
 
 ## Capability and responsibility gates
 
-### M3.1 The Ray invocation path is chosen from direct evidence
+### M3.1 The ordinary Tune function remains the user lifecycle
 
-The milestone compares the narrow viable Ray-native options, including a
-scheduler specialization or a thin adapter around the accepted independent
-controller where appropriate.
+The public mechanics path has this shape:
 
-The accepted design records:
+```text
+make worker controller
+→ obtain any Tune-assigned checkpoint
+→ restore training continuation
+→ apply current target genome from config
+→ train and evaluate through Lightning
+→ set fitness on worker controller
+→ ask whether this worker should save
+→ report metrics with an optional checkpoint
+```
 
-- where complete member fitness and configuration data become available;
-- how the controller is invoked without duplicating its policy;
-- how the result reaches native checkpoint and configuration assignment;
-- which public, private, or version-sensitive Ray surfaces are required;
-- which ordinary Tune lifecycle behavior remains native; and
-- why the selected seam is the most correct, concise, and maintainable option.
+The user does not manually coordinate rank, collective groups, complete-population
+fitness, comparison policy, mutation state, checkpoint redistribution, or scheduler
+lineage.
 
-A private seam is not rejected merely because it is private, and an existing PBT
-class is not selected merely because it provides nearby lifecycle machinery.
+### M3.2 The worker controller is only a collective save-decision handle
 
-### M3.2 The manual workflow preserves native ownership
+The worker controller:
 
-The workflow explicitly composes the accepted controller, Ray trial execution,
-Lightning training and validation, PyTorch distributed execution, model and
-optimizer construction, data configuration, and only the Clan-specific seams
-shown necessary by evidence.
+- accepts one finite local fitness;
+- performs one complete-population fitness exchange;
+- applies the shared stable winner-selection rule;
+- returns whether the local worker is the checkpoint source; and
+- caches the decision so repeated calls cannot re-enter the collective.
 
-It introduces no second training loop, population runtime, checkpoint system,
-data framework, optimizer factory, or gradient-collective implementation.
+It owns no genome, mutation, Tune configuration, model state, checkpoint, scheduler
+state, round advancement, or serializable continuation.
 
-### M3.3 One coherent live population performs shared-gradient training
+### M3.3 The Tune scheduler is the sole evolutionary authority
 
-The manual composition verifies that the complete trial population, concurrent
-resources, Clan membership, and distributed ranks describe one live Clan before
-training begins. Native distributed execution produces a common gradient from
-independently partitioned training batches while member-local optimizer state and
-configuration produce observable divergence.
+For each complete generation, the scheduler:
 
-### M3.4 Lightning produces comparable round results
+1. associates every reported fitness with the reporting trial's active genome;
+2. selects and verifies one winning trial;
+3. verifies that exactly that trial supplied the checkpoint;
+4. records the winning parent genome and lineage;
+5. derives one child genome per stable target member;
+6. installs each child genome through that target `Trial.config`;
+7. assigns the same selected training checkpoint to every target; and
+8. releases the next complete population together.
 
-The integration defines the qualifying Lightning validation-and-checkpoint event.
-Every live member reaches the same logical boundary, evaluates the same held-out
-workload under equivalent conditions, and reports one member-local fitness value
-without candidate scores being reduced together.
+Mutation RNG, replay history, and scheduler recovery state belong to the scheduler.
 
-### M3.5 The selected Ray path executes the sole-parent transition
+### M3.4 Genome and checkpoint authority remain separate
 
-At a qualifying boundary, the Ray integration extracts the complete plain-data
-population required by the accepted controller. The controller selects one parent
-and next optimizer configurations. Native Ray execution assigns the resulting
-state and configuration; Lightning restores inherited model, optimizer, and
-progress state; ClanBasedTuning reapplies receiving optimizer values; and the
-next live distributed population continues training.
+The active genome is the controlled subset of one trial's Tune configuration.
 
-This is the ordinary Clan round transition, not an operational interruption-
-recovery subsystem.
+The shared checkpoint payload contains model state, optimizer history, Lightning
+progress, and other supported training continuation. It does not contain several
+receiving members' child genomes.
 
-### M3.6 A broken active population fails collectively and clearly
+After selecting the winner, the scheduler attaches checkpoint provenance metadata
+containing:
 
-A missing or failed member cannot be silently removed while the remaining
-members continue as the same Clan. The supported manual workflow terminates or
-invalidates the run without indefinite collective waits and exposes enough
-member and lifecycle context for engineering diagnosis.
+- schema version;
+- completed generation identity;
+- source member identity;
+- source Tune trial identity; and
+- the winning parent genome.
+
+The parent metadata binds the artifact to the genome that produced it. Each receiving
+child genome remains authoritative in its target trial configuration.
+
+### M3.5 Lightning and PyTorch retain native training ownership
+
+Lightning owns Trainer execution, optimizer lifecycle, checkpoint construction,
+distributed barriers, and process-group integration. PyTorch DDP supplies native
+gradient reduction.
+
+The CBT integration preserves:
+
+- native initial synchronization;
+- gradient synchronization across the complete population;
+- member-local optimizer history and controlled values;
+- intended parameter divergence after local optimizer steps; and
+- winner-aware checkpoint persistence without inventing a second checkpoint format.
+
+### M3.6 Fitness is comparable and local
+
+Every member reaches the same logical training boundary and evaluates an equivalent
+held-out workload. Fitness remains member-local and is not reduced into one Lightning
+metric before CBT compares the population.
+
+### M3.7 A broken active population fails collectively
+
+A missing or failed member cannot be silently removed while the remaining members
+continue as the same Clan. Collective failure, invalid result populations, missing or
+multiple checkpoints, genome/provenance disagreement, failed metadata attachment, or
+partial target assignment invalidate the generation.
 
 ## Test and evidence gates
 
-### M3.7 Direct and framework-contract tests protect the integration seams
+### M3.8 Focused tests protect core contracts
 
-Focused tests cover each Clan-specific primitive's contract, lifecycle position,
-state ordering, and failure behavior. Version-specific framework-contract tests
-cover the exact PyTorch, Lightning, and Ray assumptions material to the supported
-manual workflow, including the selected controller invocation seam.
+Unit tests cover:
 
-### M3.8 End-to-end evidence proves repeated real rounds
+- one checkpoint source from a complete population;
+- minimizing, maximizing, and stable lower-rank tie behavior;
+- finite local and collective fitness requirements;
+- cached one-shot collective resolution;
+- the absence of worker mutation and serialization APIs;
+- shared winner-selection behavior intended for worker and scheduler reuse;
+- mutation geometry and bounds; and
+- parent-genome checkpoint metadata schema and input ownership.
 
-A public manual composition with a real multi-member population completes
-multiple round transitions and demonstrates shared gradients, optimizer-driven
-divergence, comparable local fitness, sole-parent selection, native state
-inheritance, post-restore optimizer reconciliation, distributed reformation, and
-continued training.
+### M3.9 Ray framework contracts qualify the runtime seams
 
-Any accelerator or topology claim requires direct evidence on that accelerator
-or topology. CPU evidence qualifies only the CPU path it exercises.
+Tests against the pinned Ray version prove:
 
-## Documentation gates
+- actor-local collective initialization and ordered fitness all-gather;
+- scheduler access to results and reporting trials' current configurations;
+- target configuration replacement;
+- selected-checkpoint assignment to every target;
+- function-trial restoration through `tune.get_checkpoint()`;
+- optional checkpoint reporting through `tune.report()`;
+- scheduler persistence and recovery; and
+- checkpoint metadata update without loading the Lightning payload.
 
-### M3.9 Engineering documentation enables manual composition and audit
+### M3.10 Lightning framework contracts qualify checkpointing and DDP
 
-The milestone delivers the integration design and ownership map, rationale for
-the selected Ray seam, manual composition guide, reference for Clan-specific
-primitives and required framework settings, tested support and limitation
-statement, and failure-boundary guidance.
+Tests against the pinned Lightning and PyTorch versions prove:
 
-A project engineer can follow one complete round from training through the next
-generation without reconstructing the design from source code.
+- one externally launched Tune worker maps to one Lightning DDP rank;
+- the complete population participates in shared-gradient training;
+- member-local updates remain divergent;
+- optimizer history restores before the child genome is applied;
+- every rank enters the required checkpoint boundary; and
+- only the selected member retains a persistent checkpoint.
 
-## Example and scientific-work gates
+### M3.11 End-to-end evidence proves repeated real generations
 
-### M3.10 A public mechanics example exposes the complete workflow
+A real multi-member workflow completes at least two transitions and demonstrates:
 
-A reproducible example uses the accepted manual path, completes multiple real
-rounds, and makes gradients, divergence, fitness, selected parent, resulting
-optimizer configurations, state inheritance, and continued training inspectable.
+- one common continuation at generation start;
+- target-local child genomes applied after restoration;
+- shared reduced gradients;
+- controlled optimizer-driven divergence;
+- comparable local fitness;
+- one selected checkpoint;
+- correct parent-genome provenance;
+- scheduler-assigned child genomes; and
+- repeated continuation through Tune and Lightning.
 
-### M3.11 An initial scientific workload begins evaluating the method
+Any accelerator or topology claim requires direct evidence on that accelerator or
+topology.
 
-A public-package experiment uses a real task capable of illustrating optimizer-
-policy adaptation, records its workload, round policy, fitness, compute cost,
-and limitations, and reports favorable, neutral, or unfavorable results honestly.
-It proves that the integrated product can investigate the method; it need not
-prove that the method is valuable.
+## Documentation and example gates
+
+### M3.12 Engineering documentation transfers the complete model
+
+Documentation explains:
+
+- the exact imperative Tune function;
+- worker, scheduler, Tune configuration, Lightning, and checkpoint authority;
+- the genome/checkpoint distinction;
+- parent-genome metadata;
+- mutation and checkpoint-assignment ordering;
+- failure boundaries; and
+- tested support limitations.
+
+### M3.13 A public mechanics example exposes the ordinary path
+
+A reproducible example uses the supported function API, completes multiple real
+generations, and makes gradients, divergence, fitness, parent genome, checkpoint
+provenance, child genomes, inherited optimizer state, and continued training
+inspectable.
+
+### M3.14 An initial scientific workload begins evaluating the method
+
+A public-package experiment uses a real task capable of illustrating optimizer-genome
+adaptation, records its workload, generation policy, fitness, compute cost, and
+limitations, and reports favorable, neutral, or unfavorable results honestly.
 
 ## Review and handoff gates
 
-### M3.12 The complete manual workflow is internally consistent
+### M3.15 The complete workflow is internally consistent
 
-Implementation, tests, framework evidence, documentation, and examples describe
-one supported manual workflow. Human review applies the standing framework-native
-review to every custom seam.
+Implementation, tests, framework evidence, documentation, and examples describe one
+supported workflow and one state authority for every piece of data.
 
-### M3.13 Milestone 4 receives the proven manual sequence
+### M3.16 Milestone 4 receives the proven ordinary sequence
 
-The handoff identifies the user-facing assembly steps that the usability frontend
-may remove, the lower-level public primitives it must continue to use, the
-support boundary it must preserve, and the advanced manual path that remains
-available.
+The handoff identifies the remaining user-facing assembly steps a later usability
+frontend may remove, the lower-level primitives it must preserve, and the tested
+support boundary it may not silently broaden.
 
 ## Closure evidence
 
-Milestone 3 closes with the accepted integration design and Ray-seam decision,
-direct and framework-contract tests, multi-round end-to-end evidence, manual
-integration and support documentation, mechanics example, initial scientific
-workload and results, human review, and Milestone 4 handoff.
+Milestone 3 closes with the accepted architecture, focused core tests, direct Ray and
+Lightning framework contracts, repeated end-to-end evidence, engineering and support
+documentation, a public mechanics example, initial scientific results, human review,
+and a Milestone 4 handoff.
