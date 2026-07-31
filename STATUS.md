@@ -1,6 +1,6 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-07-27
+Last updated: 2026-07-31
 
 ## Current position
 
@@ -11,21 +11,21 @@ Milestone 2 established the accepted framework-independent evolutionary subsyste
 `MutationSpec`, `ClanRound`, and `ClanController`, with focused tests and controller
 documentation.
 
-The active repository surface has been reset to those accepted Milestone 1 and
+The active repository surface remains reset to those accepted Milestone 1 and
 Milestone 2 products. Earlier Ray, Lightning, DDP, checkpoint, optimizer-application,
-factory, framework-contract, and end-to-end example implementations have been removed
-from the active tree. They remain available through git history only and are not an
-accepted foundation for later work.
+factory, framework-contract, and end-to-end example implementations remain available
+through git history only and are not an accepted implementation foundation.
 
 ## Current work
 
-Milestone 3 is paused while its integration design is reconsidered from the clean
-Milestone 1 and Milestone 2 boundary. No active Ray or Lightning implementation is
-currently accepted.
+A proposed whole-system design is under human review. It promotes the behavioral test
+contracts into the design reader path and proposes responsibility, state-authority,
+and lifecycle boundaries for composing the accepted controller with Ray Tune,
+Lightning, and PyTorch DDP.
 
-Future Milestone 3 work must begin from the accepted controller and framework ownership
-contracts, introduce one reviewable improvement at a time, and may revise earlier
-increments when new framework evidence changes the design.
+The design does not implement Milestone 3 or establish milestone completion. After
+review, accepted corrections will be applied before the architecture is decomposed
+into milestone-sized implementation work and executable TDD contracts.
 
 ## Governing references
 
@@ -35,6 +35,7 @@ increments when new framework evidence changes the design.
 - [Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
 - [Milestone 3 gate](docs/milestones/gates/milestone_3_integratable_orchestration.md)
 - [Controller lifecycle and reference](docs/controller/README.md)
+- [Proposed system design](docs/design/README.md)
 - [Framework-alignment package](docs/framework_alignment/README.md)
 - [LLM operating context](docs/llm/README.md)
 
@@ -44,5 +45,7 @@ increments when new framework evidence changes the design.
 - There is no active Lightning lifecycle or checkpoint integration.
 - There is no package-managed DDP, model-wrapping, or distributed-data setup.
 - There is no live optimizer-configuration application system.
+- The proposed design has not yet been accepted or decomposed into implementation
+  milestones.
 - Historical proof-of-concept code must not be imported, copied forward wholesale, or
   treated as an accepted design merely because it once passed tests.
