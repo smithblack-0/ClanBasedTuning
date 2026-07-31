@@ -1,6 +1,6 @@
 # Worker controller API
 
-The active framework-independent surface consists of `ClanController` and
+The active public framework-independent surface consists of `ClanController` and
 `MutationSpec`.
 
 ## `ClanController`
@@ -58,15 +58,18 @@ The first call:
 1. requires local fitness;
 2. exchanges fitness across the complete population;
 3. verifies the configured population size;
-4. selects one winner using the configured direction and stable rank tie-break; and
+4. selects one winner using the shared direction and stable rank tie-break; and
 5. returns whether the local member is that winner.
 
 The result is cached. Repeated calls return the same boolean without performing another
 collective operation.
 
-The method does not construct, load, save, wrap, or report a checkpoint. The train
-function and Lightning integration use the boolean at their ordinary checkpoint
+The method does not construct, load, save, wrap, annotate, or report a checkpoint. The
+train function and Lightning integration use the boolean at their ordinary checkpoint
 boundary.
+
+The controller contains no genome or scheduler state. The active member genome is the
+controlled subset of that member's Tune configuration.
 
 ## `MutationSpec`
 
@@ -91,5 +94,38 @@ lr_mutation = MutationSpec(
 : Inclusive bounds applied after mutation.
 
 `mutation.mutate(value, random_stream)` returns one bounded mutation. The future CBT
-Tune scheduler owns the random stream and applies mutation while constructing next
-trial configurations. The worker controller does not use or retain mutation state.
+Tune scheduler owns the random stream and applies mutation while constructing target
+trial genomes. The worker controller does not use or retain mutation state.
+
+## Internal scheduler primitives
+
+Two framework-independent helpers are intentionally not exported from the package root.
+They support the future scheduler without making policy mechanics part of the ordinary
+user API.
+
+### `select_winner_id(population, mode)`
+
+Returns the stable winning rank from rank-ordered fitness values. The worker controller
+uses this same implementation so the worker save decision and scheduler verification
+cannot disagree on comparison direction or ties.
+
+### `build_parent_genome_metadata(...)`
+
+Builds the namespaced metadata mapping the scheduler will merge into the selected Ray
+checkpoint:
+
+```python
+{
+    "clan_based_tuning": {
+        "schema_version": 1,
+        "round_index": round_index,
+        "source_member_id": source_member_id,
+        "source_trial_id": source_trial_id,
+        "parent_genome": dict(genome),
+    }
+}
+```
+
+The `genome` argument is the controlled subset of the winning trial's active
+configuration. The helper only builds plain metadata; Ray checkpoint mutation remains a
+scheduler integration responsibility.
