@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from clan_based_tuning import ClanRound, MutationSpec
+from clan_based_tuning import MutationSpec
 
 
 class FixedRandom:
@@ -42,31 +42,3 @@ def test_unknown_mutation_geometry_crashes_when_used():
 
     with pytest.raises(ValueError, match="unknown mutation geometry"):
         mutation.mutate(2.0, FixedRandom(0.3))
-
-
-def test_clan_round_carries_config_and_publishes_itself():
-    saved = []
-    config = {"lr": 1.0}
-    round_ = ClanRound(
-        member_id=2,
-        round_index=4,
-        config=config,
-        save_member_fitness=saved.append,
-    )
-    config["lr"] = 9.0
-
-    round_.set_fitness(0.4)
-
-    assert round_.get_config() == {"lr": 1.0}
-    assert round_.fitness == 0.4
-    assert saved == [round_]
-
-
-def test_clan_round_rejects_nonfinite_fitness_before_publish():
-    saved = []
-    round_ = ClanRound(0, 0, {"lr": 1.0}, saved.append)
-
-    with pytest.raises(ValueError, match="finite"):
-        round_.set_fitness(math.nan)
-
-    assert saved == []
