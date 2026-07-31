@@ -8,46 +8,51 @@ Milestone 1 established the accepted framework-alignment research, project decis
 roadmap, milestone gates, and durable engineering process.
 
 Milestone 2 established the framework-independent evolutionary subsystem:
-`MutationSpec`, `ClanRound`, and `ClanController`, with focused tests and controller
-documentation.
+`MutationSpec`, `ClanRound`, and `ClanController`.
 
-Milestone 3 now has an accepted system design and behavioral acceptance contract. The
-design establishes the complete round lifecycle, the responsibility split between CBT,
-Ray Tune, and Lightning DDP, the winner-only checkpoint path, and the framework seams
-that implementation must qualify.
+Milestone 3 has an accepted system design and behavioral acceptance contract. The
+first implementation slice corrects the controller lifecycle required by that design:
+selection now closes the evaluated round without mutation, winner-derived controller
+state is checkpointable, and next-round mutation can occur only after that state has
+been restored into a receiving member.
 
-The active implementation surface still contains only the accepted Milestone 1 and
-Milestone 2 products. Earlier Ray, Lightning, DDP, checkpoint, optimizer-application,
-factory, framework-contract, and end-to-end example implementations remain available
-through git history only and are not an accepted implementation foundation.
+The active implementation still contains no Ray Tune or Lightning DDP integration.
+Historical integration code remains evidence in git history and is not an accepted
+implementation foundation.
+
+## Implemented Milestone 3 foundation
+
+`ClanController.close_round()` now:
+
+1. loads and validates one complete population;
+2. selects and records the completed winner;
+3. exposes whether the local process is preferred; and
+4. leaves the current round unchanged for winner checkpointing.
+
+The selected winner is included in `state_dict()`. After the winner state is restored,
+`start_next_round()` preserves the receiving member ID, rebases a deterministic child
+random stream from the winning lineage, retains the winning configuration for the
+winning member, and mutates the other members from that same configuration.
+
+The previous combined `advance()` operation is removed because it manufactured the
+next population before the winner checkpoint existed.
 
 ## Current work
 
-The next work is to decompose the Milestone 3 design into small implementation slices
-and executable contracts.
+The next implementation work should connect the accepted round lifecycle to framework
+boundaries in small TDD slices. The nearest unresolved pieces are:
 
-The first slices must preserve the designed lifecycle:
-
-1. load the preferred continuation;
-2. restore and rebase the preferred CBT controller state;
-3. derive and apply member-local optimizer values;
-4. train through Lightning DDP;
-5. compare the complete fitness population through a Ray collective;
-6. persist one preferred Lightning checkpoint;
-7. report and transfer it through Tune; and
-8. start the complete next population from that checkpoint.
-
-The current Milestone 2 controller lifecycle must be revised so selection and
-checkpointing close the current round before rebase and mutation manufacture the next
-round. Its accepted selection, mutation, bounds, and deterministic-state algorithms
-remain the foundation for that correction.
+- Ray collective exchange of one fitness value per live variant;
+- winner-aware Lightning checkpoint persistence with all DDP ranks participating;
+- Tune reporting of one real checkpoint and checkpoint assignment to every next trial;
+- optimizer-value application after Lightning restores winner optimizer history; and
+- a real multi-round Lightning DDP acceptance path.
 
 ## Governing references
 
 - [Product roadmap](docs/product_roadmap.md)
 - [Project decisions](docs/decisions/project_decisions.md)
 - [Milestone gate system](docs/milestones/README.md)
-- [Milestone 2 gate](docs/milestones/gates/milestone_2_evolutionary_subsystem.md)
 - [Milestone 3 gate](docs/milestones/gates/milestone_3_integratable_orchestration.md)
 - [Controller lifecycle and reference](docs/controller/README.md)
 - [Milestone 3 system design](docs/design/README.md)
@@ -61,9 +66,7 @@ remain the foundation for that correction.
 - There is no active Lightning DDP integration or winner-aware checkpoint path.
 - There is no Ray fitness collective integration.
 - There is no live optimizer-configuration application system.
-- The controller close/select/checkpoint versus restore/rebase/mutate lifecycle split is
-  not yet implemented.
+- The controller rebase rule is currently qualified only by focused deterministic
+  tests; framework checkpoint restoration has not yet exercised it.
 - The design's version-sensitive Tune checkpoint-assignment seam still requires direct
   framework-contract qualification against Ray 2.56.x.
-- Historical proof-of-concept code must not be copied forward wholesale or treated as
-  accepted merely because it once passed tests.
