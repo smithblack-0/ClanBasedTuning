@@ -1,4 +1,4 @@
-"""Framework-independent primitives shared by CBT workers and the Tune scheduler."""
+"""Framework-independent Clan Tuning evolution policy."""
 
 import math
 from dataclasses import dataclass
@@ -35,28 +35,3 @@ def select_winner_id(population, mode):
     if mode == "max":
         return max(ranked, key=lambda item: (item[1], -item[0]))[0]
     raise ValueError("mode must be 'min' or 'max'")
-
-
-def build_parent_genome_metadata(
-    *,
-    round_index,
-    source_member_id,
-    source_trial_id,
-    genome,
-):
-    """Return checkpoint metadata binding a continuation to its parent genome.
-
-    The scheduler supplies only the controlled genome subset, not the complete Tune
-    configuration. Ray can merge this namespaced mapping into checkpoint metadata
-    without loading the Lightning checkpoint payload.
-    """
-
-    return {
-        "clan_based_tuning": {
-            "schema_version": 1,
-            "round_index": round_index,
-            "source_member_id": source_member_id,
-            "source_trial_id": source_trial_id,
-            "parent_genome": dict(genome),
-        }
-    }
