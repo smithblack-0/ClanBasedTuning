@@ -1,16 +1,30 @@
 # Clan controller
 
-Status: Milestone 2 controller contract and implementation
+Status: Milestone 2 controller with the accepted Milestone 3 lifecycle correction
 
 ## Lifecycle boundary
 
 One `ClanController` persists beside one training process or trial. It owns that
-member's current `ClanRound`, winner selection, local hyperparameter mutation, and
-random stream.
+member's current `ClanRound`, winner selection, winner-derived controller state,
+member-local mutation, and deterministic random stream.
 
 The controller does not implement distributed storage, synchronization, model or
-optimizer transfer, checkpoints, or framework lifecycle. Those effects are supplied
-as callbacks.
+optimizer transfer, checkpoints, or framework lifecycle. Those effects remain external.
+
+## Why the lifecycle is split
+
+A completed winner must be checkpointed before any next-round mutation is manufactured.
+The controller therefore has two separate transitions:
+
+```text
+complete and publish the current round
+→ close_round(): select and record the completed winner
+→ checkpoint and restore the winning controller state
+→ start_next_round(): rebase and manufacture this member's next round
+```
+
+`close_round()` never increments the round or mutates a configuration.
+`start_next_round()` refuses to run until a closed winner state has been restored.
 
 ## Objects
 
@@ -25,20 +39,15 @@ A `ClanRound` carries one member's controlled configuration into a training roun
 After evaluation, `set_fitness()` attaches the result and passes the completed round
 to `save_member_fitness`.
 
-The same object therefore carries configuration into training and fitness back out.
-It is not a population wrapper or a framework member.
-
 ### `ClanController`
 
-A controller owns only its local member's progression. It never constructs an entire
-population. At `advance()` it briefly loads the completed rounds as an ordinary
-`list[ClanRound]`, selects the winner, manufactures only its own next round, informs
-the external runtime, and installs that prepared round.
+A controller owns only its local member's progression. It briefly loads the completed
+population when closing a round, records the selected completed round, and exposes that
+state for checkpointing. After the winning state is restored into each receiver, the
+controller rebases its random stream for the receiving member and creates only that
+member's next round.
 
-## Small manual loop
-
-Milestone 2 can be exercised directly without a model, optimizer, Ray, Lightning, or
-checkpoint implementation:
+## Small manual lifecycle
 
 ```python
 from clan_based_tuning import ClanController, MutationSpec
@@ -89,10 +98,15 @@ controllers = [
 for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
     controller.set_fitness(fitness)
 
-for controller in controllers:
-    controller.advance()
-
+preferred = [controller.close_round() for controller in controllers]
+assert preferred == [False, True, False]
 assert winner_calls == [[1], [1], [1]]
+
+winning_state = controllers[1].state_dict()
+for controller in controllers:
+    controller.load_state_dict(winning_state)
+    controller.start_next_round()
+
 assert [controller.get_config() for controller in controllers] == [
     {"lr": 2.0},
     {"lr": 2.0},
@@ -100,30 +114,9 @@ assert [controller.get_config() for controller in controllers] == [
 ]
 ```
 
-The first loop manually supplies the three completed fitness values. The second lets
-each fake process load the same completed population, select member 1, notify its
-external callback, and manufacture its own next `ClanRound` from member 1's
-configuration.
-
-This is only the framework-independent Milestone 2 contract exercise. The manual CPU
-model and optimizer implementation is a Milestone 3 acceptance gate.
-
-## Advance sequence
-
-`advance()` performs:
-
-```text
-load completed rounds
-→ verify the expected population
-→ select the best round
-→ manufacture this member's complete next ClanRound
-→ tell the runtime which member won
-→ install the prepared ClanRound
-```
-
-Mutation is part of manufacturing the next round from the winning round. All local
-calculation therefore finishes before `select_winner` can transfer model, optimizer,
-or checkpoint state.
+The explicit `state_dict()` transfer stands in for the future winner-only Lightning
+checkpoint. It demonstrates the required order without implementing a checkpoint or
+training framework in the controller package.
 
 ## Injected effects
 
@@ -135,44 +128,33 @@ select_winner: Callable[[int], None]
 
 `save_member_fitness` publishes one completed local round.
 
-`load_population` owns rendezvous, storage, and transport. It returns the completed
-records for the requested round.
+`load_population` returns the complete records for the requested round. The controller
+keeps its corruption guard at this policy boundary.
 
-`select_winner` does not choose the winner. The controller calls it with the winning
-integer member ID so the surrounding runtime can transfer model, optimizer,
-checkpoint, or other externally owned state.
-
-A later Ray integration can implement these effects through Tune without changing
-the core controller.
-
-## Replay
-
-The selected winner ID is also the event needed to record a PBT replay path. The core
-controller should continue to emit that event through `select_winner`; durable lineage
-storage, association with checkpoints and round identities, and execution of a later
-replay run belong to Milestone 3 because they depend on the external lifecycle.
-
-No additional replay object or callback is required in Milestone 2. The Milestone 3
-integration can transfer the selected state through each local callback while one
-authority records the winner idempotently for the completed round.
+`select_winner` receives the selected integer member ID after local selection. It may
+record lineage or set framework-owned winner context, but it does not transfer state or
+manufacture the next round.
 
 ## Failure boundary
 
-The controller intentionally performs little validation. Invalid mappings, missing
-mutation names, and unusable mutation rules fail naturally when used.
+`close_round()` rejects incomplete, duplicated, wrong-round, or fitness-less
+populations before recording a winner or invoking `select_winner`.
 
-`advance()` retains one explicit corruption guard. The loaded population must contain
-exactly one completed result for every expected member and all records must belong to
-the requested round. A bad population crashes before winner transfer or installation
-of a new round.
+`start_next_round()` rejects open rounds and locally selected state that has not passed
+through `load_state_dict()`. This prevents the pre-checkpoint process from mutating and
+continuing from its local trajectory.
 
-`ClanRound.set_fitness()` also rejects non-finite fitness because NaN can otherwise
-produce a valid-looking but meaningless winner rather than crashing.
+`ClanRound.set_fitness()` rejects non-finite fitness before publication.
 
 ## Randomness and persistence
 
-Each member receives a deterministic local random stream derived from the experiment
-seed and integer member ID. `state_dict()` and `load_state_dict()` preserve that stream
-together with the current round index, configuration, and optional fitness.
+`state_dict()` includes the current round, random state, and selected completed winner.
+Only the preferred process's state should enter the continuation checkpoint.
+
+`load_state_dict()` restores that common winner-derived state while retaining the
+receiving controller's member ID. `start_next_round()` derives a deterministic child
+stream for that member from the restored winner stream. Consequently, the same winning
+checkpoint produces the same member-local next population regardless of the constructor
+seed used to recreate a receiving process, while no losing random trajectory survives.
 
 See [API reference](api.md) for the concrete call surface.
