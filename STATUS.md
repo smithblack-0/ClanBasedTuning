@@ -35,7 +35,7 @@ The first slices must preserve the designed lifecycle:
 5. compare the complete fitness population through a Ray collective;
 6. persist one preferred Lightning checkpoint;
 7. report and transfer it through Tune; and
-8. load it into the complete next population.
+8. start the complete next population from that checkpoint.
 
 The current Milestone 2 controller lifecycle must be revised so selection and
 checkpointing close the current round before rebase and mutation manufacture the next
