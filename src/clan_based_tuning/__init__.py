@@ -1,10 +1,9 @@
-"""Framework-independent Clan Tuning evolutionary subsystem."""
+"""Clan Tuning worker decision and scheduler mutation primitives."""
 
 from clan_based_tuning.controller import ClanController
-from clan_based_tuning.controller_types import ClanRound, MutationSpec
+from clan_based_tuning.controller_types import MutationSpec
 
 __all__ = [
     "ClanController",
-    "ClanRound",
     "MutationSpec",
 ]

@@ -1,10 +1,10 @@
-"""Repository-level guard for the accepted Milestone 1 and 2 active surface."""
+"""Repository-level guard for the accepted active implementation surface."""
 
 from pathlib import Path
 
 
-def test_active_package_contains_only_the_milestone_2_implementation():
-    """Historical framework code must remain outside the importable source tree."""
+def test_active_package_contains_only_the_thin_worker_core():
+    """Historical integration and superseded round code stay outside the source tree."""
 
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
@@ -39,8 +39,8 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
 
-def test_no_active_training_example_survives_the_reset():
-    """Milestone 3 examples must be rebuilt from accepted integration primitives."""
+def test_no_active_training_example_precedes_the_new_integration():
+    """Examples must be rebuilt only after the accepted Tune and Lightning seams."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"

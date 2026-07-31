@@ -1,182 +1,78 @@
 # Milestone 2 gates — evolutionary subsystem
 
-Status: active completion gate  
-Date: 2026-07-25
+Status: closed historical gate; runtime shape superseded by Milestone 3  
+Original date: 2026-07-25  
+Supersession recorded: 2026-07-31
 
-## Governing basis
+## Historical result
 
-The roadmap and accepted project decisions govern this milestone. This gate
-requires the independently invokable Clan population policy. Selection and
-qualification of the Ray Tune invocation path belong to Milestone 3.
+Milestone 2 established framework-independent population-selection and mutation
+behavior before a Ray invocation path had been selected.
 
-## Milestone result
+The work proved:
 
-ClanBasedTuning has a framework-independent, tested, documented, and inspectable
-evolutionary controller that expresses the population-decision side of Clan
-Tuning. It accepts ordinary data describing one complete population, selects the
-sole parent, and produces the next optimizer-hyperparameter configurations.
+- minimizing and maximizing selection with stable lower-rank tie behavior;
+- bounded linear and logarithmic optimizer-hyperparameter mutation;
+- deterministic mutation from explicit random state;
+- complete-population requirements;
+- failure before partial evolutionary output; and
+- separation from model, optimizer, checkpoint, training, and Ray runtime ownership.
 
-The result is independently useful and ready for later framework integration. It
-does not import Ray trial objects, subclass a Tune scheduler, communicate between
-workers, transfer checkpoints, construct optimizers, apply live optimizer values,
-or own training lifecycle.
+Those algorithms remain useful.
 
-## Capability and responsibility gates
+## Superseded runtime design
 
-### M2.1 The controller boundary is framework-independent
+The Milestone 2 implementation later expressed those algorithms through a public
+`ClanRound` and a persistent per-process `ClanController` that loaded a complete
+population, selected a winner, mutated a next configuration, advanced a hidden round,
+and serialized controller state.
 
-The accepted design gives the controller one coherent job: transform a complete
-population result into the sole parent and next optimizer-hyperparameter
-configurations.
+The accepted Milestone 3 Tune lifecycle showed that this object model duplicated
+framework responsibilities:
 
-Framework extraction and execution remain outside this component. The controller
-may be tested with the plain data shape a future integration can construct, but
-it does not depend on Ray, Lightning, or distributed runtime objects.
+- Tune trial configuration is the natural live genome authority;
+- the Tune scheduler is the natural mutation, lineage, and checkpoint-assignment
+  authority;
+- the worker needs only a pre-report collective checkpoint-source decision; and
+- the selected training checkpoint must remain separate from target-local child
+  genomes.
 
-### M2.2 The population input and transition output are complete
+Therefore the public `ClanRound`, controller advancement, controller-owned mutation,
+and controller checkpoint state are no longer active requirements. They are historical
+evidence rather than current architecture.
 
-The controller consumes one complete population result containing member
-identity, comparable fitness, current optimizer-hyperparameter configuration,
-and only the policy state the accepted design genuinely requires.
+## Retained Milestone 2 products
 
-It produces enough information for an external lifecycle owner to identify the
-sole winning member and obtain one legal next configuration for every member.
-The accepted design documents the concrete data structure and associations; the
-gate does not prescribe a record hierarchy or class layout.
+### Mutation rules
 
-The controller does not claim ownership of model parameters, optimizer state,
-checkpoint contents, optimizer construction, training, or trials merely because
-the selected member's external state will later be inherited.
+`MutationSpec` remains the framework-independent description of one bounded controlled
+value mutation. The future CBT Tune scheduler owns the random stream and applies these
+rules while constructing target trial genomes.
 
-### M2.3 Selection and configuration generation are deterministic and valid
+### Stable selection
 
-- Metric direction and tie behavior are explicit.
-- Missing, duplicate, non-finite, malformed, or incomplete population input fails
-  clearly.
-- Exactly one parent and one complete next-configuration set are produced.
-- Repeated execution from the same accepted state and input produces the same
-  decision.
-- Variation is limited to optimizer hyperparameters; model, data, batch,
-  augmentation, and other gradient-defining choices are rejected.
+The stable population comparison remains a shared internal primitive. Worker-side
+checkpoint-source resolution and scheduler-side winner verification must use the same
+rule.
 
-The exact mutation geometry, retention policy, boundary behavior, and randomness
-model are documented and tested. The gate does not prescribe an elite, hidden
-state, explicit seed, or persistence format before the accepted design justifies
-one.
+### Validation philosophy
 
-### M2.4 Controller state is limited to policy needs
+The project continues to prefer small corruption guards at real authority boundaries:
+finite fitness, complete population, declared mutation geometry, and bounded output.
+It does not construct a broad validation subsystem around trusted internal objects.
 
-The controller retains only state required by the accepted population policy.
-It does not mirror framework population membership, trial runtime, checkpoint
-contents, resources, experiment persistence, or optimizer construction.
+### Framework independence
 
-If the accepted design is stateless, no serialization surface is added merely to
-match a generic controller pattern. If state is required, its lifecycle,
-authority, and deterministic restoration are documented and tested.
+Core selection, mutation, and checkpoint-provenance metadata construction remain plain
+Python and do not import Ray or Lightning.
 
-### M2.5 Invalid populations do not produce valid transitions
+## Current authority
 
-The controller refuses to manufacture a partial evolutionary decision from a
-missing or invalid population. Validation and failure handling do not mutate
-accepted policy state or emit partial output.
+The active Milestone 3 gate and system architecture govern all implementation work:
 
-Operational process termination, collective failure handling, and checkpoint
-recovery remain outside this controller milestone.
+- [Milestone 3 gate](milestone_3_integratable_orchestration.md)
+- [System architecture](../../design/system_architecture.md)
+- [Worker controller reference](../../controller/README.md)
 
-## Test gates
-
-### M2.6 Focused tests prove the controller contract
-
-Tests state their relevant preconditions and postconditions and cover:
-
-- initialization behavior required by the accepted design;
-- ranking direction and ties;
-- invalid fitness and malformed or incomplete populations;
-- sole-parent selection and complete next-configuration output;
-- linear and logarithmic mutation geometry where supported;
-- bounds and other declared legality rules;
-- determinism and intentional state, if any;
-- failure without partial advancement; and
-- input/output immutability or ownership guarantees.
-
-### M2.7 Plain-data seam tests preserve later integratability
-
-Tests exercise the same ordinary data representation that a later Ray integration
-can build after extracting framework-owned state. They prove that independent
-controller invocations agree when given the same logical population and policy
-state.
-
-These are compatibility tests, not Ray integration tests. They do not import Ray,
-construct `Trial` objects, choose a scheduler hook, or claim checkpoint and
-lifecycle execution.
-
-### M2.8 The controller remains independently invokable
-
-The accepted controller can be exercised directly from explicit population
-results and optimizer-hyperparameter configurations. A later adapter does not
-become the only route to policy testing, explanation, or reuse.
-
-## Documentation gate
-
-### M2.9 Engineering documentation transfers the controller model
-
-Documentation is written for engineers integrating or maintaining the controller
-and includes:
-
-- the controller's purpose and explicit non-ownership boundaries;
-- its lifecycle position before and after external training;
-- the accepted input and output data structures and associations;
-- selection, tie, mutation, bounds, randomness, state, and failure algorithms;
-- the accepted call surface and its preconditions and postconditions;
-- internal objects or modules where their contracts are nontrivial; and
-- the exact responsibilities left to the future integration layer.
-
-Lifecycle and ownership appear before detailed API syntax so a reader does not
-mistake the controller for a Lightning callback, Ray scheduler, optimizer factory,
-or population runtime.
-
-## Example gate
-
-### M2.10 A pet loop demonstrates repeated evolution
-
-A small reproducible example runs several synthetic generations. An external pet
-loop produces or samples member fitness, passes the complete population to the
-controller, receives the selected parent and next configurations, and visibly
-continues to the next generation.
-
-The example exposes how configurations and winners evolve and explains where a
-real training system would supply fitness and apply the returned decision. It
-does not mock a Ray integration or reduce the demonstration to one isolated
-method call.
-
-## Evidence, review, and handoff gates
-
-### M2.11 The controller products agree
-
-The accepted design, implementation, focused tests, engineering documentation,
-and pet-loop example describe one controller contract. No artifact claims a
-public construction or framework integration API that the milestone has not
-accepted.
-
-Human review applies the standing framework-native and senior-engineering reviews
-to the component itself.
-
-### M2.12 Milestone 3 receives a complete integration handoff
-
-The handoff states:
-
-- the population fields and completeness conditions the controller consumes;
-- the transition result it produces;
-- intentional controller state and persistence requirements, if any;
-- determinism and failure guarantees;
-- the external model, optimizer, checkpoint, and lifecycle responsibilities; and
-- the plain-data boundary where Milestone 3 will choose and qualify a Ray
-  invocation path.
-
-The handoff does not choose that Ray path in advance.
-
-## Closure evidence
-
-Milestone 2 closes with links to the accepted controller design, implementation,
-focused and plain-data seam test results, engineering reference, pet-loop example,
-human review, and Milestone 3 handoff.
+No implementation should restore the superseded Milestone 2 lifecycle merely to satisfy
+this historical gate.

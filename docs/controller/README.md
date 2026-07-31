@@ -1,178 +1,147 @@
-# Clan controller
+# Worker-side Clan controller
 
-Status: Milestone 2 controller contract and implementation
+Status: active worker checkpoint-decision contract
 
-## Lifecycle boundary
+## Purpose
 
-One `ClanController` persists beside one training process or trial. It owns that
-member's current `ClanRound`, winner selection, local hyperparameter mutation, and
-random stream.
+`ClanController` hides the one unusual operation a normal Tune function needs before
+reporting: every live Clan member must exchange fitness and agree which process is
+allowed to attach the continuation checkpoint.
 
-The controller does not implement distributed storage, synchronization, model or
-optimizer transfer, checkpoints, or framework lifecycle. Those effects are supplied
-as callbacks.
+The controller is not the evolutionary policy owner and does not own a genome. The
+Tune scheduler owns parent selection, mutation, next-trial configurations, mutation
+random state, replay lineage, and winner-checkpoint assignment. The active genome for a
+member is the controlled subset of that member's `Trial.config`.
 
-## Objects
+## Intended Tune function
 
-### `MutationSpec`
-
-A `MutationSpec` applies one bounded mutation rule. Mutation names come from the keys
-in the controller's ordinary `dict[str, MutationSpec]`.
-
-### `ClanRound`
-
-A `ClanRound` carries one member's controlled configuration into a training round.
-After evaluation, `set_fitness()` attaches the result and passes the completed round
-to `save_member_fitness`.
-
-The same object therefore carries configuration into training and fitness back out.
-It is not a population wrapper or a framework member.
-
-### `ClanController`
-
-A controller owns only its local member's progression. It never constructs an entire
-population. At `advance()` it briefly loads the completed rounds as an ordinary
-`list[ClanRound]`, selects the winner, manufactures only its own next round, informs
-the external runtime, and installs that prepared round.
-
-## Small manual loop
-
-Milestone 2 can be exercised directly without a model, optimizer, Ray, Lightning, or
-checkpoint implementation:
+The ordinary user flow is:
 
 ```python
-from clan_based_tuning import ClanController, MutationSpec
+def train(config):
+    controller = make_cbt_controller()
 
+    model, optimizer = build_training_objects(config)
 
-class RoundStore:
-    def __init__(self, population_size):
-        self.population_size = population_size
-        self.saved = {}
+    checkpoint = tune.get_checkpoint()
+    if checkpoint is not None:
+        restore_training_state(checkpoint, model, optimizer)
 
-    def save(self, round_):
-        self.saved[(round_.round_index, round_.member_id)] = round_
+    apply_optimizer_config(optimizer, config)
+    train_one_round(model, optimizer)
+    metrics = evaluate(model)
 
-    def load(self, round_index):
-        return [
-            self.saved[(round_index, member_id)]
-            for member_id in range(self.population_size)
-            if (round_index, member_id) in self.saved
-        ]
+    controller.set_fitness(metrics["fitness"])
+    should_save = controller.should_save_checkpoint()
 
-
-population_size = 3
-store = RoundStore(population_size)
-winner_calls = [[] for _ in range(population_size)]
-mutations = {
-    "lr": MutationSpec(
-        standard_deviation=0.0,
-        geometry="linear",
-        minimum=0.0,
-        maximum=10.0,
+    checkpoint = distributed_checkpoint_boundary(
+        model=model,
+        optimizer=optimizer,
+        persist=should_save,
     )
-}
-controllers = [
-    ClanController(
-        member_id=member_id,
-        population_size=population_size,
-        initial_config={"lr": float(member_id + 1)},
-        mutations=mutations,
-        mode="min",
-        seed=17,
-        save_member_fitness=store.save,
-        load_population=store.load,
-        select_winner=winner_calls[member_id].append,
-    )
-    for member_id in range(population_size)
-]
 
-for controller, fitness in zip(controllers, [4.0, 1.0, 2.0], strict=True):
-    controller.set_fitness(fitness)
-
-for controller in controllers:
-    controller.advance()
-
-assert winner_calls == [[1], [1], [1]]
-assert [controller.get_config() for controller in controllers] == [
-    {"lr": 2.0},
-    {"lr": 2.0},
-    {"lr": 2.0},
-]
+    if should_save:
+        tune.report(metrics, checkpoint=checkpoint)
+    else:
+        tune.report(metrics)
 ```
 
-The first loop manually supplies the three completed fitness values. The second lets
-each fake process load the same completed population, select member 1, notify its
-external callback, and manufacture its own next `ClanRound` from member 1's
-configuration.
+`distributed_checkpoint_boundary()` represents the Lightning integration: every DDP
+rank participates in the required checkpoint boundary, while only the selected rank
+retains and reports a persistent checkpoint.
 
-This is only the framework-independent Milestone 2 contract exercise. The manual CPU
-model and optimizer implementation is a Milestone 3 acceptance gate.
+The future `make_cbt_controller()` integration factory will obtain rank, population
+size, comparison direction, and Ray collective context from CBT runtime metadata. The
+user should not manually assemble those values in the train function.
 
-## Advance sequence
+## Controller responsibility
 
-`advance()` performs:
+A controller exists for one Tune function invocation and one reporting boundary. It:
 
-```text
-load completed rounds
-→ verify the expected population
-→ select the best round
-→ manufacture this member's complete next ClanRound
-→ tell the runtime which member won
-→ install the prepared ClanRound
-```
+1. stores one finite local fitness;
+2. enters one injected population-wide fitness exchange;
+3. applies the shared comparison and stable rank tie-break;
+4. caches whether this process is the checkpoint source; and
+5. returns that boolean to the train function.
 
-Mutation is part of manufacturing the next round from the winning round. All local
-calculation therefore finishes before `select_winner` can transfer model, optimizer,
-or checkpoint state.
+It does not own:
 
-## Injected effects
+- model, optimizer, or Lightning state;
+- Tune checkpoint loading or reporting;
+- the current or parent genome;
+- hyperparameter mutation;
+- next-trial configuration;
+- scheduler persistence or replay;
+- checkpoint metadata;
+- a current or next `ClanRound`;
+- round advancement; or
+- serializable controller state.
+
+## Core contract
+
+The current framework-independent constructor is the integration seam:
 
 ```python
-save_member_fitness: Callable[[ClanRound], None]
-load_population: Callable[[int], list[ClanRound]]
-select_winner: Callable[[int], None]
+controller = ClanController(
+    member_id=rank,
+    population_size=world_size,
+    mode="min",
+    exchange_fitness=all_gather_fitness,
+)
 ```
 
-`save_member_fitness` publishes one completed local round.
+`exchange_fitness(local_fitness)` must block until every required member participates
+and then return one rank-ordered fitness value per member.
 
-`load_population` owns rendezvous, storage, and transport. It returns the completed
-records for the requested round.
+```python
+controller.set_fitness(local_fitness)
+should_save = controller.should_save_checkpoint()
+```
 
-`select_winner` does not choose the winner. The controller calls it with the winning
-integer member ID so the surrounding runtime can transfer model, optimizer,
-checkpoint, or other externally owned state.
+The first `should_save_checkpoint()` call performs the exchange. Later calls return the
+cached result and do not enter the collective again.
 
-A later Ray integration can implement these effects through Tune without changing
-the core controller.
+## Shared selection rule
 
-## Replay
+The worker and future Tune scheduler must select the same rank from the same ordered
+fitness population. The core therefore provides one internal `select_winner_id()`
+implementation used by the worker controller and intended for scheduler reuse.
 
-The selected winner ID is also the event needed to record a PBT replay path. The core
-controller should continue to emit that event through `select_winner`; durable lineage
-storage, association with checkpoints and round identities, and execution of a later
-replay run belong to Milestone 3 because they depend on the external lifecycle.
+This prevents the worker from saving one checkpoint while the scheduler identifies a
+different winner because of mode or tie-breaking drift.
 
-No additional replay object or callback is required in Milestone 2. The Milestone 3
-integration can transfer the selected state through each local callback while one
-authority records the winner idempotently for the completed round.
+## Genome ownership
 
-## Failure boundary
+The scheduler learns which genome succeeded from the complete set of Tune results and
+the corresponding trials' active configurations. It does not ask the worker controller
+for a genome.
 
-The controller intentionally performs little validation. Invalid mappings, missing
-mutation names, and unusable mutation rules fail naturally when used.
+After identifying the winner, the scheduler records the controlled parent genome in
+checkpoint metadata and derives one child genome per receiving trial. The shared
+checkpoint carries training continuation and parent provenance; the receiving child
+genomes remain target-local Tune configurations.
 
-`advance()` retains one explicit corruption guard. The loaded population must contain
-exactly one completed result for every expected member and all records must belong to
-the requested round. A bad population crashes before winner transfer or installation
-of a new round.
+The framework-independent core includes `build_parent_genome_metadata()` as the
+namespaced metadata schema used by that future scheduler transition. It does not update
+a Ray checkpoint itself and therefore does not add Ray to the core dependency surface.
 
-`ClanRound.set_fitness()` also rejects non-finite fitness because NaN can otherwise
-produce a valid-looking but meaningless winner rather than crashing.
+## Why no `ClanRound`
 
-## Randomness and persistence
+The earlier active design stored configuration, fitness, population loading, winner
+selection, mutation, and next-round construction across `ClanRound` and a persistent
+controller. That design duplicated responsibilities now owned naturally by Tune's PBT
+lifecycle.
 
-Each member receives a deterministic local random stream derived from the experiment
-seed and integer member ID. `state_dict()` and `load_state_dict()` preserve that stream
-together with the current round index, configuration, and optional fitness.
+The current worker needs only one local fitness and one collective save decision. A
+separate round object would not own enough independent behavior to justify another
+public lifecycle abstraction.
 
-See [API reference](api.md) for the concrete call surface.
+## Mutation rules
+
+`MutationSpec` remains a framework-independent value used by the future CBT Tune
+scheduler. It does not belong to the worker controller. The scheduler applies those
+rules when constructing each target trial's next genome.
+
+See [API reference](api.md) for the concrete active call surface and
+[system architecture](../design/system_architecture.md) for the complete Tune,
+Lightning, genome, metadata, and collective lifecycle.

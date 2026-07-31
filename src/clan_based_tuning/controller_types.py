@@ -1,17 +1,12 @@
-"""Small data objects used by the framework-independent Clan controller.
-
-The controller evolves named scalar values. Distributed storage and state transfer
-remain external effects supplied through callbacks.
-"""
+"""Framework-independent primitives shared by CBT workers and the Tune scheduler."""
 
 import math
-from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
 class MutationSpec:
-    """Apply one local mutation rule to a named scalar value."""
+    """Apply one bounded mutation rule to a named scalar value."""
 
     standard_deviation: float
     geometry: str
@@ -31,32 +26,37 @@ class MutationSpec:
         return min(max(candidate, self.minimum), self.maximum)
 
 
-@dataclass(slots=True)
-class ClanRound:
-    """Carry one member's configuration into a round and publish its result.
+def select_winner_id(population, mode):
+    """Return one stable winner from rank-ordered fitness values."""
 
-    The callback decides how a completed round is stored or communicated. The round
-    only knows that assigning fitness publishes this member's completed local state.
+    ranked = enumerate(population)
+    if mode == "min":
+        return min(ranked, key=lambda item: (item[1], item[0]))[0]
+    if mode == "max":
+        return max(ranked, key=lambda item: (item[1], -item[0]))[0]
+    raise ValueError("mode must be 'min' or 'max'")
+
+
+def build_parent_genome_metadata(
+    *,
+    round_index,
+    source_member_id,
+    source_trial_id,
+    genome,
+):
+    """Return checkpoint metadata binding a continuation to its parent genome.
+
+    The scheduler supplies only the controlled genome subset, not the complete Tune
+    configuration. Ray can merge this namespaced mapping into checkpoint metadata
+    without loading the Lightning checkpoint payload.
     """
 
-    member_id: int
-    round_index: int
-    config: dict[str, float]
-    save_member_fitness: Callable[["ClanRound"], None] = field(repr=False, compare=False)
-    fitness: float | None = None
-
-    def __post_init__(self):
-        self.config = dict(self.config)
-
-    def get_config(self):
-        """Return a copy of the controlled values used for this round."""
-
-        return dict(self.config)
-
-    def set_fitness(self, fitness):
-        """Attach this round's comparable result and publish the completed round."""
-
-        if not math.isfinite(fitness):
-            raise ValueError("fitness must be finite")
-        self.fitness = float(fitness)
-        self.save_member_fitness(self)
+    return {
+        "clan_based_tuning": {
+            "schema_version": 1,
+            "round_index": round_index,
+            "source_member_id": source_member_id,
+            "source_trial_id": source_trial_id,
+            "parent_genome": dict(genome),
+        }
+    }

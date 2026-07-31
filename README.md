@@ -5,17 +5,30 @@ training with member-local optimizer hyperparameters and population selection.
 
 ## Current implementation surface
 
-The active implementation is intentionally limited to the accepted Milestone 2
-framework-independent evolutionary subsystem:
+The active implementation contains the framework-independent pieces required by the
+accepted Tune-shaped design:
 
-- `MutationSpec` defines one bounded mutation rule.
-- `ClanRound` carries one member's optimizer configuration and fitness.
-- `ClanController` advances one member through the accepted population-policy lifecycle.
+- `ClanController` is a thin worker-side collective manager. It stores one local
+  fitness value and answers whether that Tune worker should attach the generation
+  checkpoint.
+- `MutationSpec` defines one bounded mutation rule for the future CBT Tune scheduler.
+- worker and scheduler code share one stable winner-selection implementation; and
+- the core defines the namespaced metadata mapping that binds a selected checkpoint to
+  the parent genome that produced it.
 
-Ray Tune, Lightning, DDP setup, checkpoint integration, optimizer application, and
-end-to-end training orchestration are not active package surfaces. Earlier
-proof-of-concept implementations were removed from the active tree before Milestone 3
-restarts. Their history remains available through git and is described in
+The worker controller does not advance generations, own a genome, retain mutation
+state, serialize into training checkpoints, or construct another round.
+
+The future CBT Tune scheduler is the evolutionary authority. The active genome for a
+member is the controlled subset of that member's `Trial.config`. The scheduler will
+associate reported fitness with those genomes, mutate target trial configurations,
+attach parent-genome provenance to the selected checkpoint metadata, persist replay
+lineage, and assign the selected training checkpoint to every next member.
+
+Ray collective construction, Lightning DDP integration, winner-aware checkpoint
+persistence, the CBT Tune scheduler, and the public `make_cbt_controller()` factory are
+not yet active package surfaces. Historical proof-of-concept implementations remain
+available only through git history and are described in
 [`old_code/README.md`](old_code/README.md).
 
 Read [`STATUS.md`](STATUS.md) for the current durable project position.
@@ -27,8 +40,9 @@ Read [`STATUS.md`](STATUS.md) for the current durable project position.
 - [`docs/decisions/project_decisions.md`](docs/decisions/project_decisions.md) —
   accepted cross-milestone technical decisions.
 - [`docs/milestones/README.md`](docs/milestones/README.md) — milestone-gate rules.
-- [`docs/controller/README.md`](docs/controller/README.md) — controller lifecycle,
-  ownership, algorithms, and API reference.
+- [`docs/design/README.md`](docs/design/README.md) — accepted Milestone 3 system flow.
+- [`docs/controller/README.md`](docs/controller/README.md) — worker controller lifecycle,
+  ownership, and API reference.
 - [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
   accepted framework research and responsibility model.
 - [`AGENTS.md`](AGENTS.md) — contributor and coding-agent entry point.

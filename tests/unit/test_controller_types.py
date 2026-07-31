@@ -2,7 +2,11 @@ import math
 
 import pytest
 
-from clan_based_tuning import ClanRound, MutationSpec
+from clan_based_tuning import MutationSpec
+from clan_based_tuning.controller_types import (
+    build_parent_genome_metadata,
+    select_winner_id,
+)
 
 
 class FixedRandom:
@@ -44,29 +48,28 @@ def test_unknown_mutation_geometry_crashes_when_used():
         mutation.mutate(2.0, FixedRandom(0.3))
 
 
-def test_clan_round_carries_config_and_publishes_itself():
-    saved = []
-    config = {"lr": 1.0}
-    round_ = ClanRound(
-        member_id=2,
-        round_index=4,
-        config=config,
-        save_member_fitness=saved.append,
+def test_shared_selection_rule_matches_worker_and_scheduler_needs():
+    assert select_winner_id([4.0, 1.0, 2.0], "min") == 1
+    assert select_winner_id([5.0, 5.0, 2.0], "max") == 0
+
+
+def test_parent_genome_metadata_namespaces_checkpoint_provenance():
+    genome = {"lr": 0.004, "weight_decay": 0.08}
+
+    metadata = build_parent_genome_metadata(
+        round_index=7,
+        source_member_id=2,
+        source_trial_id="trial_00002",
+        genome=genome,
     )
-    config["lr"] = 9.0
+    genome["lr"] = 9.0
 
-    round_.set_fitness(0.4)
-
-    assert round_.get_config() == {"lr": 1.0}
-    assert round_.fitness == 0.4
-    assert saved == [round_]
-
-
-def test_clan_round_rejects_nonfinite_fitness_before_publish():
-    saved = []
-    round_ = ClanRound(0, 0, {"lr": 1.0}, saved.append)
-
-    with pytest.raises(ValueError, match="finite"):
-        round_.set_fitness(math.nan)
-
-    assert saved == []
+    assert metadata == {
+        "clan_based_tuning": {
+            "schema_version": 1,
+            "round_index": 7,
+            "source_member_id": 2,
+            "source_trial_id": "trial_00002",
+            "parent_genome": {"lr": 0.004, "weight_decay": 0.08},
+        }
+    }
