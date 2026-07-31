@@ -158,6 +158,13 @@ class ClanController:
         return max(rounds, key=lambda round_: (round_.fitness, -round_.member_id))
 
     def _rebase_random(self):
+        """Derive this member's child stream from the restored winner lineage.
+
+        Every receiver begins from the same winning random state. Advancing that
+        state by the stable member position creates deterministic, distinct child
+        streams without retaining any losing member's random trajectory.
+        """
+
         rebased = random.Random()
         rebased.setstate(self._random.getstate())
         for _ in range(self.member_id + 1):
