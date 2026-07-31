@@ -1,17 +1,19 @@
 """Worker-side collective checkpoint decision for Clan Tuning."""
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from types import MappingProxyType
 
 from clan_based_tuning.evolution import select_winner_id
+from clan_based_tuning.scheduler_types import Genome
 
 
 class ClanController:
-    """Resolve whether this Tune worker should provide the round checkpoint.
+    """Resolve and record this worker's checkpoint-source decision.
 
-    The controller is deliberately ephemeral. It owns one local fitness value and one
-    collective decision. Population evolution, trial configuration, checkpoint loading,
-    and scheduler state belong to the Tune scheduler and surrounding training function.
+    The controller is ephemeral. It owns one immutable copy of the scheduler-assigned
+    genome, one local fitness value, and one cached collective decision. It does not
+    mutate genomes, advance generations, or own scheduler persistence.
     """
 
     def __init__(
@@ -20,6 +22,7 @@ class ClanController:
         member_id: int,
         population_size: int,
         mode: str,
+        genome: Genome,
         exchange_fitness: Callable[[float], Sequence[float]],
     ):
         if population_size < 2:
@@ -32,6 +35,7 @@ class ClanController:
         self.member_id = member_id
         self.population_size = population_size
         self._mode = mode
+        self._genome: Mapping[str, object] = MappingProxyType(dict(genome))
         self._exchange_fitness = exchange_fitness
         self._fitness = None
         self._save_checkpoint = None
@@ -66,3 +70,27 @@ class ClanController:
         winner_id = select_winner_id(population, self._mode)
         self._save_checkpoint = self.member_id == winner_id
         return self._save_checkpoint
+
+    def save_genome(self, checkpoint):
+        """Attach this selected worker's genome provenance to ``checkpoint``.
+
+        The method reads the cached save decision and never re-enters the fitness
+        collective. The scheduler remains authoritative over genomes and future
+        assignments; this metadata only records which assignment produced the payload.
+        """
+
+        if self._save_checkpoint is None:
+            raise RuntimeError("checkpoint source must be resolved before saving the genome")
+        if not self._save_checkpoint:
+            raise RuntimeError("only the selected checkpoint source may save its genome")
+
+        checkpoint.update_metadata(
+            {
+                "clan_based_tuning": {
+                    "schema_version": 1,
+                    "member_id": self.member_id,
+                    "genome": dict(self._genome),
+                }
+            }
+        )
+        return checkpoint
