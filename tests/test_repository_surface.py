@@ -3,7 +3,7 @@
 from pathlib import Path
 
 
-def test_active_package_contains_only_the_thin_worker_core():
+def test_active_package_contains_only_the_thin_worker_and_evolution_core():
     """Historical integration and superseded round code stay outside the source tree."""
 
     repository_root = Path(__file__).resolve().parents[1]
@@ -15,7 +15,8 @@ def test_active_package_contains_only_the_thin_worker_core():
     assert source_files == {
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
-        "src/clan_based_tuning/controller_types.py",
+        "src/clan_based_tuning/evolution.py",
+        "src/clan_based_tuning/scheduler_types.py",
     }
 
 
@@ -35,7 +36,7 @@ def test_test_suite_contains_only_current_surface_contracts():
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
-        "tests/unit/test_controller_types.py",
+        "tests/unit/test_evolution.py",
     }
 
 
