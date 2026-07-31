@@ -60,3 +60,24 @@ def build_parent_genome_metadata(
             "parent_genome": dict(genome),
         }
     }
+
+
+def attach_parent_genome_metadata(
+    checkpoint,
+    *,
+    round_index,
+    source_member_id,
+    source_trial_id,
+    genome,
+):
+    """Attach scheduler-owned parent provenance to a Ray checkpoint sidecar."""
+
+    checkpoint.update_metadata(
+        build_parent_genome_metadata(
+            round_index=round_index,
+            source_member_id=source_member_id,
+            source_trial_id=source_trial_id,
+            genome=genome,
+        )
+    )
+    return checkpoint
