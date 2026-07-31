@@ -1,12 +1,16 @@
 # Worker controller API
 
-The active public framework-independent surface consists of `ClanController` and
-`MutationSpec`.
+Status: intended corrected Milestone 3 API
+
+The public framework-independent surface remains centered on `ClanController`. The
+current implementation still needs the genome and `save_genome()` additions described
+here before this API is complete.
 
 ## `ClanController`
 
-`ClanController` is the worker-side collective checkpoint decision. It is constructed
-once for one Tune function invocation and one reporting boundary.
+`ClanController` is the worker-side collective checkpoint decision plus winner-side
+producer-genome annotation. It is constructed once for one Tune function invocation and
+one reporting boundary.
 
 ```python
 from clan_based_tuning import ClanController
@@ -15,12 +19,13 @@ controller = ClanController(
     member_id=rank,
     population_size=world_size,
     mode="min",
+    genome=genome,
     exchange_fitness=all_gather_fitness,
 )
 ```
 
 `member_id`
-: Stable zero-based member rank.
+: Stable zero-based Clan member rank.
 
 `population_size`
 : Number of concurrently participating Clan members.
@@ -28,14 +33,25 @@ controller = ClanController(
 `mode`
 : `"min"` or `"max"`. Equal fitness selects the lower member rank.
 
+`genome`
+: Mapping containing exactly the controlled values assigned to this worker for the
+  current round. The controller copies the mapping at construction and never mutates or
+  applies it.
+
 `exchange_fitness`
 : Callable receiving this worker's scalar fitness and returning one rank-ordered
   fitness value for every required member. The production integration will implement
   this with the Ray collective.
 
-The public Tune-facing integration is expected to construct this object through
-`make_cbt_controller()` so ordinary users do not provide those runtime values manually.
-That factory is not implemented by the framework-independent slice.
+The public Tune-facing integration is expected to construct this object through:
+
+```python
+controller = make_cbt_controller(genome=genome)
+```
+
+That factory hides rank, world size, mode, and collective construction. The caller
+supplies the controlled genome derived from the same configuration applied to the
+optimizer.
 
 ### `set_fitness(fitness)`
 
@@ -64,12 +80,57 @@ The first call:
 The result is cached. Repeated calls return the same boolean without performing another
 collective operation.
 
-The method does not construct, load, save, wrap, annotate, or report a checkpoint. The
-train function and Lightning integration use the boolean at their ordinary checkpoint
-boundary.
+The method does not construct, load, wrap, annotate, or report a checkpoint.
 
-The controller contains no genome or scheduler state. The active member genome is the
-controlled subset of that member's Tune configuration.
+### `save_genome(checkpoint)`
+
+```python
+if controller.should_save_checkpoint():
+    checkpoint = controller.save_genome(checkpoint)
+```
+
+This method is valid only when the controller has resolved that the local member is the
+winner.
+
+It merges this mapping into the checkpoint metadata:
+
+```python
+{
+    "clan_based_tuning": {
+        "schema_version": 1,
+        "member_id": member_id,
+        "genome": copied_genome,
+    }
+}
+```
+
+It returns the same checkpoint reference.
+
+It does not:
+
+- construct the Lightning checkpoint;
+- deserialize or modify the checkpoint payload;
+- report the checkpoint to Tune;
+- write a round index or Tune trial ID;
+- write fitness;
+- derive child genomes; or
+- persist scheduler mutation or lineage state.
+
+Calling `save_genome()` before the save decision is resolved, or on a losing member, is
+an error. The checkpoint object's public metadata operation is allowed to fail directly
+if the supplied genome is not serializable or the backing storage cannot be updated.
+
+## Genome authority
+
+The Tune scheduler is the evolutionary authority. It decides the current and next
+population genomes, mutation state, lineage, and recovery behavior.
+
+For an active worker, `Trial.config` contains the scheduler's materialized genome
+assignment. The controller contains an immutable copy used only to prove which values
+produced the winner checkpoint.
+
+The scheduler must verify the checkpoint's `member_id` and `genome` against the selected
+winner and its active trial configuration before accepting the transition.
 
 ## `MutationSpec`
 
@@ -93,39 +154,33 @@ lr_mutation = MutationSpec(
 `minimum`, `maximum`
 : Inclusive bounds applied after mutation.
 
-`mutation.mutate(value, random_stream)` returns one bounded mutation. The future CBT
-Tune scheduler owns the random stream and applies mutation while constructing target
-trial genomes. The worker controller does not use or retain mutation state.
+`mutation.mutate(value, random_stream)` returns one bounded mutation. The CBT Tune
+scheduler owns the random stream and applies mutation while constructing target trial
+genomes. The worker controller does not use or retain mutation state.
 
-## Internal scheduler primitives
+`MutationSpec` remains temporarily exported but belongs to an evolution or
+scheduler-types module rather than `controller_types.py`.
 
-Two framework-independent helpers are intentionally not exported from the package root.
-They support the future scheduler without making policy mechanics part of the ordinary
-user API.
+## Shared selection primitive
 
 ### `select_winner_id(population, mode)`
 
 Returns the stable winning rank from rank-ordered fitness values. The worker controller
-uses this same implementation so the worker save decision and scheduler verification
-cannot disagree on comparison direction or ties.
+and scheduler use the same implementation so checkpoint-source selection and scheduler
+verification cannot disagree on comparison direction or ties.
 
-### `build_parent_genome_metadata(...)`
+This helper belongs in a neutral selection module, not in a module named for controller
+types.
 
-Builds the namespaced metadata mapping the scheduler will merge into the selected Ray
-checkpoint:
+## Removed metadata builder
 
-```python
-{
-    "clan_based_tuning": {
-        "schema_version": 1,
-        "round_index": round_index,
-        "source_member_id": source_member_id,
-        "source_trial_id": source_trial_id,
-        "parent_genome": dict(genome),
-    }
-}
-```
+The previous `build_parent_genome_metadata(...)` design included round identity, trial
+identity, and parent-genome construction for a later scheduler-side checkpoint update.
+That shape is superseded.
 
-The `genome` argument is the controlled subset of the winning trial's active
-configuration. The helper only builds plain metadata; Ray checkpoint mutation remains a
-scheduler integration responsibility.
+Producer metadata is now written by the selected controller before reporting and
+contains only:
+
+- schema version;
+- stable member ID; and
+- the controller's copied current genome.
