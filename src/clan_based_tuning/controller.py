@@ -3,7 +3,7 @@
 import math
 from collections.abc import Callable, Sequence
 
-from clan_based_tuning.controller_types import select_winner_id
+from clan_based_tuning.evolution import select_winner_id
 
 
 class ClanController:
