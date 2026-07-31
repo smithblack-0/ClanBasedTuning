@@ -116,10 +116,12 @@ def test_collective_must_return_the_configured_population():
         controller.should_save_checkpoint()
 
 
-def test_controller_has_no_evolution_or_checkpoint_state_api():
+def test_controller_has_no_evolution_genome_or_checkpoint_state_api():
     controller, _ = _controller(0, [1.0, 2.0])
 
     assert not hasattr(controller, "advance")
     assert not hasattr(controller, "get_config")
+    assert not hasattr(controller, "genome")
+    assert not hasattr(controller, "get_genome")
     assert not hasattr(controller, "state_dict")
     assert not hasattr(controller, "load_state_dict")
