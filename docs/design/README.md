@@ -6,21 +6,19 @@ Date: 2026-07-31
 ## Purpose
 
 This directory defines the accepted behavioral target and system lifecycle for
-composing the framework-independent CBT policy with Ray Tune and Lightning DDP.
-It governs Milestone 3 implementation unless direct framework evidence or human
-review explicitly reopens a clause.
+composing a PBT-shaped CBT Tune scheduler, a thin worker-side collective controller,
+and Lightning DDP.
 
-The design does not replace the product roadmap, project decisions, milestone
-gates, or framework-alignment research. It translates them into the concrete
-round lifecycle and responsibility boundaries that implementation must follow.
+The design governs Milestone 3 implementation unless direct framework evidence or
+human review explicitly reopens a clause. It does not replace the product roadmap,
+project decisions, milestone gates, or framework-alignment research.
 
 ## Reader path
 
 1. Read the [behavioral test contracts](behavioral_test_contracts.md) for the
    black-box training outcomes the completed system must prove.
-2. Read the [system architecture](system_architecture.md) from the lifecycle
-   diagram forward. It explains the complete flow before assigning component
-   responsibilities.
+2. Read the [system architecture](system_architecture.md), beginning with the exact
+   imperative Tune function that CBT intends to support.
 3. Consult the governing [product roadmap](../product_roadmap.md), accepted
    [project decisions](../decisions/project_decisions.md), and
    [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md)
@@ -28,6 +26,25 @@ round lifecycle and responsibility boundaries that implementation must follow.
 4. Consult the accepted
    [framework-alignment research](../framework_alignment/README.md) for the
    evidence and ownership model behind the design.
+
+## Governing user flow
+
+CBT should feel like ordinary Tune PBT plus one worker-side save decision:
+
+```text
+construct the worker controller
+→ obtain any Tune-assigned checkpoint
+→ restore training state
+→ apply this trial's current optimizer configuration
+→ train and evaluate
+→ set local fitness on the controller
+→ ask whether this worker should save
+→ report metrics with a checkpoint only from the selected worker
+```
+
+The CBT Tune scheduler owns evolutionary policy and checkpoint redistribution. The
+worker controller owns only the fitness collective and local boolean save decision.
+Lightning owns distributed training and checkpoint construction.
 
 ## Artifact roles
 
@@ -40,30 +57,23 @@ comparison option names, callback order, or scheduler methods.
 
 ### System architecture
 
-The architecture begins with the governing lifecycle:
+The architecture provides:
 
-```text
-load preferred continuation
-→ rebase and mutate locally
-→ train through Lightning DDP
-→ compare the complete population through a Ray collective
-→ persist one preferred Lightning checkpoint
-→ report and transfer it through Tune
-→ load it everywhere
-```
-
-It then explains why the order is necessary, maps it onto inspected framework
-source, identifies the minimal components, and states the evidence required from
-implementation.
+- the exact intended Tune function shape;
+- the lifecycle and checkpoint ordering;
+- the responsibility split between the worker controller, Tune scheduler, Lightning
+  DDP, and user train function;
+- a two-round example and sequence diagram;
+- failure and support boundaries; and
+- the framework seams implementation must qualify.
 
 ## Design boundary
 
-The design fixes system behavior, lifecycle order, state authority, and framework
-ownership. It intentionally leaves ordinary implementation details—method
-signatures, file layout, and milestone-sized issue order—to the implementation
-plan, provided they do not change those contracts.
+CBT defines no Ray `Trainable` subclass and no second training loop. Ray may internally
+wrap the user function in its own `FunctionTrainable`; that remains Ray's implementation
+detail.
 
-CBT supplies an ordinary Tune function for each round and defines no Ray
-`Trainable` subclass. Ray may internally wrap that function in its own
-`FunctionTrainable`; that remains Ray's implementation detail. Lightning owns the
-training loop within each round, and Tune owns trial replacement between rounds.
+The eventual `make_cbt_controller()` factory hides rank, collective membership, and
+comparison context. The framework-independent slice currently implements only the thin
+controller contract; Ray collective construction and the scheduler remain subsequent
+Milestone 3 work.
