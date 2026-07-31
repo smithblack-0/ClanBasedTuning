@@ -13,12 +13,12 @@ controlled hyperparameters.
 
 At a qualifying Lightning validation boundary, each process publishes its local
 result, receives the same complete population, and advances its existing
-`ClanController`. The selected member publishes the sole candidate continuation
-checkpoint. Every member reports the same selected parent and its own next
-controller state to Tune. A narrow Tune scheduler pauses each reporting trial,
-verifies the complete population of proposals, and assigns the winner checkpoint
-together with each receiver's own controller state through Ray's native trial
-lifecycle.
+`ClanController`. Every rank participates in Lightning's distributed checkpoint
+operation, while the strategy persists only the selected member's continuation
+state. Every member reports the same selected parent and its own next controller
+state to Tune. A narrow Tune scheduler pauses each reporting trial, verifies the
+complete population of proposals, and assigns the winner checkpoint together
+with each receiver's own controller state through Ray's native trial lifecycle.
 
 The next generation starts in replacement trial processes. Lightning restores
 the winner's continuation state. The receiving `ClanController` is restored from
@@ -219,13 +219,14 @@ and ownership model does not depend on how the endpoint is manufactured.
 
 ### Clan DDP strategy
 
-**Main idea:** specialize Lightning DDP only where one rank is also one
-divergent, independently checkpointed Clan member.
+**Main idea:** specialize Lightning DDP only where one rank is also one divergent
+Clan member and the selected rank, rather than fixed global rank zero, owns the
+round checkpoint write.
 
 The strategy extends Lightning's `DDPStrategy` and delegates ordinary process
 group creation, model wrapping, gradient buckets, backward synchronization,
-barriers, device placement, and optimizer lifecycle to Lightning and PyTorch.
-Its justified differences are:
+barriers, device placement, optimizer lifecycle, checkpoint construction, and
+checkpoint I/O to Lightning and PyTorch. Its justified differences are:
 
 1. It uses the externally created Clan cluster environment.
 2. It constructs DDP with initial synchronization enabled so a fresh round starts
@@ -234,14 +235,16 @@ Its justified differences are:
    parameters after initialization, but its default buffer broadcast would copy
    rank-zero persistent buffers into every member on each forward and erase part
    of intended model divergence.
-4. It permits the selected rank to write a complete Lightning checkpoint to its
-   trial-local path at the round boundary. Lightning's ordinary DDP strategy
-   writes only on global rank zero because ranks normally represent replicas of
-   one model; the selected Clan member may be any rank.
+4. Its checkpoint save override writes the supplied Lightning checkpoint only
+   when the current global rank equals the winner already selected by the local
+   controllers. Every rank still calls `Trainer.save_checkpoint()` and reaches
+   Lightning's trailing strategy barrier.
 
-The rank-local checkpoint change remains inside the Lightning strategy and
-`CheckpointIO` lifecycle. It does not introduce a Clan checkpoint format or call
-`torch.save` on an independently assembled state dictionary.
+The selected-rank write remains inside the Lightning strategy and `CheckpointIO`
+lifecycle. It does not introduce a Clan checkpoint format or call `torch.save` on
+an independently assembled state dictionary. Losing ranks construct transient
+Lightning checkpoint dictionaries because the public Trainer method does so
+before strategy dispatch, but they do not persist them.
 
 The strategy does not synchronize optimizer history or parameters after optimizer
 updates. It relies on native DDP gradient reduction and explicitly tests that the
@@ -292,11 +295,11 @@ At the accepted validation boundary, the callback performs this sequence:
 5. Call `controller.advance()`. Its load callback waits for the complete
    population and reconstructs the controller input.
 6. Capture the local winner and post-decision controller state.
-7. If this member is the selected winner, ask Lightning to save one checkpoint to
-   the trial-local checkpoint directory. Losing members do not serialize their
-   continuation state.
-8. Report transition metadata and the optional winner checkpoint through Tune's
-   reporting API.
+7. Every rank calls `Trainer.save_checkpoint()` with its trial-local path. The
+   Clan DDP strategy persists the checkpoint only on the selected rank, and all
+   ranks complete Lightning's checkpoint barrier.
+8. Report transition metadata and the winner checkpoint, when present, through
+   Tune's reporting API.
 
 The callback does not train, validate, select the winner, mutate values, assign a
 checkpoint to another trial, or apply the next configuration to the current
@@ -317,8 +320,8 @@ The adapter:
 
 - reads the reserved Clan namespace and restores the target-local controller;
 - obtains any assigned Ray checkpoint through the function-trial checkpoint API;
-- exposes that checkpoint directory to Lightning as the `ckpt_path` for the one
-  `Trainer.fit()` call;
+- exposes the Lightning checkpoint file inside that directory as the `ckpt_path`
+  for the one `Trainer.fit()` call;
 - constructs or receives the concrete integration components described here;
 - calls the user-owned model, data, optimizer, and Trainer construction path; and
 - never implements a batch, epoch, validation, or optimizer loop.
@@ -337,13 +340,14 @@ continuing with stale in-process state or requiring FunctionTrainable
 
 ### Clan Tune scheduler
 
-**Main idea:** verify and execute one complete, unanimous Clan transition through
-Ray's native trial lifecycle.
+**Main idea:** pause, verify, and execute one complete, unanimous Clan transition
+through Ray's native trial lifecycle.
 
 For every transition report, the scheduler records the report and returns the
 normal `PAUSE` action. It never returns `CONTINUE` for a completed Clan boundary.
 Thus each old-generation trial is paused before it can execute further Lightning
-work. Result buffering is disabled.
+work. Result buffering is disabled. While the report population is incomplete,
+`choose_trial_to_run()` returns no paused Clan trial.
 
 When every configured member is paused at the same boundary, the scheduler
 verifies:
@@ -365,8 +369,8 @@ It then:
 3. assigns the winner checkpoint as every target's next continuation checkpoint;
 4. marks the complete next generation ready only after every target assignment is
    prepared; and
-5. allows Ray to schedule the paused targets, which start replacement trial
-   processes and restore through the member adapter.
+5. allows `choose_trial_to_run()` to return the prepared paused targets, which
+   start replacement processes and restore through the member adapter.
 
 The scheduler does not compare fitness, invoke mutation, construct controller
 state, save Lightning checkpoints, or manage a process group.
@@ -416,7 +420,8 @@ it.
 
 The Tune driver creates exactly one trial configuration per member identity and
 one round exchange for the Clan. It configures the custom scheduler, disables
-actor reuse, and requires `max_concurrent_trials` equal to the population size.
+actor reuse and automatic per-trial retries, and requires
+`max_concurrent_trials` equal to the population size.
 
 Before starting, the manual workflow verifies that the dedicated Ray environment
 has sufficient resources for the entire population. The implementation must not
@@ -496,14 +501,16 @@ and consistency guard, not a second policy vote.
 
 ### 7. Winner checkpoint and Tune report
 
-Only the member selected by its local controller asks Lightning to serialize its
-continuation state. Every member reports its fitness, selected winner, and
-post-decision target controller state. The winner also reports the Lightning
-checkpoint through Tune.
+After local selection, every rank calls Lightning's public checkpoint method.
+The strategy writes only on the selected rank but preserves Lightning's required
+all-rank call and barrier. Every member then reports its fitness, selected winner,
+and post-decision target controller state. The selected member also registers the
+persisted Lightning checkpoint with Tune.
 
-If local controllers disagree, zero or multiple checkpoints may be reported; the
-scheduler rejects the transition before assignment. Correct unanimous execution
-produces exactly one checkpoint without serializing losing trajectories.
+If local controllers disagree, the selected-rank write rule can produce zero or
+multiple files across the divergent decisions; the scheduler rejects the
+transition before assignment. Correct unanimous execution produces exactly one
+registered checkpoint without persisting losing trajectories.
 
 ### 8. Pause and sole-parent assignment
 
@@ -541,6 +548,9 @@ active round invalid, aborts the round exchange so members blocked in population
 loading are released, and stops or invalidates every remaining member. Members
 blocked in DDP are terminated through Ray's trial lifecycle. No partial population
 decision or next-generation assignment is allowed.
+
+Automatic individual trial retry is disabled in the initial supported path. A
+failed member may not be recreated independently inside the active round.
 
 ### Corrupt or disagreeing reports
 
@@ -662,11 +672,12 @@ identity and random stream onto every target.
 Rejected because the current configuration is already part of the controller
 state. A duplicate writable field could disagree with the state that produced it.
 
-### Save every member checkpoint before selection
+### Persist every member checkpoint
 
-Rejected because every process-local controller already knows the selected
-member before checkpointing. Only the unanimous winner's continuation state can
-be used, so serializing losing trajectories adds I/O without adding correctness.
+Rejected because every process-local controller already knows the selected member
+before the all-rank checkpoint call. Lightning still requires every rank to
+participate, but only the selected rank needs to write and register continuation
+state. Persisting losing trajectories adds I/O without adding correctness.
 
 ### Save only model parameters
 
@@ -696,7 +707,7 @@ training lifecycle.
 | Comparable member-local fitness | Lightning data configuration and round-boundary callback | Sampler/metric integration tests and end-to-end distinguishable candidates. |
 | One clan-wide reduced gradient | PyTorch DDP through Clan DDP strategy | Gradient-before-step framework contract and real multi-rank test. |
 | Controlled member divergence | Clan DDP strategy and member-local optimizers | Equal-input update test, buffer-broadcast test, and end-to-end divergence. |
-| Winner continuation is sole parent | Round-boundary callback, Clan scheduler, member adapter, Lightning restore | Winner-only checkpoint contract, Ray assignment contract, and state observation after restore. |
+| Winner continuation is sole parent | Round-boundary callback, Clan DDP strategy, Clan scheduler, member adapter, Lightning restore | Selected-rank checkpoint contract, Ray assignment contract, and state observation after restore. |
 | Target identity and control state survive | Clan scheduler, target Tune config, controller load, optimizer applier | Config-assignment, controller-RNG continuation, and optimizer-history preservation tests. |
 | Partial population cannot transition | Controller guard, round exchange abort, Clan scheduler failure handling | Missing/duplicate/wrong-round tests and one real member-failure test. |
 | Multi-round lifecycle repeats | All owners | Real two-or-more-round Ray/Lightning/DDP acceptance test. |
@@ -711,8 +722,9 @@ The design depends on version-specific behavior that must be proven directly:
 2. DDP initial synchronization occurs, gradients reduce across trials, parameters
    remain local after optimizer steps, and disabled buffer broadcast preserves
    persistent-buffer divergence.
-3. A nonzero selected rank can produce a complete Lightning checkpoint through
-   the strategy specialization while losing ranks do not write checkpoints.
+3. Every rank can call `Trainer.save_checkpoint()` without deadlock while a
+   nonzero selected rank alone writes a complete checkpoint through the strategy
+   specialization.
 4. The chosen Lightning hook applies controlled optimizer values after optimizer
    restoration and before the first update.
 5. A Function API checkpoint can carry the Lightning checkpoint directory through
@@ -739,7 +751,7 @@ Human review should focus on these decisions before milestone decomposition:
    native public Ray seam that lets process-local controllers consume one complete
    population without private actor invocation?
 2. Is the Clan DDP strategy the correct single owner for external-rank setup,
-   disabled buffer broadcast, and selected-rank checkpoint saving, or should the
+   disabled buffer broadcast, and selected-rank checkpoint writing, or should the
    checkpoint specialization be separated without duplicating Lightning state
    assembly?
 3. Is target-local controller state in the reserved Tune configuration the
