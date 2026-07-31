@@ -12,13 +12,15 @@ member. Each member applies that gradient through its own optimizer history and
 controlled hyperparameters.
 
 At a qualifying Lightning validation boundary, each process publishes its local
-result, receives the same complete population, advances its existing
-`ClanController`, and reports one transition proposal plus one trial-local
-Lightning checkpoint to Tune. A narrow Tune scheduler verifies that every local
-controller reached the same winner and assigns the winning checkpoint together
-with each receiver's own controller state through Ray's native trial lifecycle.
+result, receives the same complete population, and advances its existing
+`ClanController`. The selected member publishes the sole candidate continuation
+checkpoint. Every member reports the same selected parent and its own next
+controller state to Tune. A narrow Tune scheduler pauses each reporting trial,
+verifies the complete population of proposals, and assigns the winner checkpoint
+together with each receiver's own controller state through Ray's native trial
+lifecycle.
 
-The next generation starts in new or resumed trial processes. Lightning restores
+The next generation starts in replacement trial processes. Lightning restores
 the winner's continuation state. The receiving `ClanController` is restored from
 the target trial configuration, and ClanBasedTuning reapplies the configuration
 returned by that controller without replacing inherited optimizer history. The
@@ -60,12 +62,14 @@ remain authoritative for product meaning and framework ownership.
 9. The winner supplies continuation state. The receiver supplies member identity
    and controller state, from which its next controlled configuration is read.
 10. A partial or corrupt population cannot select, inherit, resume, or continue.
+11. No process that reported the end of round \(r\) may resume old-process
+   training as round \(r+1\).
 
 ## State ownership
 
 | State | Authoritative owner | Transition behavior |
 | --- | --- | --- |
-| Model parameters and persistent buffers | Lightning checkpoint produced from one member's live model | Copied from the selected winner to every next-generation member. |
+| Model parameters and persistent buffers | Lightning checkpoint produced from the winning member's live model | Copied from the selected winner to every next-generation member. |
 | Optimizer tensors, counters, moments, and momentum | Lightning checkpoint produced from the selected winner | Restored from the winner before receiving controlled values are reapplied. |
 | Lightning loop and training-progress state | Lightning checkpoint | Restored from the winner to every receiver. |
 | Controlled optimizer values for the current round | Receiving member's `ClanController` state | Remain target-local and are read from the restored controller after optimizer restoration. |
@@ -115,12 +119,13 @@ A transition report contains:
 - member-local fitness;
 - selected winner identity;
 - the receiving member's post-decision controller state; and
-- the trial-local Lightning checkpoint registered with the report.
+- a winner continuation checkpoint only when the reporting member is the selected
+  winner.
 
-The report contains the target's control continuation and the candidate's
-training checkpoint as separate fields. The scheduler uses the checkpoint only
-when that reporting member is the agreed winner. It assigns each report's
-controller state only to that report's target member.
+The report contains target control continuation and candidate training
+continuation as separate fields. The scheduler accepts the checkpoint only from
+the unanimously selected member. It assigns each report's controller state only
+to that report's target member.
 
 An optional flattened configuration projection may be included for logging and
 review, but it is derived from the controller state and cannot override it.
@@ -229,91 +234,18 @@ Its justified differences are:
    parameters after initialization, but its default buffer broadcast would copy
    rank-zero persistent buffers into every member on each forward and erase part
    of intended model divergence.
-4. It permits every rank to write a Lightning checkpoint to its own trial-local
-   path at the round boundary. Lightning's ordinary DDP strategy writes only on
-   global rank zero because ranks normally represent replicas of one model;
-   Clan ranks are divergent candidates and any one may win.
+4. It permits the selected rank to write a complete Lightning checkpoint to its
+   trial-local path at the round boundary. Lightning's ordinary DDP strategy
+   writes only on global rank zero because ranks normally represent replicas of
+   one model; the selected Clan member may be any rank.
 
-The per-rank checkpoint change remains inside the Lightning strategy and
+The rank-local checkpoint change remains inside the Lightning strategy and
 `CheckpointIO` lifecycle. It does not introduce a Clan checkpoint format or call
 `torch.save` on an independently assembled state dictionary.
 
 The strategy does not synchronize optimizer history or parameters after optimizer
 updates. It relies on native DDP gradient reduction and explicitly tests that the
 framework configuration preserves divergence.
-
-### Round-boundary callback
-
-**Main idea:** close one local Lightning round and emit one complete transition
-report.
-
-At the accepted validation boundary, the callback performs this sequence:
-
-1. Ignore Lightning sanity checking and any validation event not configured as a
-   Clan boundary.
-2. Read the configured fitness metric from the member's local Lightning metrics
-   without distributed metric reduction.
-3. Enter a DDP barrier so every member has completed equivalent validation work.
-4. Call `controller.set_fitness()`. Its save callback publishes the local round
-   result to the exchange and returns after publication is accepted.
-5. Call `controller.advance()`. Its load callback waits for the complete
-   population and reconstructs the controller input.
-6. Capture the local winner and post-decision controller state.
-7. Ask Lightning to save a checkpoint to the member's trial-local checkpoint
-   directory.
-8. Report the transition metadata and checkpoint through Tune's reporting API.
-
-The callback does not train, validate, select the winner, mutate values, assign a
-checkpoint to another trial, or apply the next configuration to the current
-optimizer. The reported process is at the end of the old round. Ray will hold and
-transition it; the next process reads its configuration only after restoring the
-selected checkpoint.
-
-The callback must not serialize its controller or member-local control state into
-Lightning callback state. Its Lightning checkpoint contribution is empty unless
-a later accepted design identifies genuinely winner-owned callback state.
-
-### Clan Tune scheduler
-
-**Main idea:** verify and execute one complete, unanimous Clan transition through
-Ray's native trial lifecycle.
-
-The scheduler receives one transition report from every trial and holds each
-trial at the boundary. When the population is complete, it verifies:
-
-- exactly one report per configured member;
-- one completed round identity;
-- one next round identity;
-- one agreed winner;
-- stable target member identities;
-- one valid target-local controller state per member; and
-- an assignable checkpoint from the agreed winner.
-
-It then:
-
-1. selects the already reported checkpoint belonging to the agreed winner;
-2. preserves every target trial's user configuration and stable member identity;
-3. replaces only the target's controller state and next-round metadata inside the
-   reserved Clan namespace;
-4. assigns the winner checkpoint as every target's next continuation checkpoint;
-5. lets Ray pause, stop, restore, and resume the target trials; and
-6. clears the completed transition only after every assignment is prepared.
-
-The scheduler does not compare fitness, invoke mutation, construct controller
-state, save Lightning checkpoints, or manage a process group.
-
-Ray 2.56 does not expose the complete cross-trial checkpoint reassignment as a
-stable high-level public method. The implementation may therefore require the
-same narrow version-sensitive controller and checkpoint-manager seam used by
-Ray's PBT scheduler. That seam must remain isolated in this class, covered by a
-direct Ray framework-contract test, and pinned to the qualified Ray version. It
-must not leak into controller, Lightning, or user APIs.
-
-Standard `PopulationBasedTraining` is not itself the policy implementation for
-this design. Its quantile selection, donor choice, target-config copying, and
-mutation behavior conflict with sole-parent Clan policy and target identity. The
-Clan scheduler may reuse Ray lifecycle mechanisms demonstrated by PBT, but not its
-population policy.
 
 ### Optimizer-configuration applier
 
@@ -342,6 +274,116 @@ The selected Lightning hook must be proven by a framework-contract test to occur
 after optimizer restoration and before the first optimizer update. A hook that
 runs before `restore_training_state()` is invalid because the restored checkpoint
 would overwrite the receiving values.
+
+### Round-boundary callback
+
+**Main idea:** close one local Lightning round and emit one complete transition
+report.
+
+At the accepted validation boundary, the callback performs this sequence:
+
+1. Ignore Lightning sanity checking and any validation event not configured as a
+   Clan boundary.
+2. Read the configured fitness metric from the member's local Lightning metrics
+   without distributed metric reduction.
+3. Enter a DDP barrier so every member has completed equivalent validation work.
+4. Call `controller.set_fitness()`. Its save callback publishes the local round
+   result to the exchange and returns after publication is accepted.
+5. Call `controller.advance()`. Its load callback waits for the complete
+   population and reconstructs the controller input.
+6. Capture the local winner and post-decision controller state.
+7. If this member is the selected winner, ask Lightning to save one checkpoint to
+   the trial-local checkpoint directory. Losing members do not serialize their
+   continuation state.
+8. Report transition metadata and the optional winner checkpoint through Tune's
+   reporting API.
+
+The callback does not train, validate, select the winner, mutate values, assign a
+checkpoint to another trial, or apply the next configuration to the current
+optimizer. The reported process is at the end of the old round. Ray must pause
+that trial; the next process reads its configuration only after restoring the
+selected checkpoint.
+
+The callback must not serialize its controller or member-local control state into
+Lightning callback state. Its Lightning checkpoint contribution is empty unless
+a later accepted design identifies genuinely winner-owned callback state.
+
+### Tune member adapter
+
+**Main idea:** bridge one Ray function trial to one ordinary Lightning
+`Trainer.fit()` call.
+
+The adapter:
+
+- reads the reserved Clan namespace and restores the target-local controller;
+- obtains any assigned Ray checkpoint through the function-trial checkpoint API;
+- exposes that checkpoint directory to Lightning as the `ckpt_path` for the one
+  `Trainer.fit()` call;
+- constructs or receives the concrete integration components described here;
+- calls the user-owned model, data, optimizer, and Trainer construction path; and
+- never implements a batch, epoch, validation, or optimizer loop.
+
+For a resumed generation, the adapter keeps the Ray checkpoint materialized for
+the duration of `Trainer.fit()`. For a fresh generation, it passes no checkpoint.
+The adapter does not parse a class-`Trainable` checkpoint or require the user to
+implement `setup`, `step`, `save_checkpoint`, `load_checkpoint`, or
+`reset_config`.
+
+Actor reuse is disabled for the initial supported path. Every next generation is
+constructed in a replacement process from the target trial configuration and the
+assigned winner checkpoint. This prevents a suspended old Lightning call from
+continuing with stale in-process state or requiring FunctionTrainable
+`reset_config` semantics.
+
+### Clan Tune scheduler
+
+**Main idea:** verify and execute one complete, unanimous Clan transition through
+Ray's native trial lifecycle.
+
+For every transition report, the scheduler records the report and returns the
+normal `PAUSE` action. It never returns `CONTINUE` for a completed Clan boundary.
+Thus each old-generation trial is paused before it can execute further Lightning
+work. Result buffering is disabled.
+
+When every configured member is paused at the same boundary, the scheduler
+verifies:
+
+- exactly one report per configured member;
+- one completed round identity;
+- one next round identity;
+- one agreed winner;
+- stable target member identities;
+- one valid target-local controller state per member;
+- exactly one continuation checkpoint; and
+- that the checkpoint was reported by the agreed winner.
+
+It then:
+
+1. preserves every target trial's user configuration and stable member identity;
+2. replaces only the target's controller state and next-round metadata inside the
+   reserved Clan namespace;
+3. assigns the winner checkpoint as every target's next continuation checkpoint;
+4. marks the complete next generation ready only after every target assignment is
+   prepared; and
+5. allows Ray to schedule the paused targets, which start replacement trial
+   processes and restore through the member adapter.
+
+The scheduler does not compare fitness, invoke mutation, construct controller
+state, save Lightning checkpoints, or manage a process group.
+
+Ray's public scheduler result contract provides `CONTINUE`, `PAUSE`, and `STOP`.
+Ray 2.56 does not expose complete cross-trial checkpoint reassignment as a stable
+high-level public method. The implementation may therefore require the same
+narrow version-sensitive controller and checkpoint-manager seam used by Ray's PBT
+scheduler after the trials are paused. That seam must remain isolated in this
+class, covered by a direct Ray framework-contract test, and pinned to the
+qualified Ray version. It must not leak into controller, Lightning, or user APIs.
+
+Standard `PopulationBasedTraining` is not itself the policy implementation for
+this design. Its quantile selection, donor choice, target-config copying, and
+mutation behavior conflict with sole-parent Clan policy and target identity. The
+Clan scheduler may reuse Ray lifecycle mechanisms demonstrated by PBT, but not its
+population policy.
 
 ## Reserved Tune configuration namespace
 
@@ -373,8 +415,8 @@ it.
 ### 1. Driver construction and admission
 
 The Tune driver creates exactly one trial configuration per member identity and
-one round exchange for the Clan. It configures the custom scheduler and requires
-`max_concurrent_trials` equal to the population size.
+one round exchange for the Clan. It configures the custom scheduler, disables
+actor reuse, and requires `max_concurrent_trials` equal to the population size.
 
 Before starting, the manual workflow verifies that the dedicated Ray environment
 has sufficient resources for the entire population. The implementation must not
@@ -388,24 +430,20 @@ are insufficient.
 
 ### 2. Member process construction
 
-Each trial process reads its stable identity and target-local controller state
-from the reserved config. It constructs:
+Each trial process enters through the Tune member adapter. It reads its stable
+identity and target-local controller state from the reserved config and obtains
+any assigned Ray checkpoint. It constructs:
 
 - its local `ClanController`;
 - callbacks adapting controller publication and loading to the round exchange;
 - the external cluster environment;
 - the Clan DDP strategy;
-- the round-boundary callback; and
-- the optimizer-configuration applier.
+- the optimizer-configuration applier; and
+- the round-boundary callback.
 
 The user's ordinary Lightning module, dataloaders, optimizer construction, and
-Trainer choices remain user- and Lightning-owned. No public API requires the user
-to subclass Ray `Trainable` or implement `step`, `save_checkpoint`,
-`load_checkpoint`, or `reset_config` methods.
-
-A Tune function entrypoint or equivalent package adapter may host the composition,
-but it calls one ordinary `Trainer.fit()` and contains no training loop of its
-own.
+Trainer choices remain user- and Lightning-owned. The adapter calls one ordinary
+`Trainer.fit()` and contains no training loop of its own.
 
 ### 3. Initial state
 
@@ -415,8 +453,9 @@ provided history, after which each member's initial controller configuration is
 applied.
 
 For a seeded or resumed run, every member receives the same initial Lightning
-checkpoint through Ray. Lightning restores the common continuation state before
-target-local controller configuration is applied.
+checkpoint through Ray. The member adapter passes the checkpoint to Lightning.
+Lightning restores the common continuation state before target-local controller
+configuration is applied.
 
 ### 4. Shared-gradient training
 
@@ -455,34 +494,35 @@ The controllers are expected to produce one winner and one target-local next
 controller state per member. Scheduler-side agreement checking is a corruption
 and consistency guard, not a second policy vote.
 
-### 7. Candidate checkpoint and Tune report
+### 7. Winner checkpoint and Tune report
 
-Every member saves its own divergent Lightning continuation state to a unique
-trial-local path. Every member reports its local checkpoint, fitness, selected
-winner, and target-local next controller state to Tune.
+Only the member selected by its local controller asks Lightning to serialize its
+continuation state. Every member reports its fitness, selected winner, and
+post-decision target controller state. The winner also reports the Lightning
+checkpoint through Tune.
 
-Saving every candidate is necessary at this boundary because the selected winner
-is not known to Ray's transition executor until it has all reports. Later evidence
-may justify an optimized winner-only save, but that optimization must not require
-duplicating Lightning checkpoint serialization or moving policy into the
-scheduler.
+If local controllers disagree, zero or multiple checkpoints may be reported; the
+scheduler rejects the transition before assignment. Correct unanimous execution
+produces exactly one checkpoint without serializing losing trajectories.
 
-### 8. Sole-parent transition
+### 8. Pause and sole-parent assignment
 
-The Clan scheduler waits for the complete report population, verifies unanimous
-policy output, and chooses the checkpoint already reported by the winner. It
-assigns that checkpoint to every target while preserving each target's identity
-and installing its own post-decision controller state.
+The scheduler returns `PAUSE` for each report. After every member is paused at the
+same boundary, it verifies the reports and assigns the sole winner checkpoint to
+every target while preserving each target identity and installing its own
+post-decision controller state.
 
-A failure before all assignments are prepared leaves the old round authoritative;
-the scheduler must not publish a partially advanced generation.
+A failure before all assignments are prepared leaves the old round as the last
+complete authoritative generation. No paused target is selected to run until the
+complete next generation is ready.
 
-### 9. Restore and reconcile
+### 9. Replacement, restore, and reconciliation
 
-Ray restarts or resumes every target from the assigned winner checkpoint.
-Lightning restores model state, optimizer history, and training progress. The
-target controller is restored from that target's Tune configuration. The
-optimizer applier then reads the controller's configuration and writes those
+Ray schedules each paused target as a replacement process because actor reuse is
+disabled. The member adapter receives the assigned winner checkpoint and passes it
+to Lightning. Lightning restores model state, optimizer history, and training
+progress. The target controller is restored from that target's Tune configuration.
+The optimizer applier then reads the controller's configuration and writes those
 controlled values into the restored optimizer without reconstructing it or
 clearing history.
 
@@ -504,14 +544,15 @@ decision or next-generation assignment is allowed.
 
 ### Corrupt or disagreeing reports
 
-Duplicate member IDs, wrong rounds, missing checkpoints, inconsistent winners,
-or malformed target controller state fail before checkpoint assignment. The
-previous round remains the last complete authoritative generation.
+Duplicate member IDs, wrong rounds, missing or multiple checkpoints,
+inconsistent winners, or malformed target controller state fail before checkpoint
+assignment. The previous round remains the last complete authoritative
+generation.
 
 ### Failure during assignment
 
 The scheduler prepares all target assignments before allowing any next-round
-training. If Ray cannot prepare the complete transition, the run fails rather
+trial to run. If Ray cannot prepare the complete transition, the run fails rather
 than continuing a subset of targets.
 
 The first implementation must test the actual ordering of Ray config mutation,
@@ -523,9 +564,9 @@ a mixed generation.
 
 Completion is evaluated at a synchronized population boundary. Per-trial early
 stopping that terminates one member independently is incompatible with an active
-Clan. At the final boundary the scheduler records the final selected winner and
-its checkpoint as the Clan result, then ends the complete population without
-starting an unnecessary generation.
+Clan. At the final boundary the scheduler verifies the complete decision, records
+the final selected winner and its checkpoint as the Clan result, and stops the
+complete population without starting an unnecessary generation.
 
 Operational restart after external interruption is not silently inferred from
 normal generation transitions. It is qualified separately when the support
@@ -557,21 +598,21 @@ claim follows executable evidence.
 The advanced path exposes the concrete integration owners rather than a
 package-owned Trainer or opaque experiment runtime:
 
+- the Tune member adapter;
 - the Tune scheduler;
 - the round exchange;
 - the cluster environment;
 - the DDP strategy;
-- the round-boundary callback; and
-- the optimizer-configuration applier.
+- the optimizer-configuration applier; and
+- the round-boundary callback.
 
-An advanced user supplies an ordinary Lightning module, Trainer construction,
-training and validation data, and Ray run resources. The eventual ordinary path
-may manufacture these concrete components and reserved configs, but it must use
-the same lifecycle and leave the user's model and Trainer decisions with
-Lightning.
+An advanced user supplies ordinary Lightning model, data, optimizer, and Trainer
+construction through the member function's inputs. The eventual ordinary path may
+manufacture the concrete Clan components and reserved configs, but it must use the
+same lifecycle and leave the user's model and Trainer decisions with Lightning.
 
 No public path requires a user-authored Ray `Trainable` subclass. Ray's internal
-function-trainable machinery may execute the member function, but that is an
+function-trainable machinery executes the member adapter, but that is an
 implementation detail rather than the user programming model.
 
 ## Rejected alternatives
@@ -587,6 +628,18 @@ Rejected as the primary design because it requires a private Tune actor-task sea
 for ordinary policy execution. The round exchange lets each process execute its
 own controller before reporting while preserving a narrow scheduler seam only for
 checkpoint assignment.
+
+### Continue a reporting function trial while waiting for the population
+
+Rejected because the function would resume old-process Lightning work before the
+complete transition is assigned. Every boundary report must pause its trial.
+
+### Reuse trial actors across generations
+
+Rejected for the initial path because FunctionTrainable reset semantics would
+have to terminate and reconstruct the old training function while preserving no
+stale Lightning runtime state. Replacement processes make the state authority
+explicit: target config plus winner checkpoint.
 
 ### Use stock PBT as the Clan controller
 
@@ -608,6 +661,12 @@ identity and random stream onto every target.
 
 Rejected because the current configuration is already part of the controller
 state. A duplicate writable field could disagree with the state that produced it.
+
+### Save every member checkpoint before selection
+
+Rejected because every process-local controller already knows the selected
+member before checkpointing. Only the unanimous winner's continuation state can
+be used, so serializing losing trajectories adds I/O without adding correctness.
 
 ### Save only model parameters
 
@@ -632,12 +691,12 @@ training lifecycle.
 
 | Contract | Primary owners | Required evidence |
 | --- | --- | --- |
-| Common continuation state at round start | Ray assignment, Lightning restore, Clan DDP strategy, optimizer applier | Direct restore-order contract plus multi-member observation before the first update. |
+| Common continuation state at round start | Ray assignment, member adapter, Lightning restore, Clan DDP strategy, optimizer applier | Direct restore-order contract plus multi-member observation before the first update. |
 | One complete population produces one winner | `ClanController`, round exchange, Clan scheduler | Existing controller tests plus scheduler agreement and end-to-end transition tests. |
 | Comparable member-local fitness | Lightning data configuration and round-boundary callback | Sampler/metric integration tests and end-to-end distinguishable candidates. |
 | One clan-wide reduced gradient | PyTorch DDP through Clan DDP strategy | Gradient-before-step framework contract and real multi-rank test. |
 | Controlled member divergence | Clan DDP strategy and member-local optimizers | Equal-input update test, buffer-broadcast test, and end-to-end divergence. |
-| Winner continuation is sole parent | Clan scheduler and Lightning restore | Ray checkpoint-assignment contract and state-partition observation after restore. |
+| Winner continuation is sole parent | Round-boundary callback, Clan scheduler, member adapter, Lightning restore | Winner-only checkpoint contract, Ray assignment contract, and state observation after restore. |
 | Target identity and control state survive | Clan scheduler, target Tune config, controller load, optimizer applier | Config-assignment, controller-RNG continuation, and optimizer-history preservation tests. |
 | Partial population cannot transition | Controller guard, round exchange abort, Clan scheduler failure handling | Missing/duplicate/wrong-round tests and one real member-failure test. |
 | Multi-round lifecycle repeats | All owners | Real two-or-more-round Ray/Lightning/DDP acceptance test. |
@@ -652,16 +711,21 @@ The design depends on version-specific behavior that must be proven directly:
 2. DDP initial synchronization occurs, gradients reduce across trials, parameters
    remain local after optimizer steps, and disabled buffer broadcast preserves
    persistent-buffer divergence.
-3. Every rank can produce a complete Lightning checkpoint through the strategy
-   specialization.
+3. A nonzero selected rank can produce a complete Lightning checkpoint through
+   the strategy specialization while losing ranks do not write checkpoints.
 4. The chosen Lightning hook applies controlled optimizer values after optimizer
    restoration and before the first update.
-5. Tune reports and holds every member at one boundary without advancing an old
-   actor into the next round.
-6. The scheduler can assign one reported winner checkpoint and distinct target
-   controller states to every trial through Ray's native resume path.
-7. Ray failure notification can abort the exchange and release blocked members.
-8. The complete population reforms DDP and completes another round.
+5. A Function API checkpoint can carry the Lightning checkpoint directory through
+   Ray assignment and be materialized for `Trainer.fit(ckpt_path=...)` in the
+   replacement member process.
+6. Returning `PAUSE` for every boundary report prevents the reporting function
+   trial from executing further work, and disabled actor reuse produces a
+   replacement process on resume.
+7. The scheduler can assign one reported winner checkpoint and distinct target
+   controller states to every paused trial through Ray's native resume path.
+8. Ray failure notification can abort the exchange and release or terminate
+   blocked members.
+9. The complete population reforms DDP and completes another round.
 
 A probe used to establish one of these facts is temporary evidence. Only the
 reduced framework-contract test that protects an accepted dependency belongs in
@@ -675,16 +739,16 @@ Human review should focus on these decisions before milestone decomposition:
    native public Ray seam that lets process-local controllers consume one complete
    population without private actor invocation?
 2. Is the Clan DDP strategy the correct single owner for external-rank setup,
-   disabled buffer broadcast, and per-rank checkpoint saving, or should the
+   disabled buffer broadcast, and selected-rank checkpoint saving, or should the
    checkpoint specialization be separated without duplicating Lightning state
    assembly?
 3. Is target-local controller state in the reserved Tune configuration the
    correct durable boundary, given that the winner Lightning checkpoint must not
    overwrite it?
-4. Is saving every candidate checkpoint an acceptable first correct design before
-   considering a winner-only optimization?
-5. Does the scheduler responsibility remain one coherent idea: verify and execute
-   an already decided complete-population transition?
+4. Is the function member adapter a sufficiently narrow bridge between Ray's
+   checkpoint/config lifecycle and one ordinary `Trainer.fit()` call?
+5. Does the scheduler responsibility remain one coherent idea: pause, verify, and
+   execute an already decided complete-population transition?
 
 After these questions are accepted or corrected, the design can be decomposed
 into stable implementation milestones and rolled out through contract-first TDD.
