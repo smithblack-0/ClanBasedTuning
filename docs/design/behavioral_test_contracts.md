@@ -1,309 +1,260 @@
 # Behavioral test contracts
 
-Status: proposed design contract under human review  
+Status: Milestone 3 behavioral acceptance contract  
 Date: 2026-07-31
 
 ## Purpose
 
-These contracts identify observable outcomes whose failure would prove that a
-Clan Tuning implementation is behaviorally wrong. They constrain the design and
-later executable acceptance tests without choosing a public facade, scheduler
-class, callback layout, transport, or file structure.
-
-The contracts are intentionally incomplete as a feature inventory. They cover the
-mechanism-defining conditions that must remain true through any acceptable
-implementation. Additional tests may be required for a selected design, framework
-version, support boundary, or public API.
-
-## State vocabulary
-
-The contracts avoid phrases such as "full state" because different state must
-follow different authorities during a generation transition.
-
-- **Model state** means model parameters and persistent model buffers.
-- **Optimizer history** means optimizer tensors, counters, moments, momentum, and
-  other accumulated state associated with model parameters. It excludes the
-  controlled hyperparameter values assigned to a member for the next round.
-- **Training-progress state** means the framework-owned continuation state needed
-  to resume the same training point, including supported loop counters, global
-  step, epoch, precision-scaler state, and supported scheduler state.
-- **Continuation state** means model state, optimizer history, and
-  training-progress state together.
-- **Member identity** means the stable identity of one population slot or live
-  member.
-- **Member configuration** means the controlled optimizer hyperparameter values
-  assigned to that member for one round.
-- **Controller state** means the target member's current round, local random
-  stream, current controlled configuration, and other state owned by the accepted
-  evolutionary controller.
-- **Framework runtime state** means live process, actor, process-group, device,
-  launcher, and similar objects that exist only to execute a run.
-- **Round result** means one member's fitness, member identity, round identity,
-  and controlled configuration at the completed boundary.
-- **Transition decision** means the sole selected parent and the next member
-  configuration produced for every member from one complete population of round
-  results.
+These contracts state the training behavior that ClanBasedTuning must produce.
+They deliberately treat CBT as a black box around an ordinary distributed
+training job. A test may provide fitness to CBT and inspect the resulting model,
+optimizer, training progress, checkpoint artifacts, and later training behavior.
+It may not require an internal winner ID, controller field, callback order,
+scheduler method, comparison vocabulary, or framework-private object merely to
+make the assertion convenient.
 
-A later executable test should observe these partitions at public or native
-framework lifecycle boundaries. It should not call an internal method merely
-because doing so makes the assertion easier.
+The distinction is:
+
+- **Behavioral:** report results to CBT such that one variant is unambiguously
+  preferred, then observe that the next round begins from that variant.
+- **Premature implementation contract:** configure a named metric with a named
+  `min` or `max` option, inspect an internal winner flag, or call a policy method
+  directly.
 
-## Contract 1: every round begins from one common continuation state
+The selected design will need additional framework-contract and unit tests. Those
+protect the mechanism used to deliver these outcomes; they are not substitutes
+for observing the outcomes themselves.
 
-### Test setup
+## Observable training state
 
-Observe every member immediately before its first training update in a round.
-Use continuation-state values that can be distinguished from stale or losing
-state. Assign at least two members different controlled optimizer
-configurations.
+The contracts use only state that an ordinary training system can expose:
 
-### Required observations
-
-- Every member has equal model state.
-- Every member has equal optimizer history.
-- Every member has equal training-progress state.
-- Each member retains its own member identity.
-- Each member has the configuration assigned to that member for the observed
-  round.
-- Framework runtime objects may differ and are not part of the equality claim.
+- **model state:** model parameters and persistent model buffers;
+- **optimizer history:** accumulated optimizer tensors, counters, moments,
+  momentum, and equivalent state, excluding the controlled values newly assigned
+  for an upcoming round;
+- **controlled optimizer values:** the optimizer hyperparameters CBT varies
+  between variants;
+- **training-progress state:** framework continuation state such as the global
+  step, epoch or loop progress, precision state, and supported scheduler state;
+- **fitness:** the result supplied to CBT for comparing one completed variant with
+  the others; and
+- **checkpoint:** the persisted continuation artifact from which training can be
+  restored.
 
-### A failing test proves
+## Contract 1: every round begins from one common continuation
 
-The clan did not begin from one common trajectory, a member retained stale state,
-member identity was overwritten during cloning, or controlled configuration was
-incorrectly included in the common continuation state.
+### Setup
 
-## Contract 2: one complete population produces one winner
+Arrange a preceding round whose candidate states are distinguishable. Report
+results to CBT so one candidate is unambiguously preferred. Observe every variant
+at the beginning of the next round, after restoration and before its first
+training update.
 
-### Test setup
+### Required behavior
 
-Complete one round with exactly one valid result for every required member and
-with distinct known fitness values under the configured metric direction.
+- Every variant has the preferred candidate's model state.
+- Every variant has the preferred candidate's optimizer history.
+- Every variant has the preferred candidate's training-progress state.
+- No distinguishable model, optimizer-history, or progress value from a losing
+  candidate survives.
+- Controlled optimizer values may differ between variants because next-round
+  variation is applied after the common continuation is restored.
 
-### Required observations
+### Failure establishes
 
-- The selected parent is the member with the best reported fitness under the
-  configured `min` or `max` rule.
-- Every member and the external transition executor identify the same parent.
-- The decision refers to the round that produced the supplied results.
-- Exactly one parent is selected.
+The next population did not descend solely from the preferred training
+trajectory, or next-round variation was incorrectly mixed into the inherited
+continuation.
 
-### A failing test proves
+## Contract 2: next-round variation is applied after inheritance
 
-Selection used the wrong fitness rule, different participants resolved different
-parents, stale results entered the decision, or the transition did not have one
-sole parent.
+### Setup
 
-## Contract 3: selection compares equivalent member-local fitness
+Choose a preferred candidate whose checkpoint contains controlled optimizer
+values distinguishable from the values CBT will assign in the next round.
+Observe the restored state before and after next-round controlled values are
+applied, but before a training update.
 
-### Test setup
+### Required behavior
 
-At one common round boundary, evaluate every member on the same held-out examples
-under equivalent evaluation settings. Construct members whose local model states
-produce distinguishable fitness values.
+- Model state and optimizer history first restore exactly from the preferred
+  candidate.
+- CBT then assigns the intended controlled values for each new variant.
+- Applying those values changes only the declared optimizer fields.
+- Applying them does not recreate the optimizer, clear its history, change model
+  parameters, or advance training progress.
+- The persisted preferred checkpoint is not already mutated for one receiver's
+  next-round role.
 
-### Required observations
+### Failure establishes
 
-- Each fitness value is computed from that member's own model state.
-- Every member is evaluated at the same logical round boundary.
-- Every member sees the same held-out workload, ordering rules, transforms, and
-  metric definition within the supported test configuration.
-- Candidate fitness values remain separate inputs to population selection; they
-  are not averaged or reduced into one population-wide score.
+Mutation occurred before inheritance, one receiver's mutation was baked into the
+common parent, or optimizer-history inheritance was destroyed while applying the
+new values.
 
-### A failing test proves
+## Contract 3: Lightning DDP supplies one shared gradient
 
-The comparison was not meaningful because candidates were evaluated at different
-boundaries, against different work, from the wrong model state, or after their
-scores had been combined.
+### Setup
 
-## Contract 4: every optimizer update uses one clan-wide reduced gradient
+Run at least two variants on different training examples. Choose a deterministic
+update for which their unreduced local gradients are distinguishable and the
+expected reduced gradient is known.
 
-### Test setup
+### Required behavior
 
-Run at least two live members on independently partitioned training batches.
-Choose a deterministic update for which the unreduced local gradients differ.
+- Immediately before the optimizer update, corresponding trainable parameters in
+  every variant have the same reduced gradient.
+- That gradient contains the required contribution from every active variant.
+- No required variant is queued or omitted from the tested collective.
+- Optimizer history and controlled optimizer values remain local; only the
+  gradient is shared at this boundary.
 
-### Required observations
+### Failure establishes
 
-- Immediately before the optimizer update, corresponding trainable parameters
-  have equal reduced gradients on every member.
-- The reduced gradient contains the required contribution from every live member
-  in the clan.
-- Optimizer history and member configuration remain local; only the gradient is
-  shared at this boundary.
-- No required member is queued, omitted, or time-multiplexed outside the tested
-  collective.
+The variants trained independently, the active population was incomplete, or
+optimizer-side state was synchronized together with the gradient.
 
-### A failing test proves
+## Contract 4: local optimizer behavior produces the variants
 
-Members trained independently, the active population was incomplete, the wrong
-collective was used, or optimizer-side state was synchronized together with the
-gradient.
+### Setup
 
-## Contract 5: member-local optimization produces controlled divergence
+Begin a deterministic update from equal model state and equal optimizer history.
+Use the same reduced gradient while assigning controlled optimizer values known
+to produce different updates.
 
-### Test setup
+### Required behavior
 
-Begin one update from equal model state and equal optimizer history. Supply the
-same reduced gradient to members with configurations deliberately chosen to
-produce different updates.
+- Every variant begins from equal model state and optimizer history.
+- Every variant receives the same reduced gradient.
+- Each optimizer uses the controlled values assigned to that variant.
+- The resulting model states differ as predicted by those optimizer updates.
+- Later Lightning DDP activity does not overwrite the intended parameter or
+  persistent-buffer divergence.
 
-### Required observations
+### Failure establishes
 
-- Members begin the update from equal model state and optimizer history.
-- Members use equal reduced gradients.
-- Each member applies its own assigned configuration through its own optimizer
-  history.
-- Resulting model states differ in the way implied by the local optimizer
-  behavior.
-- No post-update parameter or persistent-buffer synchronization erases intended
-  member divergence.
+The controlled optimizer behavior was erased, assigned incorrectly, or confused
+with divergence caused by different starting state or different gradients.
 
-### A failing test proves
+## Contract 5: fitness compares the actual local variants
 
-Member-local optimizer behavior was erased, a configuration was delivered to the
-wrong member, model state was resynchronized after the update, or apparent
-divergence came from unequal inputs rather than Clan Tuning.
+### Setup
 
-## Contract 6: the winner's continuation state is the sole inherited parent
+Construct variants whose local model states produce distinguishable evaluation
+results. Evaluate them at one common round boundary on the same held-out workload
+under equivalent conditions.
 
-### Test setup
+### Required behavior
 
-Complete a round whose winner has model state, optimizer history, and
-training-progress state distinguishable from every losing member. Observe every
-receiver after inheritance and before the next training update.
+- Each fitness value is computed from the model state of the variant reporting it.
+- Every variant is evaluated at the same logical training boundary.
+- The held-out examples, transforms, ordering rules, and metric definition are
+  equivalent within the supported configuration.
+- Candidate fitness values remain distinct when CBT compares them; they are not
+  averaged into one population-wide result.
 
-### Required observations
+### Failure establishes
 
-- Every receiver's model state equals the winner's accepted round-end model
-  state.
-- Every receiver's optimizer history equals the winner's accepted round-end
-  optimizer history.
-- Every receiver's training-progress state equals the winner's accepted
-  round-end training-progress state.
-- Every receiver identifies the same source member for inherited continuation
-  state.
-- No distinguishable continuation-state value from a losing member survives in
-  any receiver.
+CBT compared unlike workloads, stale or foreign model state, different training
+positions, or a fitness signal erased by distributed reduction.
 
-### A failing test proves
+## Contract 6: the preferred variant is the one continued
 
-The wrong member was copied, continuation states were averaged or mixed, only a
-partial continuation was inherited, different receivers used different parents,
-or a losing trajectory survived.
+### Setup
 
-This contract does not require copying member identity, member configuration,
-controller state, or framework runtime state.
+Complete a round with distinguishable model state, optimizer history, and
+training progress for each variant. Report results to CBT such that one variant is
+unambiguously preferred.
 
-## Contract 7: inheritance preserves target-local identity and control state
+### Required behavior
 
-### Test setup
+- Exactly one continuation checkpoint is retained for the transition.
+- Its model state, optimizer history, and training progress match the preferred
+  variant at the evaluated round boundary.
+- The next round restores that checkpoint into every variant.
+- No losing continuation is loaded, averaged, or mixed into any receiver.
 
-Resolve a transition that produces distinguishable next configurations and
-controller states for multiple members. Observe receivers after winner
-continuation-state restoration and configuration application but before the next
-training update. Continue far enough to make target-local controller randomness
-observable in a later decision.
+### Failure establishes
 
-### Required observations
+CBT selected or persisted the wrong training trajectory, retained multiple
+competing parents, or failed to make the reported preference control the next
+round.
 
-- Every receiver retains its own member identity.
-- Every receiver retains the controller state produced for that target member,
-  rather than receiving the winner's controller state.
-- Every receiver uses the next configuration assigned specifically to it.
-- Applying the receiving configuration does not recreate, discard, or replace
-  inherited optimizer history.
-- Reapplying controlled values changes only their declared optimizer fields.
-- Later target-local mutations follow the receiving member's continued random
-  stream rather than the winner's stream.
+The contract does not prescribe how preference is configured or represented.
 
-### A failing test proves
+## Contract 7: a partial population cannot advance
 
-Cloning collapsed the population into one identity, winner-local control state
-was copied to every target, configuration was taken from the checkpoint instead
-of the decision, or configuration application destroyed inherited optimizer
-history.
+### Setup
 
-## Contract 8: a partial population cannot produce or execute a transition
+Cause one required variant to fail or omit its valid fitness while the remaining
+variants reach the round boundary.
 
-### Test setup
+### Required behavior
 
-Cause one required member to fail, disappear, duplicate its result, report the
-wrong round, or omit a valid result while other members reach the boundary.
+- No continuation checkpoint is accepted as the next parent.
+- No variant begins another round.
+- The active Clan fails or is invalidated as a whole rather than silently
+  continuing with fewer participants.
+- Waiting work is released by a surfaced failure rather than hanging indefinitely.
+- The failure provides enough context to identify the broken round or population.
 
-### Required observations
+### Failure establishes
 
-- No valid transition decision is produced from the partial or corrupt
-  population.
-- No candidate checkpoint is assigned as the next parent.
-- No member begins the next round.
-- The active clan is failed or invalidated as a whole; it does not silently
-  continue with fewer members.
-- Blocked members are released by failure rather than waiting indefinitely.
-- The surfaced failure identifies the affected member and round well enough to
-  distinguish the broken population from an ordinary losing member.
+The implementation can optimize over a population different from the configured
+Clan, enter a mixed generation, or deadlock without reporting collective failure.
 
-### A failing test proves
+## Contract 8: the lifecycle repeats
 
-The implementation can optimize over a different population than configured,
-perform a partial transition, leave members on inconsistent generations, or hang
-without exposing collective invalidation.
+### Setup
 
-## Contract 9: the complete lifecycle repeats for multiple rounds
+Complete a round, transition through the preferred checkpoint, and complete at
+least one more round.
 
-### Test setup
+### Required behavior
 
-Complete a round, execute the sole-parent transition, and complete at least one
-additional round with the resulting population.
+- The later round begins from the preceding preferred continuation.
+- New controlled values are applied only after that continuation is restored.
+- Lightning DDP again produces a shared gradient while the local optimizers again
+  produce distinguishable variants.
+- The later variants produce comparable local fitness values.
+- A later reported preference again determines the sole continuation.
 
-### Required observations
+### Failure establishes
 
-- The later round begins from the continuation state, identities, controller
-  states, and configurations established by the preceding transition.
-- The distributed group is valid before later-round training begins.
-- Shared-gradient training and member-local optimization both resume.
-- The later round produces one comparable member-local fitness result per
-  required member.
-- The later complete population can produce and execute another internally
-  consistent transition.
+The implementation can stage one transfer but cannot repeatedly perform Clan
+Tuning.
 
-### A failing test proves
+## Contract 9: the same accepted inputs reproduce the same next population
 
-The implementation can stage a one-off copy but cannot reform the clan, resume
-its defining distributed behavior, or repeat the actual tuning process.
+### Setup
 
-## Contract 10: transition output is stable from the same authoritative inputs
+Repeat a transition from the same completed candidate states, fitness reports,
+experiment seed, and supported deterministic settings.
 
-### Test setup
+### Required behavior
 
-Capture the complete population results and every target controller state
-immediately before a transition decision. Execute the decision twice from those
-same inputs under the same configured experiment seed and member identities.
+- The same candidate continuation is persisted.
+- The same common model state, optimizer history, and training progress are
+  restored.
+- The same controlled optimizer values are assigned to corresponding next-round
+  variants.
+- The first deterministic update of the next round produces the same resulting
+  model states.
 
-### Required observations
+### Failure establishes
 
-- Both executions select the same parent.
-- Both executions assign the same next configuration to each member.
-- Both executions produce equivalent next controller state for each member.
-- Both executions identify the same completed and next rounds.
+The transition depends on hidden or unpreserved state rather than its declared
+training inputs.
 
-### A failing test proves
+## Evidence rule
 
-The transition depends on population iteration order, hidden process history,
-non-restored randomness, or another unrecorded source of authority.
+Executable acceptance evidence must exercise CBT through its supported
+integration path. Focused tests may inspect a named lifecycle boundary, but the
+complete suite must include a real multi-round Lightning DDP and Tune workflow
+that proves the contracts together.
 
-## Design and implementation traceability
-
-Before implementation begins, the accepted architecture must map each retained
-contract to:
-
-1. the lifecycle operation that triggers it;
-2. the boundaries where each observation can be made;
-3. the owner of every named state partition;
-4. the framework assumptions that require direct contract tests; and
-5. an executable acceptance test or a documented combination of focused and
-   end-to-end evidence that proves the behavior.
-
-A contract may be revised during design review. It must not be made more specific
-merely to accommodate the first proposed implementation.
+Design-specific tests may additionally inspect collective membership, checkpoint
+injection, scheduler state, controller serialization, framework callbacks, and
+version-sensitive Ray seams. Those assertions explain why the implementation is
+reliable; they must not replace the black-box training observations above.
