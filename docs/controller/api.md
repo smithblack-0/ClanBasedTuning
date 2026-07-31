@@ -1,7 +1,7 @@
 # Clan controller API
 
-The Milestone 2 surface consists of three framework-independent objects:
-`MutationSpec`, `ClanRound`, and `ClanController`.
+The framework-independent surface consists of `MutationSpec`, `ClanRound`, and
+`ClanController`.
 
 ## `MutationSpec`
 
@@ -16,18 +16,9 @@ lr_mutation = MutationSpec(
 )
 ```
 
-`standard_deviation`
-: Gaussian displacement scale.
-
-`geometry`
-: `"linear"` adds the displacement. `"log"` multiplies by its exponential.
-
-`minimum`, `maximum`
-: Inclusive bounds applied after mutation.
-
-`mutation.mutate(value, random_stream)` performs the mutation. Mutation specifications
-are intentionally trusted internal objects; invalid settings generally fail when the
-rule is used rather than through a separate validation subsystem.
+`mutation.mutate(value, random_stream)` applies one bounded linear or logarithmic
+mutation. Invalid rules generally fail when used rather than through a separate
+validation subsystem.
 
 ## `ClanRound`
 
@@ -42,31 +33,10 @@ round_ = ClanRound(
 )
 ```
 
-`member_id`
-: Integer identity of the process or trial within the Clan.
+`get_config()` returns a copy of the controlled values.
 
-`round_index`
-: Generation represented by this record.
-
-`config`
-: Named controlled values used during this round. The round owns a copy.
-
-`fitness`
-: Comparable result. It is `None` until evaluation finishes.
-
-### `get_config()`
-
-Returns a copy of the current round configuration.
-
-### `set_fitness(fitness)`
-
-Stores a finite fitness and immediately calls:
-
-```python
-save_member_fitness(round_)
-```
-
-The callback decides how the completed round is stored or communicated.
+`set_fitness(fitness)` stores a finite fitness and immediately calls
+`save_member_fitness(round_)`.
 
 ## `ClanController`
 
@@ -86,35 +56,8 @@ controller = ClanController(
 )
 ```
 
-`member_id`
-: Identity of this local member.
-
-`population_size`
-: Fixed number of members expected at every transition.
-
-`initial_config`
-: Controlled values supplied for this trial's first round.
-
-`mutations`
-: Ordinary dictionary from controlled-value name to `MutationSpec`.
-
-`mode`
-: `"min"` or `"max"`. Fitness ties select the lower member ID.
-
-`seed`
-: Experiment seed. The controller combines it with `member_id` for a deterministic
-member-specific random stream.
-
-`save_member_fitness`
-: Callback used by each local `ClanRound` to publish itself.
-
-`load_population`
-: Callback receiving a round index and returning `list[ClanRound]` for that completed
-round.
-
-`select_winner`
-: Callback receiving the winning integer member ID. It applies externally owned
-consequences such as model or optimizer transfer; it does not select the winner.
+The constructor settings retain their previous meanings. `select_winner` receives the
+selected member ID after the complete current population has been compared.
 
 ### `get_config()`
 
@@ -124,31 +67,39 @@ Returns this process's controlled values for the current round.
 
 Completes and publishes this process's current round.
 
-### `advance()`
+### `close_round()`
 
-Loads the current population, checks that it contains exactly one completed record for
-every expected member, and selects the winner. The controller then manufactures this
-member's complete next `ClanRound` from the winning round, including any local
-mutation, before calling `select_winner(winner_id)` and installing the prepared round.
+Loads and validates the complete population for the current round, selects the winner,
+records a copy of that completed winning round, calls `select_winner(winner_id)`, and
+returns whether the local member is the winner.
 
-The winning member keeps the winning configuration. Every other member mutates from
-that same winning configuration.
+The method does not increment the round, mutate a configuration, or install any
+next-round state. Its result is intended to gate winner-only checkpoint persistence.
 
 ### `state_dict()` and `load_state_dict(state)`
 
-Save and restore the local random stream together with the current round index,
-configuration, and optional fitness. Callback implementations and fixed constructor
-settings remain external configuration.
+`state_dict()` serializes the current round, deterministic random state, and any
+selected completed winner. A winner checkpoint taken after `close_round()` therefore
+contains the information needed to manufacture the next population after restoration.
+
+`load_state_dict()` restores the winner-derived state while preserving the receiving
+controller's constructor-supplied `member_id`. Missing state keys fail directly.
+
+### `start_next_round()`
+
+Requires a closed winner state that has passed through `load_state_dict()`. It rebases
+the restored random stream for the receiving member, keeps the exact winning
+configuration for the winning member, mutates from that configuration for every other
+member, increments the round, and clears the completed fitness and winner record.
+
+Calling it before restoration raises instead of allowing the old process to continue
+past the checkpoint boundary.
 
 ## Framework handoff
 
-A framework integration supplies callback implementations and maps its own trial or
-process identity to the controller's integer member ID. It owns synchronization,
-checkpoint movement, model and optimizer transfer, pause and resume, and all other
-framework lifecycle operations.
+A framework integration supplies publication and population-loading effects, places the
+preferred controller state in the normal winner checkpoint, restores that checkpoint
+into every receiver, and calls `start_next_round()` before training resumes.
 
-The integration may also persist the winning member ID for each round as a PBT replay
-path. Durable replay history and execution belong to that integration because they
-must remain aligned with framework round identity and checkpoint storage. Since every
-local controller observes the same winner, one authority should record the path or the
-write should be idempotently keyed by round.
+The controller still does not own synchronization, model or optimizer transfer,
+checkpoint I/O, pause and resume, or Tune trial lifecycle.
