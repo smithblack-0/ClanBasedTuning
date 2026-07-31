@@ -11,25 +11,25 @@ ClanBasedTuning keeps the ordinary Ray Tune function lifecycle.
 One live Tune trial represents one Clan member. Those trial processes form one
 Lightning DDP job for a training round. Lightning DDP supplies the same reduced
 gradient to every member, while each local optimizer applies that gradient using the
-hyperparameters in its current Tune configuration.
+controlled hyperparameters in its current Tune configuration.
 
 The CBT Tune scheduler is the sole evolutionary authority. It owns population result
-collection, parent selection, mutation, next-trial configuration, replay state, and
-assignment of the selected checkpoint to every trial.
+collection, successful-genome identification, mutation, next-trial configuration,
+mutation random state, replay lineage, and assignment of the selected checkpoint to
+every next trial.
 
-A thin worker-side `ClanController` exists only because CBT must determine the
-checkpoint source before calling `tune.report()`. It exchanges fitness across the live
+A thin worker-side `ClanController` exists only because the checkpoint source must be
+known before the worker calls `tune.report()`. It exchanges fitness across the live
 population and returns whether the local worker should attach the checkpoint.
 
 CBT defines no `Trainable` subclass, no independent training loop, no public
-`ClanRound`, no controller checkpoint state, and no second population policy.
+`ClanRound`, no checkpointed worker controller, and no second genome authority.
 
-## The intended imperative Tune function
+## Intended imperative Tune function
 
-The ordinary user-facing shape is:
+The governing user-facing shape is ordinary PBT plus one collective save decision:
 
 ```python
-
 def train(config):
     controller = make_cbt_controller()
 
@@ -39,72 +39,139 @@ def train(config):
     if checkpoint is not None:
         restore_training_state(checkpoint, model, optimizer)
 
+    # The checkpoint supplies optimizer history. The current Tune config supplies
+    # this member's genome for the new round.
     apply_optimizer_config(optimizer, config)
 
     train_one_round(model, optimizer)
     metrics = evaluate(model)
 
     controller.set_fitness(metrics["fitness"])
+    should_save = controller.should_save_checkpoint()
 
-    if controller.should_save_checkpoint():
-        checkpoint = make_checkpoint(model, optimizer)
+    checkpoint = distributed_checkpoint_boundary(
+        trainer=trainer,
+        persist=should_save,
+    )
+
+    if should_save:
         tune.report(metrics, checkpoint=checkpoint)
     else:
         tune.report(metrics)
 ```
 
-This is the governing usability target. A user should not manually handle rank,
-world size, collective-group creation, complete-population gathering, tie breaking,
-checkpoint-source selection, mutation, or checkpoint redistribution.
+The user should not manually provide rank, world size, collective-group information,
+fitness buffers, tie-breaking rules, scheduler mutation state, or checkpoint
+redistribution logic.
 
-The exact Lightning-qualified form preserves the same visible logic while requiring
-all DDP ranks to enter the checkpoint boundary:
+`distributed_checkpoint_boundary()` represents the Lightning integration rather than a
+CBT training loop. Every DDP rank participates in the required framework boundary;
+only the selected rank retains a persistent checkpoint and passes it to Tune.
 
-```python
-controller.set_fitness(metrics["fitness"])
-should_save = controller.should_save_checkpoint()
+## State authority
 
-checkpoint = distributed_checkpoint_boundary(
-    trainer=trainer,
-    persist=should_save,
-)
+The word **genome** means the subset of Tune configuration fields controlled by CBT,
+for example learning rate, optimizer betas, or weight decay. Runtime metadata and
+uncontrolled model settings are not part of the genome merely because they also appear
+in `Trial.config`.
 
-if should_save:
-    tune.report(metrics, checkpoint=checkpoint)
-else:
-    tune.report(metrics)
+| State | Live authority | Durable or audit copy |
+| --- | --- | --- |
+| Current member genome | that member's `Trial.config` | Tune experiment state and scheduler lineage |
+| Fitness for the current generation | Tune result received by the scheduler | Tune result history |
+| Winning parent genome | winner's `Trial.config` at selection time | checkpoint metadata and scheduler lineage |
+| Child genomes | scheduler until installed, then each target `Trial.config` | scheduler lineage |
+| Mutation RNG and replay history | CBT Tune scheduler | scheduler persistence |
+| Model, optimizer history, and training progress | Lightning continuation | selected checkpoint payload |
+| Collective save decision | ephemeral worker controller | verified by checkpoint-bearing report |
+
+There are deliberately two different artifacts at the start of the next round:
+
+```text
+one common selected training checkpoint
++
+one target-local child genome in each Trial.config
 ```
 
-`distributed_checkpoint_boundary()` is an integration responsibility, not a new
-training loop. Every Lightning DDP rank participates in the framework checkpoint
-operation; only the selected member retains a persistent artifact and passes it to
-Tune.
+The checkpoint is the inherited training trajectory. The target trial configuration is
+the genome that will act on that trajectory. A shared checkpoint cannot be the live
+authority for several different child genomes.
 
-## What the user does not handle
+## How the scheduler learns which genome succeeded
 
-The user train function should not provide or coordinate:
+Each report reaches the scheduler together with the reporting `Trial` object.
+Therefore the scheduler can associate:
 
-- Clan member rank or population size;
-- Ray collective initialization or group names;
-- fitness all-gather buffers;
-- objective direction or stable tie-breaking logic inside the worker;
-- deciding which report carries the checkpoint;
-- Tune scheduler pause, stop, or replacement ordering;
-- assigning the selected checkpoint to losing trials;
-- scheduler mutation state or random streams;
-- replay lineage;
-- DDP rendezvous, gradient reduction, or winner-aware checkpoint I/O; or
-- a CBT-owned round-advancement protocol.
+```text
+reported fitness
++
+reporting trial identity
++
+reporting trial's current controlled config fields
+```
 
-The user retains the ordinary PBT-style responsibilities:
+The worker does not need to serialize or repeat its genome in the checkpoint merely so
+the scheduler can discover it. The scheduler selects the winner from the complete
+fitness population and reads the winning parent genome from that trial's current
+configuration.
 
-- build the model, optimizer, and data;
-- obtain the Tune-assigned checkpoint with `tune.get_checkpoint()`;
-- restore training continuation;
-- reapply the current trial configuration after optimizer restoration;
-- train and evaluate;
-- provide one scalar fitness; and
-- call `tune.report()` with the optional checkpoint produced at the boundary.
+The worker and scheduler use the same stable comparison rule. The active core provides
+one shared selector so minimizing, maximizing, and lower-rank tie behavior cannot drift
+between the pre-report collective decision and the scheduler's verification.
+
+## Checkpoint metadata binds the parent genome to the artifact
+
+After the scheduler has the complete population and the single checkpoint-bearing
+report, it attaches namespaced provenance metadata to that checkpoint before assigning
+it to the next population.
+
+Conceptually:
+
+```python
+winner_genome = controlled_subset(winner_trial.config)
+
+checkpoint.update_metadata(
+    build_parent_genome_metadata(
+        round_index=round_index,
+        source_member_id=winner_member_id,
+        source_trial_id=winner_trial.trial_id,
+        genome=winner_genome,
+    )
+)
+```
+
+The metadata schema is:
+
+```python
+{
+    "clan_based_tuning": {
+        "schema_version": 1,
+        "round_index": 7,
+        "source_member_id": 2,
+        "source_trial_id": "trial_00002",
+        "parent_genome": {
+            "lr": 0.004,
+            "weight_decay": 0.08,
+        },
+    }
+}
+```
+
+Ray checkpoint metadata is separate from the Lightning checkpoint payload. Updating it
+reads and writes the small metadata mapping through the checkpoint filesystem; it does
+not require deserializing model parameters or optimizer tensors.
+
+The metadata is provenance and an integrity check:
+
+> This continuation was produced by this genome in this completed generation.
+
+It is not the live authority for the receiving members' child genomes. Those remain in
+the target trials' configurations.
+
+The scheduler should verify that the parent genome recorded in metadata matches the
+controlled fields it observed on the winning trial. On recovery or replay, disagreement
+between scheduler lineage and checkpoint provenance is a surfaced corruption rather
+than an arbitrary choice of authority.
 
 ## Governing lifecycle
 
@@ -114,14 +181,14 @@ TUNE STARTS ONE FUNCTION TRIAL PER CLAN MEMBER
 ├── CBT runtime creates the worker controller
 ├── tune.get_checkpoint() exposes the scheduler-assigned checkpoint, if any
 ├── restore model, optimizer history, and training progress
-└── apply this trial's current Tune configuration to the restored optimizer
+└── apply this trial's current genome from config to the restored optimizer
 │
 ▼
 TRAIN WITH LIGHTNING DDP
 │
 ├── each member processes its own training partition
-├── Lightning DDP reduces the gradient across the Clan
-└── each local optimizer applies the shared gradient using its own configuration
+├── Lightning DDP reduces gradients across the Clan
+└── each local optimizer applies the shared gradient with its own genome
 │
 ▼
 EVALUATE ONE LOCAL FITNESS
@@ -131,7 +198,7 @@ WORKER CONTROLLER RESOLVES THE CHECKPOINT SOURCE
 │
 ├── set_fitness(local fitness)
 ├── should_save_checkpoint() all-gathers fitness
-├── every member applies the same comparison and tie rule
+├── every member applies the shared comparison rule
 └── exactly one member receives True
 │
 ▼
@@ -144,7 +211,7 @@ LIGHTNING CHECKPOINT BOUNDARY
 ▼
 REPORT TO TUNE
 │
-├── every member reports its fitness and round metadata
+├── every member reports fitness and generation metadata
 ├── selected member additionally reports the checkpoint
 └── losing members report metrics without a checkpoint
 │
@@ -152,46 +219,26 @@ REPORT TO TUNE
 CBT TUNE SCHEDULER CLOSES THE GENERATION
 │
 ├── verify one complete population
-├── independently select the same parent
+├── independently select the same winner
 ├── verify exactly that trial supplied the checkpoint
-├── mutate each next trial configuration
-├── assign the selected checkpoint to every trial
-└── replace or resume the complete population together
+├── read the winner genome from winner Trial.config
+├── attach parent-genome provenance to checkpoint metadata
+├── derive one child genome per stable target member
+├── install each child genome in its target Trial.config
+├── assign the same selected checkpoint to every target
+└── make the complete next population runnable together
 │
-└──────────────────────────────────────────────► TUNE STARTS THE NEXT FUNCTION TRIALS
+└──────────────────────────────────────────────► TUNE STARTS THE NEXT FUNCTIONS
 ```
 
-The central invariant is:
+The invariant is:
 
 ```text
-one selected training continuation
-+ one scheduler-generated configuration per receiving member
-→ one next Clan population
+selected training continuation
++ scheduler-selected parent genome provenance
++ target-local child genomes
+→ one coherent next Clan population
 ```
-
-The common checkpoint supplies training state. The member-specific Tune configuration
-supplies the next optimizer hyperparameters. The worker controller supplies neither.
-
-## Why this follows ordinary PBT
-
-Ray PBT already separates inherited state from target-local configuration:
-
-```text
-assign source checkpoint to target
-→ restore source model and optimizer history
-→ apply target's current mutated configuration
-→ continue training
-```
-
-CBT keeps that shape. Its unusual additions are:
-
-1. the members train concurrently as one Lightning DDP world and intentionally diverge
-   after applying the shared gradient; and
-2. the checkpoint source must be known in the worker before reporting so losing
-   members can avoid expensive persistent checkpoints.
-
-Those additions justify a worker collective controller and Lightning integration. They
-do not justify moving evolution or checkpoint loading into that controller.
 
 ## Two-round example
 
@@ -200,91 +247,42 @@ Assume members A, B, and C and a minimizing objective.
 ### Round 4 start
 
 1. The scheduler starts A, B, and C with the checkpoint selected after round 3.
-2. Each train function calls `tune.get_checkpoint()` and restores the same model,
+2. Every function calls `tune.get_checkpoint()` and restores the same model,
    optimizer history, and Lightning progress.
-3. The scheduler supplies a different current Tune configuration to each trial.
-4. Each train function reapplies its own learning rate, momentum, weight decay, or
-   other controlled values after optimizer restoration.
-5. Lightning DDP trains the three members with shared reduced gradients and
-   member-local optimizer updates.
+3. Each trial receives a different round-4 genome in its Tune configuration.
+4. Each function reapplies its own controlled optimizer values after restoration.
+5. Lightning DDP trains the population with shared reduced gradients and member-local
+   optimizer updates.
 
 ### Round 4 boundary
 
 6. A, B, and C evaluate to fitness values 0.42, 0.31, and 0.36.
-7. Each worker controller stores its local fitness.
-8. `should_save_checkpoint()` performs the collective exchange. Every member sees the
-   rank-ordered population and identifies B as the source.
-9. Every Lightning DDP rank enters checkpointing; only B persists the continuation.
-10. A and C report metrics without a checkpoint. B reports metrics with its checkpoint.
+7. Their worker controllers all-gather the values and all identify B as the checkpoint
+   source.
+8. Every DDP rank enters the checkpoint boundary; only B persists the continuation.
+9. A and C report metrics without checkpoints. B reports metrics with its checkpoint.
 
 ### Scheduler transition
 
-11. The scheduler receives all three reports and independently identifies B from the
-    reported fitness.
-12. It verifies that B is the only checkpoint-bearing report.
-13. It assigns B's checkpoint to A, B, and C for the next invocation.
-14. It mutates or retains each next trial configuration according to CBT policy.
+10. The scheduler receives the three results and their Trial objects.
+11. It independently confirms that B is the winner and sole checkpoint source.
+12. It reads B's parent genome from the controlled fields in `B.config`.
+13. It updates B's checkpoint metadata with the round, source identities, and parent
+    genome.
+14. It records the transition in scheduler lineage.
+15. It derives round-5 child genomes for A, B, and C and installs them in each target
+    trial configuration.
+16. It assigns B's checkpoint to all three targets.
 
 ### Round 5 start
 
-15. Replacement trials retrieve B's checkpoint through `tune.get_checkpoint()`.
-16. They restore B's training continuation.
-17. They apply their distinct round-5 Tune configurations.
-18. The new Lightning DDP population trains and diverges again.
+17. Every replacement function retrieves B's checkpoint.
+18. Every member restores B's common training continuation.
+19. Every member applies its own round-5 genome from Tune configuration.
+20. The population trains and diverges again.
 
-No worker controller survives the transition. No controller state is included in B's
-training checkpoint. Scheduler state remains with the Tune scheduler.
-
-## System sequence
-
-```mermaid
-sequenceDiagram
-    participant S as CBT Tune scheduler
-    participant W as Tune worker functions
-    participant C as Worker controllers
-    participant L as Lightning DDP
-
-    S->>W: Start population with assigned checkpoint and member configs
-    W->>W: tune.get_checkpoint()
-    W->>L: Restore training continuation
-    W->>W: Apply current Tune config to optimizer
-
-    loop Training batches
-        W->>L: Local forward/backward
-        L-->>W: Shared reduced gradient
-        W->>W: Member-local optimizer update
-    end
-
-    W->>C: set_fitness(local fitness)
-    W->>C: should_save_checkpoint()
-    C->>C: All-gather population fitness
-    C-->>W: Exactly one local True
-
-    W->>L: All ranks enter checkpoint boundary
-    L-->>W: Selected rank retains checkpoint
-
-    W->>S: Report metrics; selected report includes checkpoint
-    S->>S: Verify complete population and selected source
-    S->>S: Mutate next configurations
-    S->>S: Assign selected checkpoint to every trial
-    S->>W: Start next population
-```
-
-## State ownership
-
-| State | Authority | Persistence |
-| --- | --- | --- |
-| Model parameters and buffers | Lightning training continuation | Selected Lightning checkpoint |
-| Optimizer history | Lightning training continuation | Selected Lightning checkpoint |
-| Training progress and precision state | Lightning | Selected Lightning checkpoint |
-| Current member optimizer hyperparameters | Tune trial configuration | Tune experiment and scheduler state |
-| Mutation random state and replay lineage | CBT Tune scheduler | Tune scheduler persistence |
-| Local fitness before report | Worker train function and controller | Tune result after report |
-| Collective save decision | Ephemeral worker controller | Not checkpointed |
-| Ray collective membership | CBT runtime integration | Recreated for each population |
-
-A training checkpoint must not contain a serialized worker controller, next-member
-mutation, or target-local configuration authority.
+No worker controller survives the transition. No child genome is baked into the shared
+checkpoint payload.
 
 ## Worker `ClanController`
 
@@ -306,58 +304,47 @@ should_save = controller.should_save_checkpoint()
 
 `set_fitness()` is local and nonblocking.
 
-The first `should_save_checkpoint()` call is blocking. It invokes the injected
-collective, verifies the expected population size, applies objective direction and
-stable lower-rank tie breaking, and caches the result. Repeated calls return the cached
-boolean and must not re-enter the collective.
+The first `should_save_checkpoint()` call blocks in the injected collective. It
+verifies the expected population size, applies the shared winner selector, and caches
+the result. Repeated calls return the cached boolean and never re-enter the collective.
 
-The controller does not expose:
+The controller owns no genome, mutation rule, Tune config, checkpoint, scheduler state,
+or serializable continuation. It exposes no `advance()`, `state_dict()`, or nested round
+object.
 
-- `advance()`;
-- current or next configuration access;
-- mutation operations;
-- state serialization;
-- Tune report methods;
-- checkpoint methods; or
-- a nested `ClanRound`.
-
-The eventual `make_cbt_controller()` factory hides its integration constructor inputs:
-member rank, population size, objective direction, and the Ray collective exchange.
+The eventual `make_cbt_controller()` factory hides member rank, population size,
+objective direction, and collective construction from the user function.
 
 ## CBT Tune scheduler
 
-The scheduler owns the evolutionary behavior that the earlier controller attempted to
-own process-locally.
+At each complete generation, the scheduler:
 
-At each complete generation it:
+1. waits for one result from every required trial;
+2. associates each fitness with that trial's active genome;
+3. selects and verifies the winner;
+4. obtains the sole reported checkpoint;
+5. attaches parent-genome provenance to checkpoint metadata;
+6. records fitness, parent genome, child genomes, checkpoint reference, and mutation
+   lineage in scheduler state;
+7. derives one child genome per target using the configured mutation rules;
+8. installs each child genome through the target trial configuration;
+9. assigns the same selected checkpoint to every target; and
+10. releases the complete next population together.
 
-1. waits for one report from every expected trial;
-2. compares the reported fitness under the configured objective;
-3. verifies agreement with the single checkpoint-bearing report;
-4. selects the checkpoint source;
-5. creates the next configuration for every stable member position;
-6. assigns the source checkpoint to every next trial;
-7. preserves scheduler random state and replay history; and
-8. makes the whole next population runnable together.
-
-The scheduler may specialize or reuse Ray's PBT lifecycle mechanisms, but CBT policy
-must remain explicit and testable. It must not require a CBT `Trainable` subclass.
-
-The worker and scheduler should use one shared comparison implementation or a directly
-cross-checked contract so objective direction and tie behavior cannot diverge.
+The scheduler may reuse Ray PBT lifecycle mechanisms, but it does not use PBT quantile
+selection or donor policy unless explicitly adopted by CBT policy. CBT defines no
+package-owned `Trainable` subclass.
 
 ## Lightning DDP
 
-Lightning's `DDPStrategy` owns Trainer integration, process-group setup, model wrapping,
-device placement, barriers, backward synchronization, optimizer lifecycle, and
-checkpoint hooks. PyTorch `DistributedDataParallel` is the lower-level gradient
-reduction mechanism.
+Lightning owns the training loop, process-group behavior, gradient reduction,
+optimizer lifecycle, checkpoint construction, and distributed barriers.
 
-The integration must preserve intentional member divergence:
+The CBT integration must preserve intended member divergence:
 
-- retain native DDP initialization;
+- retain native DDP initial synchronization;
 - retain gradient synchronization;
-- disable forward-time persistent-buffer broadcast when it would overwrite local
+- disable forward-time persistent-buffer broadcast where it would overwrite local
   member state; and
 - do not synchronize parameters or optimizer history after local optimizer updates.
 
@@ -366,53 +353,46 @@ fitness remains member-local rather than being reduced into one Lightning metric
 
 ## Checkpoint construction and reporting
 
-The boolean returned by `should_save_checkpoint()` is not a checkpoint request to Ray.
-Lightning must construct the selected training continuation before the corresponding
-`tune.report()` call.
+The boolean returned by `should_save_checkpoint()` is not a boolean checkpoint request
+to Ray. Lightning constructs the continuation before the corresponding report.
 
-Every DDP rank participates in the required Lightning checkpoint boundary. A
-winner-aware strategy or checkpoint-I/O seam ensures only the selected rank performs
-the persistent write.
+Every DDP rank enters the checkpoint boundary. A winner-aware strategy or
+checkpoint-I/O seam permits only the selected member to retain a persistent artifact.
+The selected worker reports that Ray checkpoint; losing workers report no checkpoint.
 
-The selected worker wraps the resulting artifact as a Ray checkpoint and calls:
-
-```python
-tune.report(metrics, checkpoint=checkpoint)
-```
-
-Other workers call:
-
-```python
-tune.report(metrics)
-```
-
-Ray's internal function wrapper retains a checkpoint attached to a function report and
-makes it available to Tune's save/restore machinery. That wrapper is framework code,
-not a CBT abstraction.
+The scheduler updates checkpoint metadata only after it has received and verified the
+complete population. It must finish metadata attachment and complete assignment before
+any target starts the next generation.
 
 ## Construction boundary
 
-The intended public factory is:
+The intended worker factory remains:
 
 ```python
 controller = make_cbt_controller()
 ```
 
-The factory will read CBT-reserved runtime metadata and initialize or join the fitness
-collective. Ordinary users should not pass rank, world size, group name, backend, or
-objective direction inside their train function.
+The framework-independent implementation exposes the underlying constructor only while
+the Ray runtime factory is developed:
 
-The current framework-independent implementation exposes the underlying constructor
-only so the worker protocol can be developed and tested before the Ray integration
-exists.
+```python
+controller = ClanController(
+    member_id=rank,
+    population_size=world_size,
+    mode="min",
+    exchange_fitness=all_gather_fitness,
+)
+```
 
-## Failure and completion
+Genome mutation and checkpoint metadata attachment do not belong in this factory or
+worker object. They belong to the scheduler transition.
+
+## Failure boundaries
 
 ### Missing collective participant
 
-The fitness exchange requires every active member. Loss of one member invalidates the
-complete Clan round. Surviving members must fail or time out rather than choose from a
-smaller population.
+Loss of one required member invalidates the generation. Surviving members must fail or
+time out rather than choose from a smaller population.
 
 ### Invalid collective result
 
@@ -420,14 +400,23 @@ A wrong-size or non-finite population fails before a save decision is cached.
 
 ### Missing or multiple checkpoints
 
-After a complete generation, the scheduler requires exactly one checkpoint-bearing
-report and it must belong to the scheduler-selected winner. Zero or multiple
-checkpoints invalidate the transition.
+The scheduler requires exactly one checkpoint-bearing report and it must belong to the
+scheduler-selected winner.
 
-### Partial checkpoint assignment
+### Genome disagreement
 
-No next trial may begin until the same selected checkpoint has been assigned to every
-required member.
+The genome used for lineage and checkpoint provenance must equal the controlled subset
+of the winner's active `Trial.config`. A mismatch fails the transition.
+
+### Metadata update failure
+
+No target may start from a checkpoint whose required parent-genome provenance could not
+be attached and verified.
+
+### Partial target assignment
+
+No next member may begin until every target has both the same selected checkpoint and
+its own scheduler-assigned child genome.
 
 ### Planned completion
 
@@ -443,59 +432,46 @@ The first executable qualification remains narrow:
 - one Lightning DDP world;
 - one Ray fitness collective with the same stable rank mapping;
 - equal-length training participation;
-- replicated held-out fitness data;
+- equivalent held-out fitness data;
 - one supported optimizer mapping for controlled values;
 - no competing learning-rate scheduler for those values;
 - no elastic world-size change, SyncBatchNorm, FSDP, or model sharding; and
 - no CBT or user-defined `Trainable` subclass.
 
-These are evidence limits, not permanent architectural claims.
+These are evidence limits rather than permanent architectural claims.
 
 ## Implementation consequences
 
-The accepted earlier `ClanRound` and persistent per-process controller design is
-superseded by this flow.
+The earlier public `ClanRound` and persistent per-process evolutionary controller are
+superseded.
 
-The active code must therefore:
+The active implementation therefore:
 
-- remove `ClanRound` from the package surface;
-- replace controller-owned mutation, population loading, advancement, and persistence
-  with the thin worker decision protocol;
-- retain `MutationSpec` for the future scheduler;
-- implement scheduler evolution and checkpoint assignment separately;
-- add a Ray-backed `make_cbt_controller()` factory later; and
-- qualify the exact Tune and Lightning seams through framework-contract tests.
-
-## Behavioral-contract traceability
-
-| Behavioral contract | Primary lifecycle evidence |
-| --- | --- |
-| Common continuation at round start | Scheduler assignment plus Tune checkpoint retrieval and Lightning restore |
-| Mutation after inheritance | Restored optimizer history followed by application of current Tune config |
-| Shared gradient | Real Lightning DDP gradient observation before optimizer step |
-| Controlled divergence | Equal-start, equal-gradient update with distinct Tune configurations |
-| Comparable local fitness | Equivalent held-out workload and unreduced member-local metrics |
-| Preferred continuation | Worker decision, one reported checkpoint, and next-round restore |
-| Partial population cannot advance | Collective failure and scheduler no-assignment evidence |
-| Repeated lifecycle | At least two complete function-invocation generations |
-| Deterministic next population | Restored scheduler state and reproducible next trial configurations |
+- exposes only a thin worker `ClanController` and `MutationSpec`;
+- removes worker-owned mutation, round advancement, population storage, and controller
+  checkpoint state;
+- shares one winner selector between worker and future scheduler code;
+- defines a namespaced parent-genome checkpoint metadata schema;
+- leaves Ray-backed `make_cbt_controller()`, the Tune scheduler, and Lightning
+  checkpoint integration as subsequent TDD slices; and
+- requires framework-contract tests for Tune checkpoint reassignment and checkpoint
+  metadata updates against the pinned Ray version.
 
 ## Source-backed framework conclusions
 
-The design continues to rely on these inspected Ray 2.56.1 paths:
+The design relies on these inspected Ray 2.56 paths:
 
-- `ray/util/collective/collective.py`: actor-local group initialization and blocking
-  `allgather()`;
-- `ray/tune/trainable/function_trainable.py`: reported-checkpoint retention, internal
-  save returning the latest report, and assigned checkpoint exposure;
-- `ray/tune/execution/tune_controller.py`: scheduler result, pause, save, and restore
-  ordering; and
-- `ray/tune/schedulers/pbt.py`: population mutation and checkpoint reassignment patterns.
+- Tune PBT associates performance with `Trial.config`, mutates target configs through
+  `trial.set_config(new_config)`, and assigns source checkpoints separately;
+- function trials receive assigned checkpoints through `tune.get_checkpoint()` and
+  report optional checkpoints through `tune.report()`;
+- `Checkpoint.update_metadata()` merges metadata through the checkpoint filesystem;
+  its implementation reads and writes the metadata JSON rather than loading checkpoint
+  payload tensors; and
+- Tune's PBT implementation demonstrates scheduler persistence and replay logging for
+  config transitions.
 
-The Lightning checkpoint boundary remains based on Lightning 2.6.1
-`Trainer.save_checkpoint()`, which constructs the standard Lightning continuation,
-delegates persistence to the strategy, and participates in distributed synchronization.
-
-Implementation must protect version-sensitive framework seams with direct contract
-tests. Those tests qualify this design; they do not replace the black-box behavioral
-contracts.
+The Lightning checkpoint boundary remains based on Lightning 2.6.x public checkpoint
+construction and strategy-owned persistence. Those source conclusions establish a
+viable design; direct framework-contract tests must still qualify the exact pinned
+versions.
