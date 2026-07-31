@@ -63,6 +63,7 @@ ownership. It intentionally leaves ordinary implementation details—method
 signatures, file layout, and milestone-sized issue order—to the implementation
 plan, provided they do not change those contracts.
 
-The core package does not define a Ray `Trainable` subclass. Ray may internally
-wrap the supplied function in its own `FunctionTrainable`; that remains Ray's
-implementation detail.
+CBT supplies an ordinary Tune function for each round and defines no Ray
+`Trainable` subclass. Ray may internally wrap that function in its own
+`FunctionTrainable`; that remains Ray's implementation detail. Lightning owns the
+training loop within each round, and Tune owns trial replacement between rounds.
