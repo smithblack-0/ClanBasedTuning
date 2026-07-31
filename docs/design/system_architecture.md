@@ -124,8 +124,9 @@ Assume a three-variant Clan and round 4.
 11. The scheduler installs C's checkpoint as the latest checkpoint for all three
     paused trials, using the same Tune checkpoint-assignment mechanism exercised
     by synchronous PBT.
-12. When A, B, and C run again, Tune exposes C's checkpoint. Lightning restores
-    it, the controller rebases for each new variant, and round 5 begins.
+12. Tune starts replacement trial processes for A, B, and C from C's checkpoint.
+    Each process constructs an ordinary Lightning Trainer for round 5, Lightning
+    restores C's continuation, and the controller rebases for the new variants.
 
 At no point does A or B persist a full candidate checkpoint. At no point does the
 scheduler run CBT's comparison or mutation policy.
@@ -139,7 +140,7 @@ sequenceDiagram
     participant L as Lightning DDP
     participant T as Tune scheduler
 
-    T->>A: Start/resume every trial with the same selected checkpoint
+    T->>A: Start replacement trials with the same selected checkpoint
     A->>L: Trainer.fit(..., ckpt_path=selected checkpoint)
     L->>A: Restore model, optimizer, and training progress
     A->>A: Restore/rebase winning CBT controller
@@ -160,10 +161,10 @@ sequenceDiagram
     L-->>A: Preferred rank persists; losing ranks do not
 
     A->>T: Report fitness; preferred report includes checkpoint
-    T->>A: Pause completed trials
+    T->>A: Pause and stop completed trial processes
     T->>T: Verify complete round and resolve preferred checkpoint
     T->>T: Assign the same checkpoint to every paused trial
-    T->>A: Resume next generation from assigned checkpoint
+    T->>A: Start the next generation in replacement processes
 ```
 
 ## State flow
@@ -220,8 +221,9 @@ receiver's future configuration and make replay ambiguous.
 ### Stop the old generation after reporting
 
 A process that reported the end of round r must not perform an optimizer update
-for round r+1 from its old local state. Tune pauses the whole population at the
-report boundary and restarts it from the assigned checkpoint.
+for round r+1 from its old local state. Tune pauses and stops the completed trial
+processes, assigns the preferred checkpoint, and creates the next generation from
+that checkpoint.
 
 ## Framework realization
 
@@ -311,7 +313,7 @@ boundary but perform no persistent candidate save.
 
 ### Tune's function API carries the checkpoint
 
-CBT exposes a normal Tune function. It does not define, subclass, or ask users to
+CBT supplies a normal Tune function. It does not define, subclass, or ask users to
 implement `ray.tune.Trainable`.
 
 Ray internally wraps function trials in its own `FunctionTrainable`. In Ray
@@ -321,8 +323,8 @@ Ray internally wraps function trials in its own `FunctionTrainable`. In Ray
 - marks the result for checkpoint handling when the report contains a checkpoint;
 - returns that latest reported result from its internal `save_checkpoint()`; and
 - installs an assigned checkpoint into the function session during internal
-  `load_checkpoint()` so the next function invocation can obtain it through
-  `tune.get_checkpoint()`.
+  `load_checkpoint()` so the replacement function invocation can obtain it
+  through `tune.get_checkpoint()`.
 
 This internal wrapper is Ray's implementation detail. It is not a CBT abstraction
 and no CBT class inherits from it.
@@ -391,22 +393,25 @@ variation; it may not retain a losing controller trajectory.
 | Lightning cluster environment | Present Tune-created processes as one Lightning DDP world | Stable ranks and rendezvous information | Lightning rank/world configuration | Trial creation or gradient code |
 | CBT Lightning DDP strategy | Preserve Clan semantics inside Lightning DDP | Lightning model and winner flag | Shared-gradient training and winner-aware checkpoint persistence | CBT selection or Tune assignment |
 | Lightning checkpoint state hook | Add winner CBT continuation to the normal checkpoint | Completed controller state | Controller state inside Lightning checkpoint | Model/optimizer serialization |
-| Tune function | Compose ordinary Trainer execution | User workload, Tune config, assigned checkpoint | One continuous Lightning run with round reports | Custom train/save/load object lifecycle |
+| Tune function | Compose one round of ordinary Trainer execution | User workload, Tune config, assigned checkpoint | One `Trainer.fit()` invocation ending at the round report | Custom train/save/load object lifecycle |
 | CBT Tune scheduler | Pause and transfer the already selected continuation | Complete round reports and one checkpoint | Same assigned checkpoint for every next trial | Fitness comparison, mutation, training |
 
 No additional coordinator or member-adapter class is part of this design.
 
 ## Initial construction and restoration
 
-The Tune function performs ordinary composition:
+Each replacement Tune function invocation performs ordinary composition for one
+round:
 
 1. read the stable Clan rank and collective information from its configuration;
 2. initialize the Ray fitness collective;
 3. construct the Lightning cluster environment, DDP strategy, and CBT hooks;
 4. obtain any assigned Ray checkpoint through `tune.get_checkpoint()`;
 5. expose the Lightning checkpoint file as the `ckpt_path` for `Trainer.fit()`;
-6. call one ordinary `Trainer.fit()`; and
-7. let the Lightning and CBT hooks execute the repeated round lifecycle.
+6. call one ordinary `Trainer.fit()` and let Lightning own training through the
+   configured round boundary; and
+7. let `ClanRound` close the round, checkpoint the preferred continuation, and
+   report to Tune, after which the scheduler pauses and replaces the process.
 
 For a fresh run there is no checkpoint. Lightning DDP performs its normal initial
 model synchronization, the controller creates the first local mutation from the
@@ -414,6 +419,10 @@ configured initial policy state, and training begins.
 
 For every later round the Tune-assigned checkpoint is authoritative. Lightning
 restores before CBT rebases and applies the next controlled values.
+
+Tune's repeated function invocations do not form a CBT-owned training loop.
+Lightning owns every batch, optimizer step, validation event, and checkpoint
+inside each round; Tune owns trial replacement between rounds.
 
 ## Failure and completion
 
