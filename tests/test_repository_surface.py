@@ -31,6 +31,7 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
     assert test_files == {
+        "tests/framework_contracts/test_ray_checkpoint_metadata.py",
         "tests/framework_contracts/test_removed_integration_surface.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
