@@ -5,18 +5,25 @@ training with member-local optimizer hyperparameters and population selection.
 
 ## Current implementation surface
 
-The active implementation now contains two framework-independent pieces required by
-the accepted Tune-shaped design:
+The active implementation contains the framework-independent pieces required by the
+accepted Tune-shaped design:
 
 - `ClanController` is a thin worker-side collective manager. It stores one local
-  fitness value and answers whether that Tune worker should attach the round
+  fitness value and answers whether that Tune worker should attach the generation
   checkpoint.
 - `MutationSpec` defines one bounded mutation rule for the future CBT Tune scheduler.
+- worker and scheduler code share one stable winner-selection implementation; and
+- the core defines the namespaced metadata mapping that binds a selected checkpoint to
+  the parent genome that produced it.
 
-The worker controller does not advance generations, own mutation state, serialize into
-training checkpoints, or construct another round. The Tune scheduler will own parent
-selection, mutation, trial configuration, replay state, and winner-checkpoint
-assignment.
+The worker controller does not advance generations, own a genome, retain mutation
+state, serialize into training checkpoints, or construct another round.
+
+The future CBT Tune scheduler is the evolutionary authority. The active genome for a
+member is the controlled subset of that member's `Trial.config`. The scheduler will
+associate reported fitness with those genomes, mutate target trial configurations,
+attach parent-genome provenance to the selected checkpoint metadata, persist replay
+lineage, and assign the selected training checkpoint to every next member.
 
 Ray collective construction, Lightning DDP integration, winner-aware checkpoint
 persistence, the CBT Tune scheduler, and the public `make_cbt_controller()` factory are
