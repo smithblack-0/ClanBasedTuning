@@ -12,21 +12,26 @@ The package currently exposes:
   whether that worker is the checkpoint source; and
 - `MutationSpec`, a bounded linear or logarithmic mutation rule.
 
-The current controller still receives an injected `exchange_fitness` callback. That is a
-framework-independent test seam, not the production Ray population runtime.
+The repository also contains internal implementation pieces:
 
-The repository also contains the shared deterministic winner-selection function and
-plain scheduler-state type aliases as internal implementation pieces.
+- the shared deterministic winner-selection function;
+- scheduler-owned configuration type aliases; and
+- a Ray GLOO population runtime that returns complete fitness associated with stable
+  member identity.
+
+The Ray runtime has direct CPU/GLOO component evidence, but the accepted public
+`make_cbt_controller(genome=...)` factory is not implemented yet. Ordinary users cannot
+yet obtain a fully wired controller inside a Tune training function.
 
 ## Accepted work not yet implemented
 
-The accepted design requires:
+The accepted design still requires:
 
-- a Ray collective population runtime with explicit stable-member association;
-- a selected-worker checkpoint and producer-provenance path;
+- selected-worker checkpoint provenance through `save_genome(checkpoint)`;
 - a CBT Tune scheduler that owns the authoritative generation transition;
 - Lightning/PyTorch integration for shared gradients, selected persistence, restoration,
-  and target optimizer-configuration application; and
+  and target optimizer-configuration application;
+- public worker construction that hides population-runtime wiring; and
 - a repeated real multi-member workflow.
 
 The scheduler's exact Ray superclass, delegated native machinery, and hook path remain
