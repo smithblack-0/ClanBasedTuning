@@ -6,152 +6,137 @@ Date: 2026-07-31
 ## Purpose
 
 This directory defines the accepted behavioral target and system lifecycle for a
-PBT-shaped CBT Tune scheduler, a thin worker-side controller, and Lightning DDP.
+PBT-shaped CBT Tune scheduler, a thin worker controller, a Ray collective
+population-resolution boundary, and Lightning DDP.
 
-The design governs Milestone 3 implementation unless direct framework evidence or
-human review explicitly reopens a clause. It does not replace the product roadmap,
-project decisions, milestone gates, or framework-alignment research.
+The design distinguishes fixed architecture from implementation choices. A merged
+prototype or callback does not become an accepted contract unless the governing design
+and evidence gates say so.
 
 ## Reader path
 
-1. Read the [behavioral test contracts](behavioral_test_contracts.md) for the
-   black-box training outcomes the completed system must prove.
-2. Read the [system architecture](system_architecture.md), beginning with the exact
-   imperative Tune function and state-authority table.
-3. Consult the governing [product roadmap](../product_roadmap.md), accepted
+1. Read the [system architecture](system_architecture.md) for the complete lifecycle and
+   state ownership.
+2. Read the [Ray population-resolution design](population_resolution.md) for the fixed
+   Ray invariants and still-open interface choices.
+3. Read the [behavioral test contracts](behavioral_test_contracts.md) for observable
+   acceptance behavior.
+4. Consult the governing [product roadmap](../product_roadmap.md),
    [project decisions](../decisions/project_decisions.md), and
-   [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md)
-   when judging scope or milestone completion.
-4. Consult the accepted
-   [framework-alignment research](../framework_alignment/README.md) for the
-   evidence and ownership model behind the design.
+   [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md).
+5. Consult the accepted
+   [framework-alignment research](../framework_alignment/README.md) before choosing a
+   version-sensitive framework seam.
 
 ## Governing user flow
 
-CBT should feel like ordinary Tune PBT plus one worker-side save decision and one
-winner-side provenance write:
+CBT preserves the ordinary Tune function shape:
 
 ```text
 read the scheduler-assigned genome from config
-→ construct the worker controller with a copy of that genome
+→ construct the worker controller with a copied genome mapping
 → obtain any Tune-assigned checkpoint
 → restore training state
 → apply the current genome
-→ train and evaluate
-→ set local fitness on the controller
-→ ask whether this worker should save
-→ selected worker constructs the checkpoint
-→ selected worker saves its genome into checkpoint metadata
-→ report metrics with a checkpoint only from that worker
+→ train and evaluate through Lightning
+→ provide one local fitness
+→ resolve one checkpoint source through the Ray population collective
+→ selected member constructs and annotates the checkpoint
+→ report metrics, with a checkpoint only from that member
 ```
 
-The worker controller owns only:
+The high-level ordering and Ray-collective requirement are accepted.
 
-- the immutable current-round genome snapshot used for provenance;
-- the fitness collective;
-- the local boolean save decision; and
-- winner-only `save_genome(checkpoint)`.
+The exact Ray primitive, exchanged result shape, stable member/rank representation,
+controller/runtime collaborator boundary, and final names remain under design review.
 
-It does not mutate genomes or own future assignments.
+## Responsibility summary
+
+The worker controller owns:
+
+- one copied current-genome mapping for provenance;
+- one local fitness;
+- participation in one Ray population-resolution boundary through the runtime
+  integration;
+- one cached local checkpoint-source decision; and
+- winner-only producer metadata writing.
+
+The Ray runtime owns collective membership, transport, generation isolation, timeout,
+and failure behavior.
+
+The framework-independent evolution policy owns mutation and deterministic winner
+selection.
 
 Lightning owns distributed training and checkpoint construction.
 
-The CBT Tune scheduler owns:
+The CBT Tune scheduler owns result association, winner verification, child-genome
+derivation, mutation and lineage state, target configuration, recovery, and checkpoint
+redistribution.
 
-- associating reported fitness with each trial's active genome;
-- independently selecting and verifying the winner;
-- verifying the checkpoint's producer metadata;
-- deriving and installing one child genome per target trial;
-- assigning the selected checkpoint to every target; and
-- mutation RNG, persistence, recovery, and replay lineage.
+## Genome and checkpoint distinction
 
-## Genome, scheduler, and checkpoint distinction
+The scheduler is the evolutionary authority. Each member's `Trial.config` materializes
+its assigned current genome.
 
-The scheduler is the evolutionary authority.
+The controller receives an independently copied mapping so the selected worker can
+record what produced its checkpoint. The contract is copied mapping ownership, not deep
+immutability of arbitrary nested values.
 
-Each member's `Trial.config` is the scheduler's materialized genome assignment for the
-current round. The controller copies that assignment so the selected worker can record
-what produced its checkpoint.
-
-The winner checkpoint contains:
+The selected checkpoint contains:
 
 ```text
 Lightning training continuation
 +
-producer metadata: schema version, member ID, and genome
+producer metadata: schema version, stable member ID, copied genome
 ```
 
-The metadata is evidence, not a second source of child-genome authority. Receiving
-child genomes remain scheduler assignments carried through the target trial
-configurations.
+Producer metadata is evidence, not child-genome authority.
 
-Therefore the next population is formed from:
+## Atomicity
 
-```text
-one common selected and producer-annotated checkpoint
-+
-one scheduler-assigned child genome per target Trial.config
-```
-
-## Ordering and atomicity
-
-The winner annotates the checkpoint before `tune.report()`:
+The winner artifact is completed before reporting:
 
 ```text
 construct checkpoint payload
-→ controller.save_genome(checkpoint)
+→ attach producer metadata
 → report complete artifact
 ```
 
-A failed metadata write prevents publication of an incomplete artifact.
+The scheduler transition has a separate commit boundary:
 
-The later scheduler transition has a separate commit boundary. No next-round trial may
-run until winner verification, child derivation, scheduler persistence, target config
-installation, and common checkpoint assignment are all complete.
+```text
+verify complete generation
+→ derive all child genomes
+→ persist scheduler transition state
+→ assign all configs and checkpoints
+→ release complete next population
+```
 
-## Artifact roles
+## Current implementation boundary
 
-### Behavioral test contracts
+The active package currently contains:
 
-The contracts observe CBT as part of an ordinary training system. They may supply
-fitness to CBT and inspect model state, optimizer state, training progress, trial
-configurations, checkpoint artifacts, controlled values, scheduler recovery, and later
-training behavior. They do not freeze framework-private objects merely to make
-assertions convenient.
+- a framework-independent `ClanController` with a provisional
+  `exchange_fitness(local_fitness) -> Sequence[float]` callback;
+- `MutationSpec` and `select_winner_id()` in `evolution.py`; and
+- dictionary aliases in `scheduler_types.py`.
 
-### System architecture
+The callback name, sequence-position identity, callable shape, and responsibility split
+are not accepted design merely because they are merged.
 
-The architecture provides:
-
-- the exact intended Tune function shape;
-- scheduler, worker, trial-config, and checkpoint responsibilities;
-- the minimal producer-genome metadata schema;
-- the lifecycle and checkpoint ordering;
-- transition atomicity and failure boundaries;
-- a two-round example; and
-- the framework seams implementation must qualify.
+The active package does not yet contain an accepted Ray population-resolution runtime,
+controller genome provenance, `make_cbt_controller()`, the CBT Tune scheduler, Lightning
+integration, or a repeated end-to-end generation path.
 
 ## Module boundary
 
-Package organization must reflect ownership:
+Accepted current modules are:
 
-- worker controller behavior belongs in `controller.py`;
-- shared winner comparison belongs in a selection module;
-- mutation rules belong in an evolution or scheduler-types module;
-- Tune lifecycle and scheduler state belong in the scheduler integration; and
-- Ray collective construction belongs in the worker runtime integration.
+- `controller.py` for worker-local boundary state;
+- `evolution.py` for pure selection, mutation, and later child-genome logic;
+- `scheduler_types.py` for dictionary aliases only; and
+- future `scheduler.py` for Tune generation transitions.
 
-Mutation and scheduler metadata concerns do not belong in `controller_types.py` merely
-because an older controller design once owned evolution.
-
-## Design boundary
-
-CBT defines no Ray `Trainable` subclass and no second training loop. Ray may internally
-wrap the user function in its own `FunctionTrainable`; that remains Ray's implementation
-detail.
-
-The eventual `make_cbt_controller(genome=...)` factory hides rank, collective
-membership, and comparison context. The framework-independent implementation currently
-has the thin save-decision controller but still requires the genome snapshot,
-`save_genome(checkpoint)`, module split, Ray collective construction, Tune scheduler,
-and Lightning checkpoint integration described by the active architecture.
+The Ray runtime module and collaborator names remain deliberately unfixed until the
+population-resolution interface is reviewed. The design does not require a separate
+`selection.py` or a module literally named `ray_collective.py`.
