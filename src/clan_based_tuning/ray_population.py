@@ -1,6 +1,8 @@
 """Ray collective runtime for Clan population boundaries."""
 
 from collections.abc import Sequence
+from queue import Queue
+from threading import Thread
 
 
 class RayPopulationRuntime:
@@ -18,7 +20,7 @@ class RayPopulationRuntime:
         member_id: int,
         member_ids_by_rank: Sequence[int],
         group_name: str,
-        gloo_timeout_ms: int = 30_000,
+        timeout_ms: int = 30_000,
     ):
         member_ids_by_rank = tuple(member_ids_by_rank)
         population_size = len(member_ids_by_rank)
@@ -30,13 +32,13 @@ class RayPopulationRuntime:
             raise ValueError("member_id must identify one configured stable member")
         if not group_name:
             raise ValueError("group_name must be non-empty")
-        if gloo_timeout_ms <= 0:
-            raise ValueError("gloo_timeout_ms must be positive")
+        if timeout_ms <= 0:
+            raise ValueError("timeout_ms must be positive")
 
         self.member_id = member_id
         self.member_ids_by_rank = member_ids_by_rank
         self.group_name = group_name
-        self.gloo_timeout_ms = gloo_timeout_ms
+        self.timeout_ms = timeout_ms
         self._rank = member_ids_by_rank.index(member_id)
 
     def initialize(self) -> None:
@@ -49,7 +51,7 @@ class RayPopulationRuntime:
             rank=self._rank,
             backend="gloo",
             group_name=self.group_name,
-            gloo_timeout=self.gloo_timeout_ms,
+            gloo_timeout=self.timeout_ms,
         )
 
     def resolve(self, local_fitness: float) -> dict[int, float]:
@@ -58,21 +60,49 @@ class RayPopulationRuntime:
         CPU ``float64`` transport preserves the comparison semantics of Python fitness
         values more closely than ``float32`` while keeping the population collective
         independent of the model-training device.
+
+        Ray 2.56 applies its GLOO timeout to rendezvous but not to the underlying torch
+        collective operation. The all-gather therefore runs on a daemon thread. If it
+        cannot complete within the configured boundary, the current Ray actor exits so
+        the invalid Clan fails visibly instead of leaving a worker blocked indefinitely.
         """
 
+        import ray
         import ray.util.collective as collective
         import torch
 
         if not collective.is_group_initialized(self.group_name):
             raise RuntimeError("population collective group is not initialized")
 
-        local = torch.tensor([local_fitness], dtype=torch.float64, device="cpu")
-        gathered = [torch.empty_like(local) for _ in self.member_ids_by_rank]
-        collective.allgather(gathered, local, self.group_name)
-        return {
-            member_id: float(fitness.item())
-            for member_id, fitness in zip(self.member_ids_by_rank, gathered, strict=True)
-        }
+        outcome = Queue(maxsize=1)
+
+        def allgather():
+            try:
+                local = torch.tensor([local_fitness], dtype=torch.float64, device="cpu")
+                gathered = [torch.empty_like(local) for _ in self.member_ids_by_rank]
+                collective.allgather(gathered, local, self.group_name)
+                population = {
+                    member_id: float(fitness.item())
+                    for member_id, fitness in zip(
+                        self.member_ids_by_rank, gathered, strict=True
+                    )
+                }
+                outcome.put((population, None))
+            except BaseException as error:
+                outcome.put((None, error))
+
+        operation = Thread(target=allgather, daemon=True)
+        operation.start()
+        operation.join(self.timeout_ms / 1000)
+
+        if operation.is_alive():
+            ray.actor.exit_actor()
+            raise RuntimeError("population collective timed out")
+
+        population, error = outcome.get_nowait()
+        if error is not None:
+            raise error
+        return population
 
     def destroy(self) -> None:
         """Release this worker's collective resources when the live Clan ends."""
