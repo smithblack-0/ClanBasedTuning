@@ -10,16 +10,16 @@ Lightning DDP workflow that completes multiple generations end to end.
 
 The supported design uses:
 
-- one Tune trial per live Clan member;
+- one Tune trial per stable live Clan member;
 - one Lightning DDP world spanning those trials;
-- a thin worker `ClanController` that holds one immutable current-genome snapshot,
-  performs the pre-report fitness collective, decides the local checkpoint source, and
-  lets only that source write producer metadata;
-- a CBT Tune scheduler that owns population genomes, mutation, lineage, recovery, and
+- one Ray collective population-resolution boundary per generation;
+- one thin worker controller with a copied current-genome snapshot and cached local
+  checkpoint-source decision;
+- one CBT Tune scheduler authoritative over genomes, mutation, lineage, recovery, and
   checkpoint assignment;
-- one selected Lightning checkpoint carrying the common training continuation and the
-  winning producer's member ID and genome; and
-- target-local child genomes carried through each target `Trial.config`.
+- one selected Lightning checkpoint carrying common training continuation and verified
+  producer metadata; and
+- one target-local child genome carried through each target `Trial.config`.
 
 CBT defines no package-owned `Trainable` subclass, no second training loop, no public
 `ClanRound`, and no checkpointed evolutionary controller.
@@ -32,58 +32,85 @@ The public mechanics path has this shape:
 
 ```text
 read controlled genome from config
-→ make worker controller with a copy of that genome
+→ make worker controller with a copied mapping snapshot
 → obtain any Tune-assigned checkpoint
 → restore training continuation
 → apply current target genome
 → train and evaluate through Lightning
-→ set fitness on worker controller
-→ ask whether this worker should save
-→ selected worker constructs the checkpoint
-→ selected worker saves its genome into checkpoint metadata
+→ provide one local fitness to the controller
+→ participate in Ray population resolution
+→ selected member retains and annotates the checkpoint
 → report metrics with an optional checkpoint
 ```
 
-The user does not manually coordinate rank, collective groups, complete-population
-fitness, comparison policy, mutation state, checkpoint redistribution, or scheduler
-lineage.
+The user does not manually coordinate collective groups, member/rank mapping, complete-
+population fitness, comparison policy, mutation state, checkpoint redistribution, or
+scheduler lineage.
 
-### M3.2 The worker controller remains thin
+### M3.2 Ray population resolution preserves the complete Clan
+
+At each qualifying boundary:
+
+- every configured member participates exactly once;
+- each valid fitness is associated with one stable member;
+- operations from different generations cannot mix;
+- the shared deterministic selection policy yields one selected stable member;
+- every participant reaches the same result;
+- exactly one member is allowed to retain and report the checkpoint; and
+- missing, failed, duplicated, malformed, or cross-generation participation fails the
+  complete boundary.
+
+The implementation uses Ray collectives. The exact Ray primitive, result shape, identity
+encoding, runtime collaborator, and final names are design choices rather than milestone
+requirements.
+
+### M3.3 The worker controller remains thin
 
 The worker controller:
 
-- copies the current controlled genome mapping at construction;
+- owns one copied current-genome mapping for provenance;
 - accepts one finite local fitness;
-- performs one complete-population fitness exchange;
-- applies the shared stable winner-selection rule;
-- returns whether the local worker is the checkpoint source;
-- caches the decision so repeated calls cannot re-enter the collective; and
-- permits only the selected worker to call `save_genome(checkpoint)`.
+- enters one Ray population-resolution boundary through the runtime integration;
+- caches whether the local stable member is the checkpoint source;
+- returns the cached answer on repeated queries without another collective; and
+- permits only the selected member to attach producer metadata.
 
-It owns no mutation rule, child genome, scheduler recovery state, replay lineage, round
-advancement, or serializable continuation.
+It owns no mutation rule, child genome, scheduler recovery state, replay lineage,
+generation advancement, Ray group construction, or serializable continuation.
 
-### M3.3 The Tune scheduler is the evolutionary authority
+The current `exchange_fitness` callback and sequence-position identity assumption are
+provisional implementation details, not accepted API.
+
+### M3.4 Selection policy is shared and deterministic
+
+Framework-independent evolution policy defines:
+
+- minimizing or maximizing;
+- finite fitness requirements;
+- stable tie behavior; and
+- the selected stable member ID.
+
+The worker-side Ray path and Tune scheduler verification use the same implementation.
+
+### M3.5 The Tune scheduler is the evolutionary authority
 
 For each complete generation, the scheduler:
 
-1. associates every reported fitness with the reporting trial's active genome;
+1. associates every reported fitness with the reporting trial's stable member and active
+   genome;
 2. selects and verifies one winning trial;
-3. verifies that exactly that trial supplied the checkpoint;
-4. verifies the checkpoint producer metadata against that winner;
-5. records the winning parent genome and lineage;
+3. verifies that exactly that member supplied the checkpoint;
+4. verifies checkpoint producer metadata against that winner;
+5. records parent and lineage state;
 6. derives one child genome per stable target member;
 7. persists mutation RNG, replay, and recovery state;
 8. installs each child genome through that target `Trial.config`;
 9. assigns the same selected training checkpoint to every target; and
 10. releases the complete next population together.
 
-The scheduler decides genomes. `Trial.config` is the live materialization of those
-assignments for each active worker.
+### M3.6 Producer metadata is written before publication
 
-### M3.4 Producer metadata is written before publication
-
-After Lightning constructs the selected checkpoint, the winning controller writes:
+After Lightning constructs the selected checkpoint, the selected controller writes:
 
 ```python
 {
@@ -95,102 +122,98 @@ After Lightning constructs the selected checkpoint, the winning controller write
 }
 ```
 
-The controller does not write a round index or Tune trial ID because it does not own
-those scheduler facts. It does not write fitness, child genomes, mutation state, or
-lineage.
+The controller writes no generation index, Tune trial ID, fitness, child genomes,
+mutation state, or lineage.
 
-The selected worker must finish this metadata write before `tune.report()` publishes
-the checkpoint. A failed write prevents publication of an incomplete artifact.
+The genome is an independently copied mapping snapshot. The contract does not claim
+deep immutability for arbitrary nested values.
 
-### M3.5 Genome authority and provenance remain distinct
+A failed metadata write prevents checkpoint publication.
 
-The CBT Tune scheduler is authoritative over population genomes and mutation lineage.
-The current trial configuration is its assigned live genome for that worker.
-
-The controller's genome is an immutable copy used only for winner provenance. The
-checkpoint metadata records which member and genome produced the payload. It does not
-own receiving child genomes or future mutation decisions.
-
-The scheduler must reject any checkpoint whose metadata disagrees with the selected
-winner's member ID or controlled trial configuration.
-
-### M3.6 Lightning and PyTorch retain native training ownership
+### M3.7 Lightning and PyTorch retain native training ownership
 
 Lightning owns Trainer execution, optimizer lifecycle, checkpoint construction,
 distributed barriers, and process-group integration. PyTorch DDP supplies native
 gradient reduction.
 
-The CBT integration preserves:
+The integration preserves:
 
 - native initial synchronization;
 - gradient synchronization across the complete population;
 - member-local optimizer history and controlled values;
-- intended parameter divergence after local optimizer steps; and
+- intended parameter divergence after local optimizer steps;
+- restoration of optimizer history before applying the child genome; and
 - winner-aware checkpoint persistence without inventing a second checkpoint format.
 
-### M3.7 Fitness is comparable and local
+The Ray population collective remains a distinct Clan-level coordination boundary.
+
+### M3.8 Fitness is comparable and local
 
 Every member reaches the same logical training boundary and evaluates an equivalent
 held-out workload. Fitness remains member-local and is not reduced into one Lightning
-metric before CBT compares the population.
+metric before CBT population resolution.
 
-### M3.8 A broken active population fails collectively
+### M3.9 Failure and completion are population-wide
 
 A missing or failed member cannot be silently removed while the remaining members
-continue as the same Clan. Collective failure, invalid result populations, missing or
-multiple checkpoints, producer-metadata disagreement, failed metadata attachment, or
-partial target assignment invalidate the generation.
+continue as the same Clan.
 
-### M3.9 The scheduler transition has a durable commit boundary
+Collective failure, invalid fitness or identity, inconsistent selected-member results,
+missing or multiple checkpoints, producer-metadata disagreement, failed annotation, or
+partial target assignment invalidates the generation and releases waiting work through
+a surfaced failure.
+
+### M3.10 The scheduler transition has a durable commit boundary
 
 No next-round member may run until:
 
 - the complete generation has reported;
-- the winner and sole checkpoint source agree;
+- scheduler and worker-side winner decisions agree;
 - producer metadata has been verified;
 - all child genomes have been derived;
-- scheduler mutation and lineage state required for recovery has been persisted;
+- scheduler mutation, lineage, and recovery state has been persisted;
 - every target configuration contains its assigned child genome; and
 - every target has the same selected checkpoint.
 
-A crash before that transition is durably committed must restore the last completed
-scheduler generation or fail the experiment. It may not release a partially assigned
-population.
+A crash before that transition is durably committed restores the last completed
+scheduler generation or fails the experiment. It may not release a partial population.
 
 ## Test and evidence gates
 
-### M3.10 Focused tests protect core contracts
+### M3.11 Focused framework-independent tests protect pure behavior
 
 Unit tests cover:
 
-- one checkpoint source from a complete population;
-- minimizing, maximizing, and stable lower-rank tie behavior;
-- finite local and collective fitness requirements;
-- cached one-shot collective resolution;
-- controller copying rather than retaining the caller's genome mapping;
-- winner-only `save_genome(checkpoint)`;
-- the minimal `{schema_version, member_id, genome}` metadata schema;
+- minimizing, maximizing, and stable tie behavior;
+- finite fitness policy;
+- local controller fitness assignment;
+- cached one-shot save-decision behavior;
+- independent genome mapping ownership;
+- winner-only producer metadata writing;
 - rejection of unresolved or losing metadata writes;
-- the absence of worker mutation and serialization APIs;
-- shared winner-selection behavior intended for worker and scheduler reuse; and
+- absence of worker mutation and serialization APIs; and
 - mutation geometry and bounds outside the controller subsystem.
 
-### M3.11 Ray framework contracts qualify the runtime seams
+Single-process callback tests do not qualify Ray collective behavior.
+
+### M3.12 Ray framework contracts qualify population resolution
 
 Tests against the pinned Ray version prove:
 
-- actor-local collective initialization and ordered fitness all-gather;
-- scheduler access to results and reporting trials' current configurations;
-- selected-worker checkpoint metadata update without loading or modifying the Lightning
-  payload;
-- checkpoint metadata readback and winner/config verification;
-- target configuration replacement;
-- selected-checkpoint assignment to every target;
-- function-trial restoration through `tune.get_checkpoint()`;
-- optional checkpoint reporting through `tune.report()`; and
+- complete group construction for the configured population;
+- stable member identity association;
+- one logical operation per generation boundary;
+- identical selected-member results on every participant;
+- agreement with the shared pure selection policy;
+- no second collective on repeated local save queries;
+- surfaced failure for malformed, missing, or failed participation;
+- no cross-generation mixing;
+- checkpoint metadata update without modifying the Lightning payload;
+- Tune result/config access and winner verification;
+- target configuration and checkpoint assignment; and
 - scheduler persistence and recovery without partial population release.
 
-### M3.12 Lightning framework contracts qualify checkpointing and DDP
+### M3.13 Lightning framework contracts qualify checkpointing and DDP
 
 Tests against the pinned Lightning and PyTorch versions prove:
 
@@ -201,7 +224,7 @@ Tests against the pinned Lightning and PyTorch versions prove:
 - every rank enters the required checkpoint boundary; and
 - only the selected member retains and annotates a persistent checkpoint.
 
-### M3.13 End-to-end evidence proves repeated real generations
+### M3.14 End-to-end evidence proves repeated real generations
 
 A real multi-member workflow completes at least two transitions and demonstrates:
 
@@ -211,8 +234,8 @@ A real multi-member workflow completes at least two transitions and demonstrates
 - shared reduced gradients;
 - controlled optimizer-driven divergence;
 - comparable local fitness;
-- one selected checkpoint;
-- correct winner-side producer metadata;
+- one Ray-resolved checkpoint source;
+- one selected checkpoint with correct producer metadata;
 - scheduler-assigned child genomes;
 - durable scheduler transition state; and
 - repeated continuation through Tune and Lightning.
@@ -220,54 +243,47 @@ A real multi-member workflow completes at least two transitions and demonstrates
 Any accelerator or topology claim requires direct evidence on that accelerator or
 topology.
 
-## Documentation and example gates
+## Documentation and review gates
 
-### M3.14 Engineering documentation transfers the complete model
+### M3.15 Documentation separates invariants from implementation choices
 
 Documentation explains:
 
-- the exact imperative Tune function;
-- worker, scheduler, Tune configuration, Lightning, and checkpoint responsibilities;
-- the distinction between scheduler authority and checkpoint provenance;
-- the minimal producer metadata schema;
-- winner-side annotation ordering;
-- scheduler transition atomicity;
-- mutation and checkpoint-assignment ordering;
-- failure boundaries; and
+- the exact high-level Tune function ordering;
+- worker, Ray runtime, scheduler, Lightning, and checkpoint responsibilities;
+- the fixed Ray-collective population invariants;
+- the still-open Ray primitive, data-shape, identity, and interface choices;
+- scheduler authority versus checkpoint provenance;
+- atomicity and failure boundaries; and
 - tested support limitations.
 
-### M3.15 A public mechanics example exposes the ordinary path
+### M3.16 Pull request descriptions remain synchronized with diffs
+
+Every PR states:
+
+- the exact files and behavior changed;
+- which design decisions are introduced versus merely inherited;
+- which tests are unit fakes versus direct framework evidence; and
+- the explicit exclusions of the slice.
+
+A PR must not describe planned behavior as implemented or silently re-endorse provisional
+code from an earlier iteration.
+
+### M3.17 A public mechanics example exposes the ordinary path
 
 A reproducible example uses the supported function API, completes multiple real
-generations, and makes gradients, divergence, fitness, producer genome, checkpoint
-provenance, child genomes, inherited optimizer state, scheduler recovery state, and
-continued training inspectable.
-
-### M3.16 An initial scientific workload begins evaluating the method
-
-A public-package experiment uses a real task capable of illustrating optimizer-genome
-adaptation, records its workload, generation policy, fitness, compute cost, and
-limitations, and reports favorable, neutral, or unfavorable results honestly.
-
-## Review and handoff gates
-
-### M3.17 The complete workflow is internally consistent
-
-Implementation, tests, framework evidence, documentation, examples, and module names
-describe one supported workflow and one owner for every decision or state transition.
-
-In particular, mutation and scheduler transition behavior must not remain under a
-`controller_types` namespace after the thin-controller boundary is adopted.
+generations, and makes gradients, divergence, fitness, population resolution, producer
+metadata, child genomes, inherited optimizer state, scheduler recovery, and continued
+training inspectable.
 
 ### M3.18 Milestone 4 receives the proven ordinary sequence
 
 The handoff identifies the remaining user-facing assembly steps a later usability
-frontend may remove, the lower-level primitives it must preserve, and the tested
-support boundary it may not silently broaden.
+frontend may remove, the lower-level primitives it must preserve, and the tested support
+boundary it may not broaden silently.
 
 ## Closure evidence
 
-Milestone 3 closes with the accepted architecture, focused core tests, direct Ray and
+Milestone 3 closes with the accepted architecture, focused pure tests, direct Ray and
 Lightning framework contracts, repeated end-to-end evidence, engineering and support
-documentation, a public mechanics example, initial scientific results, human review,
-and a Milestone 4 handoff.
+documentation, a public mechanics example, human review, and a Milestone 4 handoff.
