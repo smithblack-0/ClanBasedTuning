@@ -1,22 +1,30 @@
 # ClanBasedTuning documentation
 
-Use this page as the single documentation entry point.
+This is the single active documentation entry point.
 
-## Active authority
+## Project authority
 
-- [`product_roadmap.md`](product_roadmap.md) defines product meaning, development criteria, and milestone sequence.
-- [`decisions/project_decisions.md`](decisions/project_decisions.md) records accepted cross-milestone decisions.
-- [`design/README.md`](design/README.md) enters the active Milestone 3 architecture and behavioral contracts.
-- [`milestones/README.md`](milestones/README.md) identifies the active milestone gate and the role of future gates.
-- [`framework_alignment/evidence_ledger.md`](framework_alignment/evidence_ledger.md) preserves version-sensitive framework evidence.
-- [`llm/README.md`](llm/README.md) routes substantial engineering and documentation work through the project workflows.
+1. [`roadmap.md`](roadmap.md) defines product meaning, development criteria, and milestone sequence.
+2. [`decisions.md`](decisions.md) records accepted cross-milestone technical decisions.
+3. [`architecture.md`](architecture.md) defines the accepted Milestone 3 system lifecycle and state authority.
+4. [`contracts/`](contracts/) states behavior and evidence that implementation must satisfy.
+5. [`implementation/`](implementation/) records replaceable implementation choices and their qualification boundary.
+6. [`evidence/`](evidence/) preserves version-sensitive framework observations used to justify claims.
 
-## Current state
+The root [`STATUS.md`](../STATUS.md) states current implementation and active work. Code and tests establish current behavior; a planned API is not implemented merely because a design describes it.
 
-The root [`STATUS.md`](../STATUS.md) states what is implemented, what remains unimplemented, and the accepted next boundary. Code and tests establish current behavior; planned interfaces are not current package surfaces merely because they appear in design documents.
+## Active contracts
 
-## History
+- [`contracts/system_behavior.md`](contracts/system_behavior.md) — end-to-end training outcomes.
+- [`contracts/population_resolution.md`](contracts/population_resolution.md) — complete-population checkpoint-source resolution and ownership.
+- [`contracts/milestone_3.md`](contracts/milestone_3.md) — the active milestone result and closure evidence.
 
-Completed and superseded material belongs under [`archive/`](archive/). Archived documents explain prior decisions but do not compete with active authority.
+## Current implementation decision
 
-Tentative reasoning belongs in [`scratchwork/`](scratchwork/) only while it remains useful and is never project authority.
+- [`implementation/population_resolution.md`](implementation/population_resolution.md) — the initial Ray collective mechanism and evidence required before support is claimed.
+
+## Working process
+
+Root [`AGENTS.md`](../AGENTS.md) and [`llm/README.md`](llm/README.md) route substantial engineering and documentation work. Their consolidation is a separate cleanup slice.
+
+Completed and superseded records live under [`archive/`](archive/) and are not active authority. Tentative reasoning belongs in `scratchwork/` only while useful.
