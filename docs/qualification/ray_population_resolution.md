@@ -44,8 +44,8 @@ For minimizing and maximizing modes, tests prove that:
 - every successful worker receives complete member-associated fitness;
 - every worker applies the same shared selection implementation;
 - every worker selects the same stable member;
-- the Tune integration independently selects that same member;
-- stable tie behavior is identical on worker and Tune-side paths; and
+- the CBT Tune scheduler independently selects that same member;
+- stable tie behavior is identical on worker and scheduler paths; and
 - transport conversion does not change the selected member for supported fitness values.
 
 The evidence includes ordinary distinct fitness, an exact tie, negative values, and
@@ -84,16 +84,16 @@ Each case demonstrates that:
 Backend-specific timeout or failure behavior may differ. The qualification record states
 how each supported path satisfies the common failure outcome.
 
-## Checkpoint and Tune-side evidence
+## Checkpoint and scheduler evidence
 
 The complete integration evidence proves that:
 
 - exactly the worker selected through population resolution retains and reports the
   checkpoint;
-- the Tune integration independently selects the same member from reported results;
+- the CBT Tune scheduler independently selects the same member from reported results;
 - a missing, extra, or losing checkpoint is rejected;
-- producer provenance matches the selected member and active optimizer configuration;
-  and
+- producer provenance matches the selected member and active controlled optimizer
+  configuration; and
 - every next-generation member receives the same accepted continuation.
 
 A fake callback or single-process controller test may support local unit coverage, but it
