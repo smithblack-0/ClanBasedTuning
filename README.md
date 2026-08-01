@@ -1,73 +1,42 @@
 # ClanBasedTuning
 
-ClanBasedTuning is a pre-alpha research library for Clan Tuning: shared-gradient
-training with member-local optimizer hyperparameters and population selection.
+ClanBasedTuning is a pre-alpha research library for Clan Tuning: distributed training
+that shares gradients across a population while adapting optimizer hyperparameters
+online through population selection.
 
-## Current implementation surface
+## Current package surface
 
-The active implementation contains the first framework-independent pieces required by
-the accepted Tune-shaped design:
+The package currently exposes:
 
-- `ClanController` is a thin worker-side collective manager. It stores one local
-  fitness value and answers whether that Tune worker should attach the generation
-  checkpoint.
-- `MutationSpec` defines one bounded mutation rule for the future CBT Tune scheduler.
-- worker and scheduler code share one stable winner-selection implementation; and
-- the core still contains an older parent-genome metadata builder that is scheduled for
-  replacement.
+- `ClanController`, a thin worker-side object that stores one local fitness and caches
+  whether that worker is the checkpoint source; and
+- `MutationSpec`, a bounded linear or logarithmic mutation rule.
 
-The corrected Milestone 3 controller design additionally requires:
+The current controller still receives an injected `exchange_fitness` callback. That is a
+framework-independent test seam, not the production Ray population runtime.
 
-- construction with an immutable copy of the current scheduler-assigned genome; and
-- winner-only `save_genome(checkpoint)` before the checkpoint is reported to Tune.
+The repository also contains the shared deterministic winner-selection function and
+plain scheduler-state type aliases as internal implementation pieces.
 
-The selected worker will write only:
+## Accepted work not yet implemented
 
-```python
-{
-    "clan_based_tuning": {
-        "schema_version": 1,
-        "member_id": member_id,
-        "genome": dict(genome),
-    }
-}
-```
+The accepted design requires:
 
-The worker controller does not advance generations, mutate genomes, retain scheduler
-state, serialize a continuation of itself, or construct another round.
+- a Ray collective population runtime with explicit stable-member association;
+- a selected-worker checkpoint and producer-provenance path;
+- one Tune-side authoritative generation transition;
+- Lightning/PyTorch integration for shared gradients, selected persistence, restoration,
+  and target optimizer-configuration application; and
+- a repeated real multi-member workflow.
 
-The CBT Tune scheduler remains the evolutionary authority. It decides population
-genomes, materializes the current assignment in each member's `Trial.config`, verifies
-the winning checkpoint's producer metadata, derives child genomes, persists mutation
-and replay lineage, and assigns the selected training checkpoint to every next member.
-
-The controller's genome copy and the checkpoint metadata are provenance, not a second
-genome authority.
-
-The active module layout is transitional: mutation and shared selection concerns must
-move out of `controller_types.py` as the corrected controller API is implemented.
-
-Ray collective construction, Lightning DDP integration, winner-aware checkpoint
-persistence, the CBT Tune scheduler, and the public
-`make_cbt_controller(genome=...)` factory are not yet active package surfaces.
-Historical proof-of-concept implementations remain available only through git history
-and are described in [`old_code/README.md`](old_code/README.md).
-
-Read [`STATUS.md`](STATUS.md) for the current durable project position.
+The Tune integration may use a scheduler specialization or another narrow native adapter.
+That internal choice remains open to direct Ray evidence.
 
 ## Documentation
 
-- [`docs/product_roadmap.md`](docs/product_roadmap.md) — governing product meaning,
-  development criteria, and milestone sequence.
-- [`docs/decisions/project_decisions.md`](docs/decisions/project_decisions.md) —
-  accepted cross-milestone technical decisions.
-- [`docs/milestones/README.md`](docs/milestones/README.md) — milestone-gate rules.
-- [`docs/design/README.md`](docs/design/README.md) — accepted Milestone 3 system flow.
-- [`docs/controller/README.md`](docs/controller/README.md) — worker controller lifecycle,
-  ownership, and intended API.
-- [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
-  accepted framework research and responsibility model.
-- [`AGENTS.md`](AGENTS.md) — contributor and coding-agent entry point.
+Start with [`docs/README.md`](docs/README.md). The governing product roadmap is
+[`docs/product_roadmap.md`](docs/product_roadmap.md), current implementation state is in
+[`STATUS.md`](STATUS.md), and the active work sequence is [`docs/plan.md`](docs/plan.md).
 
 ## Development
 
