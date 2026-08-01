@@ -35,8 +35,8 @@ Each member:
    and
 5. returns that complete association to `ClanController`.
 
-`ClanController` then applies the shared `select_winner_id()` policy and caches whether
-its local member is the selected checkpoint source.
+`ClanController` then applies the shared deterministic selection policy and caches
+whether its local member is the selected checkpoint source.
 
 The Ray population runtime does not select the winner.
 
@@ -45,7 +45,7 @@ The Ray population runtime does not select the winner.
 The runtime selects a Ray-supported collective backend compatible with the configured
 execution device and payload representation.
 
-The controller and Tune-side contracts are independent of backend, tensor library,
+The controller and scheduler contracts are independent of backend, tensor library,
 device placement, and transport dtype. Those details remain runtime configuration or
 internal implementation choices.
 
@@ -68,7 +68,7 @@ The population runtime owns group use and teardown. `ClanController` does not ca
 collective construction APIs directly.
 
 The same group may be reused across generation boundaries only when the implementation
-preserves generation isolation and the Tune integration does not release the next
+preserves generation isolation and the CBT Tune scheduler does not release the next
 generation before the current complete transition is accepted.
 
 Skipped, duplicated, failed, or misordered participation must surface as failure rather
@@ -99,22 +99,22 @@ Group initialization failure, participant failure, collective failure, timeout,
 malformed output, or incomplete identity association fails the complete boundary.
 
 The initial implementation does not retry a failed collective as though the same
-population were still valid. Recovery belongs to the enclosing Tune and experiment
+population were still valid. Recovery belongs to the enclosing scheduler and experiment
 lifecycle.
 
 ## Public and internal surfaces
 
-This decision does not freeze a public factory, internal collaborator class name,
-constructor signature, transport container, or helper-method name. Those are chosen in
-the implementation work and may change without revisiting this decision when ownership
-and behavior remain unchanged.
+The implementation must support the accepted `make_cbt_controller(genome=...)` public
+flow. This decision does not freeze additional factory arguments, an internal
+collaborator class name, constructor wiring, transport container, or helper-function
+name. Those details may change without revisiting this decision when ownership and
+behavior remain unchanged.
 
 ## Why all-gather
 
-The worker controller is responsible for applying the same framework-independent
-selection policy used by the Tune integration. All-gather gives every worker the complete
-population information needed to apply that policy without duplicating selection inside
-the Ray runtime.
+The worker controller applies the same framework-independent selection policy used by
+the CBT Tune scheduler. All-gather gives every worker the complete population information
+needed to apply that policy without duplicating selection inside the Ray runtime.
 
 Ray 2.56 collective communication provides all-gather on supported backends and requires
 an output list matching the collective world size. That directly matches the
