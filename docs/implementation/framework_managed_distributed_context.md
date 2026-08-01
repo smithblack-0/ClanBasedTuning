@@ -27,7 +27,8 @@ one live Ray Tune trial
 
 Ray Tune creates and resources the trial processes. ClanBasedTuning coordinates the
 complete cohort and supplies stable member and distributed-topology facts. Lightning and
-PyTorch establish, use, and tear down the DDP process group.
+PyTorch establish and use the DDP process group. The qualified external-launch path keeps
+the group active after `Trainer.fit()` and releases it when the Tune trial process ends.
 
 ClanBasedTuning does not create a separate Ray collective group for population
 resolution.
@@ -64,17 +65,39 @@ but their association remains explicit so later topologies are not forced to equ
 
 ## Framework ownership
 
-Lightning and PyTorch own:
+Lightning, PyTorch, and the external Tune trial process lifecycle own:
 
 - backend selection appropriate to the qualified device path;
-- process-group initialization and teardown;
+- process-group initialization and lifetime;
 - gradient reduction and ordinary DDP synchronization;
 - barriers and collective execution;
-- distributed exceptions and cleanup; and
+- distributed exceptions and cleanup through the qualified framework lifecycle; and
 - device-local behavior required by the selected strategy.
 
 ClanBasedTuning supplies only the missing Clan facts and policy. It does not take over
 GLOO, NCCL, CUDA, rendezvous, process-group, or generic DDP lifecycle.
+
+## Qualified topology seam
+
+The initial seam is an explicitly supplied Lightning `ClusterEnvironment` for each Tune
+trial. It reports immutable scheduler-assigned rank, world size, local rank, logical node
+rank, and rendezvous address and port, and declares that the processes were created
+externally.
+
+The environment does not import Ray, choose the distributed backend, perform a collective,
+or call process-group initialization or destruction. Lightning's `DDPStrategy` consumes
+the supplied topology and initializes native PyTorch DDP.
+
+Direct CPU evidence with Ray 2.56.1, Lightning 2.6.5, and PyTorch 2.10.0 shows that two
+real Tune function trials form one GLOO DDP world and receive the same reduced gradient.
+For this externally launched path, Lightning leaves the process group initialized when
+`Trainer.fit()` returns. The Tune trial process then exits normally, releasing that
+framework-owned context. The package does not add an explicit destroy call.
+
+This establishes the topology handoff and shared-gradient mechanism for a fully available
+two-member single-node CPU cohort. It does not establish production cohort admission,
+repeated round lifecycle, failure recovery, population exchange, CUDA/NCCL, or multi-node
+support.
 
 ## Population resolution
 
