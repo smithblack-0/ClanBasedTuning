@@ -6,10 +6,10 @@ Status: current and accepted intended surface
 
 This document records the public lowering through which application and integration code
 use ClanBasedTuning. It distinguishes implemented behavior from accepted surface that is
-not yet connected to the production Ray and Lightning integration.
+not yet connected to the production Ray Tune and Lightning integration.
 
-It does not specify internal collective collaborators, helper functions, module layout,
-or framework hooks that may change during implementation.
+It does not specify internal population-exchange collaborators, helper functions, module
+layout, distributed backend, or framework hooks that may change during implementation.
 
 ## Worker flow
 
@@ -30,13 +30,19 @@ The production factory and winner-side `save_genome()` path remain to be impleme
 
 This is the intended public integration constructor. The caller supplies the controlled
 optimizer configuration assigned to the current member. The integration supplies stable
-member identity, population membership, comparison mode, and Ray population-runtime
-wiring.
+member identity, population membership, comparison mode, generation context, and access
+to the population exchange over the already-established framework-managed distributed
+context.
 
 The name and `genome` argument express the accepted public flow. Additional arguments,
 configuration objects, or advanced construction paths may be added when implementation
-evidence requires them. The factory must not make users manually construct collective
-groups or transport collaborators for the ordinary path.
+evidence requires them. The factory must not make users manually construct distributed
+groups, choose a backend, supply rendezvous details, or assemble transport collaborators
+for the ordinary path.
+
+The factory does not itself initialize or tear down the Lightning/PyTorch distributed
+context. That lifecycle remains with the framework integration that launches the Tune
+trial as one member process.
 
 Direct `ClanController` construction remains useful for framework-independent testing and
 advanced composition. Its current injected `exchange_fitness` constructor seam is
@@ -64,12 +70,14 @@ should_save = controller.should_save_checkpoint()
 The first call:
 
 1. requires local fitness;
-2. performs the complete-population resolution through the configured runtime;
+2. performs the complete-population exchange through the configured collaborator over
+   the established framework-managed distributed context;
 3. applies the shared comparison direction and deterministic tie policy; and
 4. caches whether the local stable member is selected.
 
 Repeated calls return the cached answer without a second population operation.
-The method does not construct, annotate, persist, or report a checkpoint.
+The method does not initialize distributed communication, construct, annotate, persist,
+or report a checkpoint.
 
 ## `ClanController.save_genome(checkpoint)`
 

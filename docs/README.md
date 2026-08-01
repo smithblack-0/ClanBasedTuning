@@ -21,15 +21,17 @@ This is the active documentation entry point.
 ## Public lowering
 
 - [`api.md`](api.md) records the current and accepted intended public surface while
-  leaving internal helpers, transport collaborators, framework hooks, and metadata
-  representation free to evolve.
+  leaving internal helpers, population-exchange collaborators, framework hooks, and
+  metadata representation free to evolve.
 
 ## Current implementation choice and evidence boundary
 
-- [`implementation/ray_population_resolution.md`](implementation/ray_population_resolution.md)
-  chooses the first Ray collective mechanism without turning it into architecture.
-- [`qualification/ray_population_resolution.md`](qualification/ray_population_resolution.md)
-  states what must be demonstrated before a backend, device, or topology is supported.
+- [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
+  defines the initial one-trial/one-member/one-DDP-rank direction while retaining
+  Lightning/PyTorch ownership of distributed lifecycle.
+- [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
+  states what real Tune, Lightning, DDP, population, and failure evidence must exist
+  before that path is supported.
 
 ## Current work
 

@@ -8,37 +8,70 @@ This document assigns ownership for satisfying the
 [population-resolution invariants](population_resolution_invariants.md).
 
 It fixes authority boundaries where ambiguity could duplicate policy or hide lifecycle
-state. It deliberately does not freeze internal transport representation, backend,
-device placement, helper names, or other implementation details that do not affect those
-boundaries.
+state. It deliberately does not freeze internal fitness representation, collective
+operation, helper names, or framework hooks that do not affect those boundaries.
 
 ## Semantic boundary
 
-The Ray population runtime accepts one member's local fitness at one generation boundary
-and returns a complete association between stable Clan members and their fitness values.
+The population-resolution operation accepts one member's local fitness at one generation
+boundary and returns a complete association between stable Clan members and their fitness
+values.
 
 That association is the contract. Its concrete Python type is not architectural.
 
 A successful result contains exactly one finite comparable fitness for every required
-stable member. The mapping between a Ray collective participant and a stable member is
-explicit or mechanically proven; incidental sequence position is insufficient unless its
-meaning is established by the runtime contract.
+stable member. The mapping between distributed participation and stable member identity
+is explicit or mechanically proven; incidental sequence position is insufficient unless
+its meaning is established by the integration contract.
 
-## Ray population runtime
+The population-resolution operation does not own the distributed context through which
+that association is produced.
 
-The Ray-specific population runtime owns:
+## Complete-Clan topology
 
-- collective-group construction, membership, and teardown;
-- the mapping between stable member identity and collective participation;
-- population communication at one qualifying generation boundary;
-- returning complete member-associated fitness information;
-- preventing contributions from different generations from mixing;
-- surfacing timeout, participant failure, malformed transport output, and incomplete
-  participation; and
-- releasing waiting participants when the boundary fails.
+The CBT Tune scheduler owns the configured Clan as a cohort. It determines which live
+Tune trial represents each stable member and ensures the complete required cohort is
+available for shared distributed execution.
+
+The worker integration conveys the scheduler-assigned stable member identity and the
+cohort topology required by Lightning's externally launched process model. This includes
+the semantic facts needed to establish rank, world size, and rendezvous, but does not make
+ClanBasedTuning the owner of distributed initialization.
+
+The exact Ray scheduling and placement mechanism and the exact Lightning environment seam
+remain implementation decisions requiring direct framework evidence.
+
+## Framework-managed distributed context
+
+Lightning and PyTorch own:
+
+- process-group initialization and teardown;
+- backend and device behavior;
+- rank and world-size realization from the supplied topology;
+- training-gradient communication;
+- barriers and collective execution; and
+- propagation of distributed failures through the supported framework lifecycle.
+
+For the initial DDP path, the already-established training group also carries the
+population fitness exchange. Population-resolution code does not create, configure,
+rendezvous, time out, or destroy a second Ray, GLOO, NCCL, CUDA, or PyTorch process group.
+
+A later ClanFSDP extension may require a composed topology with multiple framework-owned
+groups. That does not transfer group lifecycle into the controller or selection logic.
+
+## Population exchange
+
+The narrow population-exchange collaborator owns:
+
+- contributing one local fitness through the established Clan-wide distributed context;
+- returning complete fitness associated with stable member identity;
+- preventing values from different generation boundaries from being accepted together;
+  and
+- rejecting malformed, incomplete, or ambiguously associated results.
 
 It does not own:
 
+- process-group lifecycle or backend choice;
 - minimizing or maximizing policy;
 - tie-breaking policy;
 - winner selection;
@@ -47,9 +80,8 @@ It does not own:
 - checkpoint construction; or
 - Tune result reporting.
 
-The architecture commits to Ray collective communication for this role. The exact Ray
-primitive, backend, device, dtype, internal result container, and implementation object
-name are implementation decisions.
+Its exact collaborator interface, collective primitive, payload representation, and
+container type remain internal implementation choices.
 
 ## Framework-independent selection policy
 
@@ -60,8 +92,8 @@ The shared selection policy owns:
 - stable deterministic tie behavior; and
 - selection of one stable member from complete member-associated fitness.
 
-The worker-side path and CBT Tune scheduler use the same implementation. The Ray
-population runtime does not contain a second winner-selection rule.
+The worker-side path and CBT Tune scheduler use the same implementation. The population
+exchange does not contain a second winner-selection rule.
 
 ## Worker controller
 
@@ -70,13 +102,13 @@ population runtime does not contain a second winner-selection rule.
 - the stable identity of its local member;
 - comparison mode;
 - one local fitness value;
-- one invocation of the Ray population runtime;
+- one invocation of the population exchange;
 - application of the shared selection policy to the complete result;
 - one cached local save decision; and
 - copied current-configuration provenance and winner-only provenance writing.
 
-The controller does not create or destroy Ray collective groups. It does not expose
-collective membership or transport buffers to the user training function. It does not
+The controller does not create or destroy distributed groups. It does not expose ranks,
+rendezvous details, or transport buffers to the user training function. It does not
 mutate configurations, derive child configurations, advance generations, or persist Tune
 transition state.
 
@@ -87,18 +119,24 @@ collaborator interface or concrete population-result type.
 ## Worker integration
 
 The worker integration implements the accepted `make_cbt_controller(genome=...)` flow.
-It obtains runtime identity, population membership, comparison configuration, generation
-context, and collective configuration without requiring the user training function to
-assemble those details manually.
+It obtains stable member identity, population membership, comparison configuration,
+generation context, and access to the established framework population exchange without
+requiring the user training function to assemble those details manually.
+
+The same integration supplies the scheduler-assigned distributed topology to Lightning
+through a supported externally launched process seam. It does not call distributed
+initialization or choose the backend itself.
 
 Additional factory arguments, advanced construction paths, and internal wiring remain
 open. The ordinary path and its responsibility do not: hide framework wiring while
-preserving an ordinary Tune function lifecycle.
+preserving ordinary Tune, Lightning, and PyTorch lifecycles.
 
 ## CBT Tune scheduler
 
 A CBT Tune scheduler exists and owns the authoritative generation transition. It:
 
+- coordinates one complete live Clan;
+- assigns stable member identity and target optimizer configuration;
 - waits for one result from every required trial;
 - associates each reported fitness with the correct stable member and active controlled
   optimizer configuration;
@@ -114,20 +152,21 @@ The scheduler does not trust the worker-side result as authority. Worker resolut
 one pre-report checkpoint possible; scheduler verification decides whether the generation
 transition is accepted.
 
-The scheduler's exact Ray superclass, delegated native scheduler machinery, persistence
-seam, and hook methods remain open to direct framework evidence.
+The scheduler's exact Ray superclass, cohort-admission mechanism, delegated native
+scheduler machinery, persistence seam, and hook methods remain open to direct framework
+evidence.
 
 ## Lightning and PyTorch
 
 Lightning owns training-loop cadence, the qualifying validation-and-checkpoint boundary,
-checkpoint construction, and restoration. Native PyTorch DDP owns shared-gradient
-communication for the supported initial path.
+checkpoint construction, restoration, and the distributed strategy lifecycle. Native
+PyTorch DDP owns shared-gradient communication for the supported initial path.
 
 Every required training process participates in the Lightning checkpoint boundary. Only
 the selected member retains the persistent continuation passed to Tune.
 
-The Ray population runtime does not replace training-gradient communication, and the
-training process group does not replace the Ray population-resolution boundary.
+The established distributed training context also supports the population exchange; the
+exchange is a different semantic operation, not a separately owned communication system.
 
 ## Failure ownership
 
@@ -135,9 +174,12 @@ Each layer fails the facts it owns:
 
 - the worker controller rejects invalid local lifecycle use;
 - the selection policy rejects invalid comparison input;
-- the Ray population runtime surfaces communication, membership, timeout, and generation
-  isolation failures;
+- the population exchange rejects malformed, incomplete, or ambiguously associated
+  population results;
+- Lightning and PyTorch surface distributed initialization, communication, and member
+  failure;
 - Lightning surfaces checkpoint-construction failure; and
-- the CBT Tune scheduler rejects incomplete or inconsistent generation transitions.
+- the CBT Tune scheduler rejects incomplete or inconsistent cohort and generation
+  transitions.
 
 No layer may convert a failure into a valid partial-population winner.
