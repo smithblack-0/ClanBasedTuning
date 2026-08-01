@@ -73,18 +73,20 @@ invariant.
 
 ## Scheduler verification
 
-The Tune integration independently receives one result from every required trial,
+The CBT Tune scheduler independently receives one result from every required trial,
 applies the same selection policy, and verifies all of the following:
 
 - exactly the selected member supplied a checkpoint;
 - no losing member supplied a checkpoint;
 - the checkpoint producer provenance matches the selected member and its active
-  optimizer configuration; and
-- the complete next-population transition is committed before any target is released.
+  controlled optimizer configuration; and
+- the complete next-population transition is durably accepted before any target is
+  released.
 
-Worker agreement is therefore necessary but not authoritative. The Tune integration
+Worker agreement is therefore necessary but not authoritative. The CBT Tune scheduler
 remains the evolutionary authority over winner verification, mutation, child
-configurations, lineage, recovery, target configuration, and checkpoint redistribution.
+configurations, mutation random state, lineage, recovery, target configuration, and
+checkpoint redistribution.
 
 ## Representation freedom
 
