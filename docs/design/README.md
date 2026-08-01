@@ -1,7 +1,8 @@
 # ClanBasedTuning system design
 
 Status: active Milestone 3 design  
-Date: 2026-07-31
+Date: 2026-07-31  
+Population-resolution clarification: 2026-08-01
 
 ## Purpose
 
@@ -9,69 +10,75 @@ This directory defines the accepted behavioral target and system lifecycle for a
 PBT-shaped CBT Tune scheduler, a thin worker-side controller, and Lightning DDP.
 
 The design governs Milestone 3 implementation unless direct framework evidence or
-human review explicitly reopens a clause. It does not replace the product roadmap,
-project decisions, milestone gates, or framework-alignment research.
+human review explicitly reopens a clause. The population-resolution mechanism is
+currently reopened and must not be inferred from older controller code or rejected
+branches.
 
 ## Reader path
 
-1. Read the [behavioral test contracts](behavioral_test_contracts.md) for the
-   black-box training outcomes the completed system must prove.
-2. Read the [system architecture](system_architecture.md), beginning with the exact
-   imperative Tune function and state-authority table.
+1. Read the [behavioral test contracts](behavioral_test_contracts.md) for the black-box
+   outcomes the completed system must prove.
+2. Read the [system architecture](system_architecture.md) for lifecycle, ownership, and
+   open integration seams.
 3. Consult the governing [product roadmap](../product_roadmap.md), accepted
    [project decisions](../decisions/project_decisions.md), and
-   [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md)
-   when judging scope or milestone completion.
+   [Milestone 3 gate](../milestones/gates/milestone_3_integratable_orchestration.md).
 4. Consult the accepted
-   [framework-alignment research](../framework_alignment/README.md) for the
-   evidence and ownership model behind the design.
+   [framework-alignment research](../framework_alignment/README.md) before choosing a
+   version-sensitive framework seam.
 
 ## Governing user flow
 
-CBT should feel like ordinary Tune PBT plus one worker-side save decision and one
-winner-side provenance write:
+CBT should retain the ordinary Tune function shape:
 
 ```text
 read the scheduler-assigned genome from config
-→ construct the worker controller with a copy of that genome
+→ construct the worker controller with a copied genome snapshot
 → obtain any Tune-assigned checkpoint
 → restore training state
 → apply the current genome
 → train and evaluate
-→ set local fitness on the controller
-→ ask whether this worker should save
-→ selected worker constructs the checkpoint
-→ selected worker saves its genome into checkpoint metadata
-→ report metrics with a checkpoint only from that worker
+→ provide local fitness to the controller
+→ obtain the local checkpoint-source decision
+→ selected worker constructs and annotates the checkpoint
+→ report metrics, with a checkpoint only from that worker
 ```
+
+The high-level ordering is accepted. The mechanism that turns the complete population's
+fitness into one pre-report checkpoint-source decision is not yet accepted.
+
+## Responsibility split
 
 The worker controller owns only:
 
-- the immutable current-round genome snapshot used for provenance;
-- the fitness collective;
-- the local boolean save decision; and
-- winner-only `save_genome(checkpoint)`.
+- one copied current-round genome snapshot for producer provenance;
+- one local fitness value;
+- one cached local checkpoint-source decision supplied through the runtime integration;
+  and
+- winner-only producer metadata attachment.
 
-It does not mutate genomes or own future assignments.
+It does not own mutation, future assignments, scheduler recovery, or communication
+backend selection.
 
 Lightning owns distributed training and checkpoint construction.
 
 The CBT Tune scheduler owns:
 
 - associating reported fitness with each trial's active genome;
-- independently selecting and verifying the winner;
-- verifying the checkpoint's producer metadata;
+- selecting and verifying the winner;
+- verifying checkpoint producer metadata;
 - deriving and installing one child genome per target trial;
 - assigning the selected checkpoint to every target; and
 - mutation RNG, persistence, recovery, and replay lineage.
 
 ## Genome, scheduler, and checkpoint distinction
 
-The scheduler is the evolutionary authority.
+The scheduler is the evolutionary authority. Each member's `Trial.config` materializes
+its scheduler-assigned genome for the current round.
 
-Each member's `Trial.config` is the scheduler's materialized genome assignment for the
-current round. The controller copies that assignment so the selected worker can record
-what produced its checkpoint.
+The controller owns an independent copied mapping used only to record what produced the
+selected checkpoint. The design does not currently require deep immutability for
+arbitrary nested values.
 
 The winner checkpoint contains:
 
@@ -81,77 +88,70 @@ Lightning training continuation
 producer metadata: schema version, member ID, and genome
 ```
 
-The metadata is evidence, not a second source of child-genome authority. Receiving
-child genomes remain scheduler assignments carried through the target trial
-configurations.
-
-Therefore the next population is formed from:
-
-```text
-one common selected and producer-annotated checkpoint
-+
-one scheduler-assigned child genome per target Trial.config
-```
+The metadata is evidence, not child-genome authority. The next population combines one
+common selected checkpoint with one scheduler-assigned child genome per target trial.
 
 ## Ordering and atomicity
 
-The winner annotates the checkpoint before `tune.report()`:
+The selected worker completes producer annotation before reporting:
 
 ```text
 construct checkpoint payload
-→ controller.save_genome(checkpoint)
+→ attach producer metadata
 → report complete artifact
 ```
 
-A failed metadata write prevents publication of an incomplete artifact.
+A failed annotation prevents publication of an incomplete winner artifact.
 
-The later scheduler transition has a separate commit boundary. No next-round trial may
-run until winner verification, child derivation, scheduler persistence, target config
-installation, and common checkpoint assignment are all complete.
+The scheduler transition has a separate commit boundary. No next-round trial may run
+until winner verification, child derivation, scheduler persistence, target-config
+installation, and common-checkpoint assignment are complete.
 
-## Artifact roles
+## Open population-resolution seam
 
-### Behavioral test contracts
+The complete active population must reach one consistent decision about which member
+may report the checkpoint. The accepted requirements are:
 
-The contracts observe CBT as part of an ordinary training system. They may supply
-fitness to CBT and inspect model state, optimizer state, training progress, trial
-configurations, checkpoint artifacts, controlled values, scheduler recovery, and later
-training behavior. They do not freeze framework-private objects merely to make
-assertions convenient.
+- every required member participates at the same logical boundary;
+- one comparable fitness is associated with each stable member;
+- all participants use the same accepted comparison and tie rule;
+- exactly one member receives the checkpoint-source result;
+- a missing or failed member invalidates the boundary; and
+- repeated local queries return the cached decision without repeating synchronization.
 
-### System architecture
+The design does **not** yet choose:
 
-The architecture provides:
+- Ray collectives;
+- the existing PyTorch distributed process group;
+- an all-gather operation;
+- an injected callback signature;
+- rank-to-member mapping mechanics;
+- timeout and failure release behavior; or
+- the module that will implement the runtime seam.
 
-- the exact intended Tune function shape;
-- scheduler, worker, trial-config, and checkpoint responsibilities;
-- the minimal producer-genome metadata schema;
-- the lifecycle and checkpoint ordering;
-- transition atomicity and failure boundaries;
-- a two-round example; and
-- the framework seams implementation must qualify.
+Those choices require a fresh current-iteration design and direct framework evidence.
 
 ## Module boundary
 
-Package organization must reflect ownership:
+Current accepted package organization is:
 
-- worker controller behavior belongs in `controller.py`;
-- shared winner comparison belongs in a selection module;
-- mutation rules belong in an evolution or scheduler-types module;
-- Tune lifecycle and scheduler state belong in the scheduler integration; and
-- Ray collective construction belongs in the worker runtime integration.
+- `controller.py` for the worker-local controller;
+- `evolution.py` for `MutationSpec`, stable winner selection, and future pure evolution
+  logic;
+- `scheduler_types.py` for dictionary aliases only; and
+- a future scheduler module for Tune lifecycle, mutation state, lineage, persistence,
+  target configurations, and checkpoint assignment.
 
-Mutation and scheduler metadata concerns do not belong in `controller_types.py` merely
-because an older controller design once owned evolution.
+The population-resolution integration module is intentionally unnamed until its
+framework ownership is settled. There is no accepted `selection.py` or
+`ray_collective.py` requirement.
 
-## Design boundary
+## Current implementation status
 
-CBT defines no Ray `Trainable` subclass and no second training loop. Ray may internally
-wrap the user function in its own `FunctionTrainable`; that remains Ray's implementation
-detail.
+The active package contains the evolution primitives and a provisional thin controller.
+The controller's current `exchange_fitness` callback, associated naming, docstrings, and
+fake unit-test transport are inherited from PR #33 and are not the accepted production
+seam. They require cleanup before genome provenance or framework integration proceeds.
 
-The eventual `make_cbt_controller(genome=...)` factory hides rank, collective
-membership, and comparison context. The framework-independent implementation currently
-has the thin save-decision controller but still requires the genome snapshot,
-`save_genome(checkpoint)`, module split, Ray collective construction, Tune scheduler,
-and Lightning checkpoint integration described by the active architecture.
+No production communication backend, controller genome snapshot, `save_genome()`, Tune
+scheduler, or Lightning checkpoint integration is currently accepted as implemented.
