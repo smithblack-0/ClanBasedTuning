@@ -14,7 +14,7 @@ ray = pytest.importorskip("ray")
 
 @ray.remote
 class PopulationMember:
-    def __init__(self, member_id, member_ids_by_rank, group_name, timeout_ms=30_000):
+    def __init__(self, member_id, member_ids_by_rank, group_name, timeout_ms):
         self.member_id = member_id
         self.member_ids_by_rank = tuple(member_ids_by_rank)
         self.runtime = RayPopulationRuntime(
