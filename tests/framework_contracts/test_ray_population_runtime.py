@@ -90,10 +90,7 @@ def test_allgather_preserves_stable_member_identity_and_float64_precision(local_
 
     try:
         results = ray.get(
-            [
-                members[member_id].resolve.remote(population[member_id])
-                for member_id in population
-            ]
+            [members[member_id].resolve.remote(population[member_id]) for member_id in population]
         )
     finally:
         _destroy(members)
