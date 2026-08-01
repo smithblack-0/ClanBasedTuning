@@ -32,8 +32,10 @@ member's scheduler-assigned Tune configuration. It is not an independent policy 
 
 The CBT worker integration supplies the stable member identity and cohort topology needed
 by the externally launched Lightning process. Lightning and PyTorch use that information
-to establish and tear down the distributed context. ClanBasedTuning does not create a
-second process group for population resolution.
+to establish and own the distributed context. Its release follows the qualified framework
+process lifecycle, which may be strategy teardown or termination of the externally
+launched Tune trial process. ClanBasedTuning does not create a second process group for
+population resolution.
 
 ## Round boundary
 
@@ -83,7 +85,7 @@ The controller applies the shared framework-independent selection policy and cac
 whether its local member is the sole checkpoint source.
 
 The controller and its population-resolution collaborator do not choose the distributed
-backend, establish rendezvous, initialize or tear down a process group, own training
+backend, establish rendezvous, initialize or release a process group, own training
 gradient communication, mutate future configurations, or advance the generation.
 
 ## Checkpoint and producer provenance
@@ -142,10 +144,11 @@ lifecycles.
 - **The CBT worker integration** supplies the scheduler-assigned stable identity and
   cohort topology to the externally launched Lightning process without constructing the
   distributed group itself.
-- **Lightning and PyTorch** own distributed initialization and teardown, backend and
-  device behavior, training-loop execution, validation cadence, model synchronization,
-  shared-gradient communication, collective execution, optimizer and training-state
-  restoration, checkpoint construction, and distributed checkpoint barriers.
+- **Lightning, PyTorch, and the external trial process lifecycle** own distributed
+  initialization, backend and device behavior, process-group lifetime, training-loop
+  execution, validation cadence, model synchronization, shared-gradient communication,
+  collective execution, optimizer and training-state restoration, checkpoint
+  construction, and distributed checkpoint barriers.
 - **Framework-independent policy functions** own deterministic selection and mutation
   behavior without owning framework lifecycle.
 - **`ClanController`** owns one worker's local fitness, one population decision over the
