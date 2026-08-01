@@ -54,10 +54,10 @@ def _run_ddp_member(config):
             self.reduced_gradient = float(self.weight.grad.detach().item())
 
     environment = TuneMemberEnvironment(
-        global_rank=config["global_rank"],
+        global_rank=config["member_id"],
         world_size=config["world_size"],
         local_rank=0,
-        node_rank=config["global_rank"],
+        node_rank=config["member_id"],
         main_address=config["main_address"],
         main_port=config["main_port"],
     )
@@ -137,7 +137,6 @@ def test_two_tune_trials_form_one_framework_managed_ddp_world(tmp_path):
             tune.with_resources(_run_ddp_member, {"cpu": 1}),
             param_space={
                 "member_id": tune.grid_search([0, 1]),
-                "global_rank": tune.sample_from(lambda spec: spec.config.member_id),
                 "world_size": world_size,
                 "main_address": "127.0.0.1",
                 "main_port": _free_local_port(),
