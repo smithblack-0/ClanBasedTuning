@@ -5,55 +5,66 @@ import pytest
 from clan_based_tuning import ClanController
 
 
-class FitnessExchange:
+class PopulationRuntime:
     def __init__(self, population):
-        self.population = list(population)
+        self.population = dict(population)
         self.calls = []
 
-    def __call__(self, local_fitness):
+    def resolve(self, local_fitness):
         self.calls.append(local_fitness)
-        return list(self.population)
+        return dict(self.population)
 
 
 def _controller(member_id, population, *, mode="min"):
-    exchange = FitnessExchange(population)
+    runtime = PopulationRuntime(population)
     controller = ClanController(
         member_id=member_id,
         population_size=len(population),
         mode=mode,
-        exchange_fitness=exchange,
+        population_runtime=runtime,
     )
-    return controller, exchange
+    return controller, runtime
 
 
 def test_population_resolves_one_checkpoint_source():
-    population = [4.0, 1.0, 2.0]
-    controllers_and_exchanges = [
+    population = {0: 4.0, 1: 1.0, 2: 2.0}
+    controllers_and_runtimes = [
         _controller(member_id, population) for member_id in range(len(population))
     ]
 
-    for (controller, _), fitness in zip(controllers_and_exchanges, population, strict=True):
+    for (controller, _), fitness in zip(
+        controllers_and_runtimes, population.values(), strict=True
+    ):
         controller.set_fitness(fitness)
 
-    assert [controller.should_save_checkpoint() for controller, _ in controllers_and_exchanges] == [
+    assert [controller.should_save_checkpoint() for controller, _ in controllers_and_runtimes] == [
         False,
         True,
         False,
     ]
-    assert [exchange.calls for _, exchange in controllers_and_exchanges] == [
+    assert [runtime.calls for _, runtime in controllers_and_runtimes] == [
         [4.0],
         [1.0],
         [2.0],
     ]
 
 
+def test_member_identity_not_mapping_order_determines_the_winner():
+    population = {2: 2.0, 0: 4.0, 1: 1.0}
+    controller, _ = _controller(1, population)
+    controller.set_fitness(1.0)
+
+    assert controller.should_save_checkpoint() is True
+
+
 def test_max_mode_breaks_ties_by_lower_member_id():
-    population = [5.0, 5.0, 2.0]
+    population = {0: 5.0, 1: 5.0, 2: 2.0}
     controllers = [
-        _controller(member_id, population, mode="max")[0] for member_id in range(len(population))
+        _controller(member_id, population, mode="max")[0]
+        for member_id in range(len(population))
     ]
 
-    for controller, fitness in zip(controllers, population, strict=True):
+    for controller, fitness in zip(controllers, population.values(), strict=True):
         controller.set_fitness(fitness)
 
     assert [controller.should_save_checkpoint() for controller in controllers] == [
@@ -63,59 +74,85 @@ def test_max_mode_breaks_ties_by_lower_member_id():
     ]
 
 
-def test_should_save_checkpoint_is_one_collective_decision():
-    controller, exchange = _controller(1, [3.0, 1.0, 2.0])
+def test_should_save_checkpoint_is_one_population_decision():
+    controller, runtime = _controller(1, {0: 3.0, 1: 1.0, 2: 2.0})
     controller.set_fitness(1.0)
 
     assert controller.should_save_checkpoint() is True
     assert controller.should_save_checkpoint() is True
-    assert exchange.calls == [1.0]
+    assert runtime.calls == [1.0]
 
 
-def test_fitness_must_be_set_before_collective_resolution():
-    controller, exchange = _controller(0, [1.0, 2.0])
+def test_fitness_must_be_set_before_population_resolution():
+    controller, runtime = _controller(0, {0: 1.0, 1: 2.0})
 
     with pytest.raises(RuntimeError, match="fitness"):
         controller.should_save_checkpoint()
 
-    assert exchange.calls == []
+    assert runtime.calls == []
 
 
 @pytest.mark.parametrize("fitness", [math.nan, math.inf, -math.inf])
-def test_nonfinite_fitness_is_rejected_before_collective(fitness):
-    controller, exchange = _controller(0, [1.0, 2.0])
+def test_nonfinite_fitness_is_rejected_before_population_resolution(fitness):
+    controller, runtime = _controller(0, {0: 1.0, 1: 2.0})
 
     with pytest.raises(ValueError, match="finite"):
         controller.set_fitness(fitness)
 
-    assert exchange.calls == []
+    assert runtime.calls == []
 
 
 def test_fitness_cannot_change_after_assignment():
-    controller, exchange = _controller(0, [1.0, 2.0])
+    controller, runtime = _controller(0, {0: 1.0, 1: 2.0})
     controller.set_fitness(1.0)
 
     with pytest.raises(RuntimeError, match="already"):
         controller.set_fitness(0.5)
 
-    assert exchange.calls == []
+    assert runtime.calls == []
 
 
-def test_collective_must_return_the_configured_population():
+def test_population_runtime_must_return_every_configured_member():
     controller = ClanController(
         member_id=0,
         population_size=3,
         mode="min",
-        exchange_fitness=lambda local_fitness: [local_fitness, 2.0],
+        population_runtime=PopulationRuntime({0: 1.0, 1: 2.0}),
     )
     controller.set_fitness(1.0)
 
-    with pytest.raises(RuntimeError, match="population"):
+    with pytest.raises(RuntimeError, match="member set"):
+        controller.should_save_checkpoint()
+
+
+def test_population_runtime_rejects_unconfigured_members():
+    controller = ClanController(
+        member_id=0,
+        population_size=2,
+        mode="min",
+        population_runtime=PopulationRuntime({0: 1.0, 1: 2.0, 2: 3.0}),
+    )
+    controller.set_fitness(1.0)
+
+    with pytest.raises(RuntimeError, match="member set"):
+        controller.should_save_checkpoint()
+
+
+def test_population_runtime_must_return_finite_fitness():
+    controller = ClanController(
+        member_id=0,
+        population_size=2,
+        mode="min",
+        population_runtime=PopulationRuntime({0: 1.0, 1: math.nan}),
+    )
+    controller.set_fitness(1.0)
+
+    with pytest.raises(RuntimeError, match="non-finite"):
         controller.should_save_checkpoint()
 
 
 def test_controller_has_no_evolution_genome_or_checkpoint_state_api():
-    controller, _ = _controller(0, [1.0, 2.0])
+    controller, _ = _controller(0, {0: 1.0, 1: 2.0})
 
     assert not hasattr(controller, "advance")
     assert not hasattr(controller, "get_config")
