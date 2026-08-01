@@ -5,23 +5,35 @@ training with member-local optimizer hyperparameters and population selection.
 
 ## Current implementation surface
 
-The active implementation contains the first framework-independent pieces required by
-the accepted Tune-shaped design:
+The active package contains framework-independent pieces only:
 
-- `ClanController` is a thin worker-side collective manager. It stores one local
-  fitness value and answers whether that Tune worker should attach the generation
-  checkpoint.
+- `ClanController` stores one finite local fitness, invokes a provisional population-
+  fitness callback, selects one checkpoint source, and caches the local save decision.
 - `MutationSpec` defines one bounded mutation rule for the future CBT Tune scheduler.
-- worker and scheduler code share one stable winner-selection implementation; and
-- the core still contains an older parent-genome metadata builder that is scheduled for
-  replacement.
+- `select_winner_id()` defines stable minimizing/maximizing selection and tie behavior.
+- `scheduler_types.py` contains dictionary aliases only.
 
-The corrected Milestone 3 controller design additionally requires:
+`MutationSpec` and `select_winner_id()` live in `evolution.py`. The obsolete
+`controller_types.py` metadata builder has been removed.
 
-- construction with an immutable copy of the current scheduler-assigned genome; and
-- winner-only `save_genome(checkpoint)` before the checkpoint is reported to Tune.
+## Accepted architecture
 
-The selected worker will write only:
+One live Tune trial represents one stable Clan member. The complete population trains
+through one Lightning DDP world.
+
+At a completed generation boundary, every member contributes one comparable local
+fitness through a Ray collective population-resolution step. The complete population
+must agree on exactly one stable member that may retain and report the checkpoint before
+Tune reporting.
+
+The local save decision is cached. Later checkpoint-provenance checks must not enter a
+second collective.
+
+The CBT Tune scheduler remains authoritative over population genomes, mutation, lineage,
+recovery, target configurations, and checkpoint redistribution. Lightning and PyTorch
+own training, gradient reduction, optimizer continuation, and checkpoint construction.
+
+The selected worker will later record this minimal producer metadata before reporting:
 
 ```python
 {
@@ -33,40 +45,52 @@ The selected worker will write only:
 }
 ```
 
-The worker controller does not advance generations, mutate genomes, retain scheduler
-state, serialize a continuation of itself, or construct another round.
+That metadata is evidence of the producer, not child-genome authority.
 
-The CBT Tune scheduler remains the evolutionary authority. It decides population
-genomes, materializes the current assignment in each member's `Trial.config`, verifies
-the winning checkpoint's producer metadata, derives child genomes, persists mutation
-and replay lineage, and assigns the selected training checkpoint to every next member.
+## Provisional boundary
 
-The controller's genome copy and the checkpoint metadata are provenance, not a second
-genome authority.
+The current controller accepts:
 
-The active module layout is transitional: mutation and shared selection concerns must
-move out of `controller_types.py` as the corrected controller API is implemented.
+```python
+exchange_fitness(local_fitness) -> Sequence[float]
+```
 
-Ray collective construction, Lightning DDP integration, winner-aware checkpoint
-persistence, the CBT Tune scheduler, and the public
-`make_cbt_controller(genome=...)` factory are not yet active package surfaces.
-Historical proof-of-concept implementations remain available only through git history
-and are described in [`old_code/README.md`](old_code/README.md).
+and treats sequence position as member identity. That callback name, data shape, identity
+contract, validation placement, and responsibility split are provisional implementation
+evidence rather than accepted API design.
 
-Read [`STATUS.md`](STATUS.md) for the current durable project position.
+The architecture is committed to Ray collectives. The exact Ray primitive, exchanged
+result shape, member/rank representation, controller-versus-runtime collaborator
+boundary, names, timeout behavior, and generation-isolation mechanism remain under
+review.
+
+The active package does not yet contain:
+
+- an accepted Ray population-resolution runtime;
+- controller genome snapshot or `save_genome()`;
+- `make_cbt_controller()`;
+- the CBT Tune scheduler;
+- Lightning DDP integration; or
+- a repeated end-to-end generation path.
+
+Read [`STATUS.md`](STATUS.md) for the durable project position.
 
 ## Documentation
 
-- [`docs/product_roadmap.md`](docs/product_roadmap.md) — governing product meaning,
-  development criteria, and milestone sequence.
-- [`docs/decisions/project_decisions.md`](docs/decisions/project_decisions.md) —
-  accepted cross-milestone technical decisions.
-- [`docs/milestones/README.md`](docs/milestones/README.md) — milestone-gate rules.
-- [`docs/design/README.md`](docs/design/README.md) — accepted Milestone 3 system flow.
-- [`docs/controller/README.md`](docs/controller/README.md) — worker controller lifecycle,
-  ownership, and intended API.
-- [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) —
-  accepted framework research and responsibility model.
+- [`docs/product_roadmap.md`](docs/product_roadmap.md) — governing product meaning and
+  milestone sequence.
+- [`docs/decisions/project_decisions.md`](docs/decisions/project_decisions.md) — accepted
+  technical decisions.
+- [`docs/design/system_architecture.md`](docs/design/system_architecture.md) — complete
+  Milestone 3 lifecycle and state ownership.
+- [`docs/design/population_resolution.md`](docs/design/population_resolution.md) — fixed
+  Ray population invariants and open interface choices.
+- [`docs/design/behavioral_test_contracts.md`](docs/design/behavioral_test_contracts.md) —
+  observable acceptance behavior.
+- [`docs/controller/README.md`](docs/controller/README.md) — current controller state and
+  redesign boundary.
+- [`docs/framework_alignment/README.md`](docs/framework_alignment/README.md) — accepted
+  framework research.
 - [`AGENTS.md`](AGENTS.md) — contributor and coding-agent entry point.
 
 ## Development
