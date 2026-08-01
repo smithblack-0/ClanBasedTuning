@@ -1,43 +1,45 @@
 # ClanBasedTuning project decisions
 
 Status: accepted project decisions  
-Date: 2026-07-31
+Date: 2026-07-31  
+Population-resolution clarification: 2026-08-01
 
 ## Purpose
 
-This file records dated technical decisions that resolve choices left open by the
-governing [product roadmap](../product_roadmap.md). Accepted decisions remain
-authoritative unless a concrete roadmap, framework-evidence, or responsibility conflict
-explicitly reopens them. A reopened decision remains under review until a replacement
-is accepted.
+This file records technical decisions that resolve choices left open by the governing
+[product roadmap](../product_roadmap.md). Accepted decisions remain authoritative unless
+a concrete roadmap, framework-evidence, or responsibility conflict explicitly reopens
+them.
 
-This file does not contain milestone completion gates, audit history, temporary support
-limits, or implementation plans. Those belong in the milestone, research, evidence,
-audit, design, and planning artifacts for their actual jobs.
+This file does not define milestone completion evidence, temporary support limits, or
+implementation plans. Those belong in their corresponding artifacts.
 
 ## Current alignment status
 
-All seven decisions are accepted.
+All seven decisions remain accepted.
 
-P3, P4, and P5 were revised on 2026-07-31 after the Milestone 3 lifecycle established a
-thin worker controller and a Tune-scheduler evolutionary authority. The revision keeps
-one Clan policy authority while separating:
+The high-level Milestone 3 lifecycle is accepted:
 
-- worker-side collective checkpoint-source resolution;
-- winner-side producer-genome annotation;
-- scheduler-owned mutation, lineage, recovery, and target assignment; and
-- Lightning-owned training continuation.
+- one Tune trial represents one live Clan member;
+- Lightning and PyTorch own distributed training and checkpoint construction;
+- the CBT Tune scheduler owns evolutionary policy and next-generation assignment;
+- exactly one completed member supplies the continuation checkpoint; and
+- the selected worker records the genome that produced that checkpoint before reporting
+  it.
 
-P1, P2, P6, and P7 retain their accepted meaning.
+The mechanism that lets workers determine the sole checkpoint source before reporting
+is **not yet accepted**. No existing callback name, all-gather implementation, Ray
+collective, PyTorch collective, rank mapping, timeout policy, or module layout is
+promoted by these decisions. That seam must be designed and qualified in the current
+iteration.
 
 ## P1. One Ray Tune trial represents one live Clan member
 
 One Tune trial represents one Clan member. The complete population must be concurrently
 resident, and every member participates in every shared training gradient.
 
-Ray remains the population runtime authority. Later assembly work must make the
-generated trial count, concurrent capacity, Clan world size, and dedicated resources
-describe one consistent live population.
+Ray remains the population runtime authority. Trial count, concurrent capacity, Clan
+world size, and dedicated resources must describe one consistent live population.
 
 **Status:** accepted.
 
@@ -64,88 +66,83 @@ The CBT Tune scheduler owns the complete population policy transition:
 - install target trial configurations; and
 - coordinate selected-checkpoint assignment.
 
-Framework-independent selection and mutation primitives remain independently testable
-without Ray trial objects. Their independence does not make the worker controller or a
-second policy object authoritative over evolution.
+Framework-independent selection and mutation primitives remain independently testable.
+Their independence does not make the worker controller or another policy object
+authoritative over evolution.
 
-The worker `ClanController` has a narrower responsibility. It exchanges fitness across
-the active population, reaches the same deterministic winner decision needed before
-checkpoint reporting, and lets only that selected worker attach its immutable current
-genome snapshot to the checkpoint.
+The worker controller has a narrower purpose. It holds worker-local boundary state,
+obtains the local answer to the pre-report checkpoint-source decision, caches that
+answer, and allows only the selected worker to attach producer-genome metadata.
 
-The controller does not derive future configurations, advance generations, or persist
-scheduler lineage.
+How the complete population reaches that decision is an integration responsibility that
+remains open. The controller does not choose a communication backend or own future
+configurations, generation advancement, or scheduler lineage.
 
-**Status:** accepted; revised on 2026-07-31 after the persistent evolutionary-controller
-shape was replaced by the thin worker lifecycle.
+**Status:** accepted; population-resolution mechanism reopened on 2026-08-01.
 
 ## P4. CBT selects and mutates; Ray transfers state; Lightning restores it
 
 ClanBasedTuning owns the Clan-specific population policy through its Tune scheduler and
 therefore selects the sole winning parent and derives the next population genomes.
 
-Ray owns execution of the resulting checkpoint and configuration assignment to target
-trials. Lightning owns checkpoint payload construction, contents, and restoration.
+Ray owns execution of checkpoint and configuration assignment to target trials.
+Lightning owns checkpoint payload construction, contents, and restoration.
 
 After Lightning restores the parent's optimizer state, CBT reapplies only the receiving
-member's scheduler-assigned optimizer configuration. This division does not create a
-second checkpoint format, generation manifest, or optimizer-construction system.
+member's scheduler-assigned optimizer configuration. This division creates neither a
+second checkpoint format nor a package-owned training loop.
 
 The selected worker annotates the checkpoint before reporting it with the stable member
-ID and exact genome that produced the payload. That metadata is provenance used by the
-scheduler for verification; it is not a second mutation or child-genome authority.
+ID and copied genome snapshot that produced the payload. That metadata is provenance
+for scheduler verification; it is not a second mutation or child-genome authority.
 
-**Status:** accepted; revised on 2026-07-31 to place producer annotation before
-checkpoint publication while retaining scheduler policy authority.
+**Status:** accepted.
 
 ## P5. Training data is partitioned; fitness data is comparable
 
 Training retains normal distributed partitioning. Every member is evaluated on the same
 held-out workload under comparable conditions, and each fitness value remains local to
-its Tune trial until the active population reaches the CBT comparison boundary.
+its Tune trial until the population reaches the comparison boundary.
 
-The worker collective applies the same deterministic comparison rule on every member so
-exactly one process knows whether to persist and report the checkpoint. The Tune
-scheduler independently applies that shared rule to the complete reported generation
-and verifies that the checkpoint source agrees.
+Before checkpoint reporting, the complete active population must produce one consistent
+checkpoint-source result. The Tune scheduler independently applies the same accepted
+comparison rule to the complete reported generation and verifies that the checkpoint
+source agrees.
 
-The integration milestone owns the concrete sampler, metric, collective, and reporting
-contract.
+The integration milestone owns the sampler, metric, synchronization, membership,
+ordering, failure, and reporting contracts. It must choose those mechanisms from current
+framework evidence rather than inherit an earlier collective implementation.
 
-**Status:** accepted; comparison ownership clarified on 2026-07-31 so the pre-report
-worker decision and scheduler policy verification cannot drift.
+**Status:** accepted; transport and callback shape remain unresolved.
 
 ## P6. Native PyTorch DDP owns shared-gradient execution
 
 PyTorch DDP owns ordinary model wrapping, gradient bucketing, initial synchronization,
-and gradient collectives wherever its qualified behavior fits. ClanBasedTuning may
+and gradient reduction wherever its qualified behavior fits. ClanBasedTuning may
 configure or narrowly specialize the framework boundary, but it does not reimplement
 normal all-reduce.
 
 The integration milestone must prove that native synchronization does not erase
 intended member divergence.
 
-**Status:** accepted unchanged. Later model-sharding support is introduced and qualified
-by the roadmap's industry milestone rather than by rewriting this DDP contract in
-advance.
+**Status:** accepted unchanged.
 
-## P7. Failure and planned completion are collective
+## P7. Failure and planned completion are population-wide
 
 Failure of one active member invalidates the active Clan. Planned completion occurs only
 at a synchronized population boundary and ends the complete Clan. No supported path may
 silently continue one member independently, shrink the active population, or redefine a
-partial population as a valid Clan.
+partial population as valid.
 
-Detailed termination, invalidation, diagnosis, scheduler recovery, and operational
-behavior belongs in the integration and support contracts where those capabilities
-become enforceable. This decision states the collective validity rule; it does not
-create separate recovery subsystems.
+Here, population-wide or collective describes the validity rule, not a required
+communication API. Detailed termination, timeout, diagnosis, scheduler recovery, and
+operational behavior belong in the integration and support contracts.
 
-**Status:** accepted; the collective rule is unchanged.
+**Status:** accepted; communication mechanism remains open.
 
 ## Supporting record
 
-The reasoning and source evidence behind these decisions and revisions are recorded in:
+The reasoning and source evidence behind these decisions are recorded in:
 
 - [Framework-alignment research report](../framework_alignment/research_report.md)
 - [Framework-alignment evidence ledger](../framework_alignment/evidence_ledger.md)
