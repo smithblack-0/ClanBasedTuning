@@ -14,14 +14,14 @@ ray = pytest.importorskip("ray")
 
 @ray.remote
 class PopulationMember:
-    def __init__(self, member_id, member_ids_by_rank, group_name, gloo_timeout_ms=30_000):
+    def __init__(self, member_id, member_ids_by_rank, group_name, timeout_ms=30_000):
         self.member_id = member_id
         self.member_ids_by_rank = tuple(member_ids_by_rank)
         self.runtime = RayPopulationRuntime(
             member_id=member_id,
             member_ids_by_rank=member_ids_by_rank,
             group_name=group_name,
-            gloo_timeout_ms=gloo_timeout_ms,
+            timeout_ms=timeout_ms,
         )
 
     def initialize(self):
@@ -60,14 +60,14 @@ def _group_name():
     return f"cbt-{uuid.uuid4().hex}"
 
 
-def _members(member_ids_by_rank, *, gloo_timeout_ms=30_000):
+def _members(member_ids_by_rank, *, timeout_ms=30_000):
     group_name = _group_name()
     members = {
         member_id: PopulationMember.remote(
             member_id,
             member_ids_by_rank,
             group_name,
-            gloo_timeout_ms,
+            timeout_ms,
         )
         for member_id in member_ids_by_rank
     }
@@ -124,10 +124,10 @@ def test_controller_resolves_once_across_consecutive_generations(local_ray):
         _destroy(members)
 
 
-def test_missing_member_surfaces_collective_failure(local_ray):
-    members = _members((0, 1), gloo_timeout_ms=1_000)
+def test_missing_member_exits_the_blocked_actor(local_ray):
+    members = _members((0, 1), timeout_ms=1_000)
 
     result = members[0].resolve.remote(1.0)
 
-    with pytest.raises(ray.exceptions.RayTaskError):
+    with pytest.raises(ray.exceptions.RayActorError):
         ray.get(result, timeout=15)
