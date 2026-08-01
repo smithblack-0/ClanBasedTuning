@@ -46,8 +46,8 @@ class RayPopulationRuntime:
         independent of the model-training device.
         """
 
-        import torch
         import ray.util.collective as collective
+        import torch
 
         collective.init_collective_group(
             world_size=len(self.member_ids_by_rank),
