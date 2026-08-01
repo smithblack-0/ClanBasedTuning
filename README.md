@@ -13,24 +13,30 @@ The package currently exposes:
 - `MutationSpec`, a bounded linear or logarithmic mutation rule.
 
 The current controller still receives an injected `exchange_fitness` callback. That is a
-framework-independent test seam, not the production Ray population runtime.
+framework-independent test seam, not the production distributed integration.
 
 The repository also contains the shared deterministic winner-selection function and
 plain scheduler-state type aliases as internal implementation pieces.
 
 ## Accepted work not yet implemented
 
-The accepted design requires:
+The accepted initial topology requires:
 
-- a Ray collective population runtime with explicit stable-member association;
+- one Ray Tune trial per stable Clan member;
+- one externally launched Lightning process and native PyTorch DDP rank per member;
+- framework-managed distributed setup and teardown rather than a package-owned
+  population process group;
+- population fitness exchange through that established distributed context;
 - a selected-worker checkpoint and producer-provenance path;
 - a CBT Tune scheduler that owns the authoritative generation transition;
-- Lightning/PyTorch integration for shared gradients, selected persistence, restoration,
-  and target optimizer-configuration application; and
+- member-local optimizer application without erasing shared-gradient divergence; and
 - a repeated real multi-member workflow.
 
-The scheduler's exact Ray superclass, delegated native machinery, and hook path remain
-open to direct framework evidence.
+The scheduler's exact Ray superclass, complete-cohort admission mechanism, delegated
+native machinery, and hook path remain open to direct framework evidence.
+
+A later ClanFSDP extension may add a composed model-shard and Clan-member topology. It is
+not part of the initial DDP implementation.
 
 ## Documentation
 
