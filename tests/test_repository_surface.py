@@ -16,6 +16,7 @@ def test_active_package_contains_only_the_thin_worker_and_evolution_core():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/evolution.py",
+        "src/clan_based_tuning/lightning_environment.py",
         "src/clan_based_tuning/scheduler_types.py",
     }
 
@@ -33,6 +34,7 @@ def test_test_suite_contains_only_current_surface_contracts():
 
     assert test_files == {
         "tests/framework_contracts/test_removed_integration_surface.py",
+        "tests/framework_contracts/test_tune_member_lightning_environment.py",
         "tests/test_package.py",
         "tests/test_repository_surface.py",
         "tests/unit/test_controller.py",
