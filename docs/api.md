@@ -9,8 +9,7 @@ use ClanBasedTuning. It distinguishes implemented behavior from accepted surface
 not yet connected to the production Ray and Lightning integration.
 
 It does not specify internal collective collaborators, helper functions, module layout,
-checkpoint-provenance representation, or framework hooks that may change during
-implementation.
+or framework hooks that may change during implementation.
 
 ## Worker flow
 
@@ -82,19 +81,35 @@ that produced it, then returns the same checkpoint reference.
 checkpoint = controller.save_genome(checkpoint)
 ```
 
-It does not:
+The accepted producer-provenance schema is:
 
-- construct the Lightning checkpoint;
-- report the checkpoint to Tune;
-- write Tune-owned trial or generation state;
-- derive child configurations; or
-- persist mutation, lineage, or recovery state.
+```python
+{
+    "clan_based_tuning": {
+        "schema_version": 1,
+        "member_id": member_id,
+        "genome": copied_genome,
+    }
+}
+```
 
-Calling it before population resolution or on a losing member is an error.
+The metadata contains only the schema version, stable member identity, and copied current
+genome. It does not contain:
 
-The exact provenance schema and checkpoint metadata mechanism remain implementation
-choices. They must provide enough information for the Tune integration to verify the
-selected member and its active optimizer configuration before accepting the transition.
+- Tune trial or generation state;
+- fitness or comparison mode;
+- child configurations;
+- mutation random state;
+- scheduler lineage; or
+- recovery state.
+
+The method does not construct the Lightning checkpoint or report it to Tune. Calling it
+before population resolution or on a losing member is an error.
+
+The checkpoint metadata mechanism may follow the qualified framework interface, but it
+must preserve this schema and must not deserialize or modify the Lightning payload. The
+CBT Tune scheduler verifies the recorded member and genome against the selected member's
+active controlled configuration before accepting the transition.
 
 ## `MutationSpec`
 
@@ -116,12 +131,12 @@ lr_mutation = MutationSpec(
 - `geometry="log"` multiplies by the exponential of the displacement.
 - `minimum` and `maximum` are inclusive bounds applied after mutation.
 
-`mutation.mutate(value, random_stream)` returns one bounded mutation. The Tune-side
-evolutionary transition owns the random stream and mutation lifecycle. Worker controllers
-do not use or retain mutation state.
+`mutation.mutate(value, random_stream)` returns one bounded mutation. The CBT Tune
+scheduler owns the random stream and mutation lifecycle. Worker controllers do not use
+or retain mutation state.
 
 ## Internal policy functions
 
-Worker and Tune-side selection use one shared deterministic implementation so comparison
+Worker and scheduler selection use one shared deterministic implementation so comparison
 direction and ties cannot diverge. Its helper name, signature, module, and container types
 are internal rather than public API.
