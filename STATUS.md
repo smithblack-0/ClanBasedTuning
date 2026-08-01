@@ -9,12 +9,28 @@ The active package contains:
 - `ClanController`, with one local fitness, one injected population exchange, and one
   cached checkpoint-source decision;
 - the shared deterministic winner-selection function;
-- `MutationSpec`; and
-- scheduler-owned configuration type aliases.
+- `MutationSpec`;
+- scheduler-owned configuration type aliases; and
+- an internal Lightning `ClusterEnvironment` that presents externally assigned Tune
+  member topology without owning distributed initialization, backend choice, collective
+  execution, or process-group release.
 
 The current tests establish the framework-independent controller lifecycle, stable tie
 behavior, finite-fitness requirements, mutation behavior, and the intentionally small
-package surface.
+public package surface.
+
+A real framework contract additionally establishes one narrow distributed seam on Ray
+2.56.1, Lightning 2.6.5, PyTorch 2.10.0, Python 3.11, and single-node CPU:
+
+- two concurrent Tune function trials act as two stable Clan members;
+- each trial is one externally launched Lightning process and one DDP rank;
+- Lightning/PyTorch initialize one GLOO DDP world from the supplied topology;
+- distinct local gradients reduce to one common gradient; and
+- the externally launched Tune trial process owns final release after `Trainer.fit()`
+  returns with the process group still active.
+
+The GLOO choice belongs to the CPU qualification harness. Production code does not choose
+GLOO or call process-group initialization or release APIs.
 
 ## Accepted design
 
@@ -26,7 +42,8 @@ The current integration design assigns:
 - externally launched distributed setup, training cadence, validation, restoration, and
   checkpoint construction to Lightning;
 - process-group lifecycle, collectives, model synchronization, and shared gradients to
-  native PyTorch DDP for the initial path;
+  the qualified Lightning/PyTorch and external trial-process lifecycle for the initial
+  path;
 - population fitness exchange to a narrow collaborator using that already-established
   framework-managed distributed context;
 - deterministic selection and mutation behavior to framework-independent policy
@@ -35,7 +52,7 @@ The current integration design assigns:
 
 One live Tune trial represents one stable Clan member and one DDP rank in the initial
 path. ClanBasedTuning supplies the missing cohort identity and topology facts but does not
-create or tear down a separate population process group.
+create or release a separate population process group.
 
 The scheduler's existence and evolutionary authority are accepted. Its exact Ray
 superclass, cohort-admission mechanism, delegated native machinery, and hook path remain
@@ -46,7 +63,9 @@ it.
 
 The repository does not yet contain:
 
-- the production Tune-trial-to-Lightning DDP cohort integration;
+- complete-cohort admission and production assignment of rank, world-size, rendezvous,
+  member, and cohort identity;
+- coherent repeated-round lifecycle over one live Tune-member DDP cohort;
 - the framework-managed population exchange;
 - selected-worker checkpoint provenance;
 - the CBT Tune scheduler;
@@ -54,12 +73,16 @@ The repository does not yet contain:
 - a repeated real multi-member Clan workflow; or
 - the later ClanFSDP topology.
 
+The current two-member contract assumes that the complete cohort is already schedulable
+and supplies its rendezvous facts from the test harness. It does not qualify incomplete
+cohort behavior, failures, CUDA/NCCL, or multi-node execution.
+
 ## Current work
 
-[`docs/plan.md`](docs/plan.md) begins by directly establishing the one-trial,
-one-member, one-DDP-rank topology through real Ray Tune, Lightning, and PyTorch framework
-seams. Population resolution then uses that established context rather than creating a
-second Ray collective group.
+[`docs/plan.md`](docs/plan.md) next resolves complete-cohort admission and production
+assignment of the topology facts consumed by the qualified Lightning environment.
+Population resolution then uses that established context rather than creating a second
+Ray collective group.
 
 The rejected standalone Ray/GLOO population-runtime branch was closed without merge. Its
 process-group ownership model is not active implementation or accepted evidence.
