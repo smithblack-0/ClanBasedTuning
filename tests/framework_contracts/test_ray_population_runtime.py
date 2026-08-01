@@ -74,14 +74,13 @@ def test_allgather_preserves_stable_member_identity_and_float64_precision(local_
         1: 1.0,
         2: 3.0,
     }
+    group_name = _group_name()
 
     results = ray.get(
         [
-            members[member_id].resolve.remote(population[member_id], _group_name_value)
+            members[member_id].resolve.remote(population[member_id], group_name)
             for member_id in population
         ]
-        if (_group_name_value := _group_name())
-        else []
     )
 
     assert results == [population, population, population]
