@@ -27,14 +27,6 @@ class TuneMemberEnvironment(ClusterEnvironment):
             raise ValueError("world_size must contain at least two Clan members")
         if not 0 <= global_rank < world_size:
             raise ValueError("global_rank must identify one member of the distributed world")
-        if local_rank < 0:
-            raise ValueError("local_rank must be non-negative")
-        if node_rank < 0:
-            raise ValueError("node_rank must be non-negative")
-        if not main_address:
-            raise ValueError("main_address must be non-empty")
-        if not 1 <= main_port <= 65_535:
-            raise ValueError("main_port must be a valid TCP port")
 
         self._global_rank = global_rank
         self._world_size = world_size
