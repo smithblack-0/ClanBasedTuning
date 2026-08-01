@@ -32,9 +32,7 @@ def test_population_resolves_one_checkpoint_source():
         _controller(member_id, population) for member_id in range(len(population))
     ]
 
-    for (controller, _), fitness in zip(
-        controllers_and_runtimes, population.values(), strict=True
-    ):
+    for (controller, _), fitness in zip(controllers_and_runtimes, population.values(), strict=True):
         controller.set_fitness(fitness)
 
     assert [controller.should_save_checkpoint() for controller, _ in controllers_and_runtimes] == [
@@ -60,8 +58,7 @@ def test_member_identity_not_mapping_order_determines_the_winner():
 def test_max_mode_breaks_ties_by_lower_member_id():
     population = {0: 5.0, 1: 5.0, 2: 2.0}
     controllers = [
-        _controller(member_id, population, mode="max")[0]
-        for member_id in range(len(population))
+        _controller(member_id, population, mode="max")[0] for member_id in range(len(population))
     ]
 
     for controller, fitness in zip(controllers, population.values(), strict=True):
