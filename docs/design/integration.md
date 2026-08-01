@@ -82,8 +82,9 @@ Before reporting, the selected worker binds that checkpoint to:
 - the stable member that produced it; and
 - the exact controlled optimizer configuration used by that member for the round.
 
-This provenance is required scheduler-verification data, not another configuration or
-evolution authority. The exact metadata keys, container, and checkpoint-storage mechanism
+The accepted public API fixes the producer-provenance schema. This provenance is required
+scheduler-verification data, not another configuration or evolution authority. The
+framework metadata interface and checkpoint-storage mechanism used to persist that schema
 remain implementation choices. The worker must not publish the checkpoint if provenance
 attachment fails.
 
@@ -148,7 +149,8 @@ The current design does not determine:
 - the exact Lightning hooks used for the qualifying round and checkpoint boundaries;
 - additional factory arguments or advanced construction paths beyond the accepted public
   lowering;
-- the checkpoint-provenance keys, container, or storage mechanism;
+- the framework metadata interface or storage mechanism used for the accepted provenance
+  schema;
 - Ray collective backend, payload device, dtype, or internal result type; or
 - optimizer layouts beyond the first explicitly supported and qualified path.
 
