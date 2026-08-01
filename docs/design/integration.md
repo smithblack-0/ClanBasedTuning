@@ -7,7 +7,7 @@ Status: accepted design for the current implementation
 This document translates the governing roadmap into the current system-level
 lifecycle and responsibility boundaries. It does not repeat the Clan Tuning
 method, define the population-resolution contract, choose a Ray collective
-backend, or fix the public convenience API.
+backend, or restate the public lowering documented in [`../api.md`](../api.md).
 
 ## Runtime model
 
@@ -46,10 +46,10 @@ Every process required by the Lightning checkpoint boundary participates in that
 boundary. Only the selected member retains and reports the persistent training
 continuation.
 
-The reported continuation carries enough producer provenance for the Tune-side
-transition to verify which stable member and assigned optimizer configuration
-produced it. The exact metadata representation and framework hook are current
-implementation choices, not architectural commitments.
+The selected worker binds its checkpoint to the stable member and assigned optimizer
+configuration that produced it through the accepted public API. The exact provenance
+representation and framework hook are implementation choices, not architectural
+commitments.
 
 The ClanBasedTuning Tune integration is authoritative over the complete
 generation transition. It:
@@ -87,7 +87,8 @@ behavior, not that internal Ray seam.
 - **Framework-independent policy functions** own deterministic selection and
   mutation behavior without owning framework lifecycle.
 - **`ClanController`** owns one worker's local fitness, one population decision,
-  and its cached local checkpoint-source answer.
+  its cached local checkpoint-source answer, and winner-only producer provenance
+  through the public API.
 - **The assigned Tune configuration** is the live source of that member's
   optimizer configuration for the round.
 
@@ -102,11 +103,13 @@ The current design does not determine:
 - scheduler subclass versus another narrow Tune adapter;
 - the exact Lightning hooks used for checkpoint persistence and optimizer
   configuration application;
-- the public construction or convenience API;
+- additional factory arguments or advanced construction paths beyond the accepted
+  public lowering;
 - the checkpoint-provenance container or storage mechanism;
 - Ray collective backend, payload device, dtype, or internal result type; or
 - optimizer layouts beyond the first explicitly supported and qualified path.
 
 Those choices may be made by the implementer only where they preserve the
-roadmap, the system behavioral contract, and the population-resolution
-contracts. Support claims remain limited to directly qualified paths.
+roadmap, the public API, the system behavioral contract, and the
+population-resolution contracts. Support claims remain limited to directly
+qualified paths.
