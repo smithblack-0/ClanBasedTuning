@@ -1,138 +1,147 @@
 # Worker controller API
 
-Status: intended corrected Milestone 3 API
+Status: exact current framework-independent API  
+Date: 2026-07-31
 
-The public framework-independent surface remains centered on `ClanController`. The
-current implementation still needs the genome and `save_genome()` additions described
-here before this API is complete.
+This file documents what the active package implements today. It does not present the
+provisional callback as the accepted future Ray interface.
 
 ## `ClanController`
-
-`ClanController` is the worker-side collective checkpoint decision plus winner-side
-producer-genome annotation. It is constructed once for one Tune function invocation and
-one reporting boundary.
 
 ```python
 from clan_based_tuning import ClanController
 
 controller = ClanController(
-    member_id=rank,
-    population_size=world_size,
+    member_id=member_id,
+    population_size=population_size,
     mode="min",
-    genome=genome,
-    exchange_fitness=all_gather_fitness,
+    exchange_fitness=exchange_fitness,
 )
 ```
 
-`member_id`
-: Stable zero-based Clan member rank.
+### `member_id`
 
-`population_size`
-: Number of concurrently participating Clan members.
+Zero-based local identity used by the current framework-independent implementation.
 
-`mode`
-: `"min"` or `"max"`. Equal fitness selects the lower member rank.
+The production Ray design still must prove whether this identity is exactly Ray
+collective rank or is associated explicitly with that rank.
 
-`genome`
-: Mapping containing exactly the controlled values assigned to this worker for the
-  current round. The controller copies the mapping at construction and never mutates or
-  applies it.
+### `population_size`
 
-`exchange_fitness`
-: Callable receiving this worker's scalar fitness and returning one rank-ordered
-  fitness value for every required member. The production integration will implement
-  this with the Ray collective.
+Expected number of values returned by the current callback.
 
-The public Tune-facing integration is expected to construct this object through:
+This constructor field is provisional. The future Ray runtime may own population size
+without exposing it directly to `ClanController`.
+
+### `mode`
+
+`"min"` or `"max"`. Equal fitness selects the lower current sequence position through
+`select_winner_id()`.
+
+Selection policy remains required, but its final placement relative to the controller
+and Ray runtime is under review.
+
+### `exchange_fitness`
+
+A callable with the current test seam:
 
 ```python
-controller = make_cbt_controller(genome=genome)
+exchange_fitness(local_fitness) -> Sequence[float]
 ```
 
-That factory hides rank, world size, mode, and collective construction. The caller
-supplies the controlled genome derived from the same configuration applied to the
-optimizer.
+The first `should_save_checkpoint()` call invokes it once. The current implementation
+assumes:
 
-### `set_fitness(fitness)`
+- the returned sequence contains exactly `population_size` values;
+- sequence position corresponds to stable member identity; and
+- every value is finite.
 
-Stores one finite local fitness. Fitness can be assigned only once.
+This is not an accepted production collective contract. It does not define Ray group
+membership, rank mapping, generation isolation, timeout, missing-member failure, or
+transport behavior.
+
+## `set_fitness(fitness)`
 
 ```python
 controller.set_fitness(validation_loss)
 ```
 
-This operation does not enter the collective.
+Stores one finite local fitness.
 
-### `should_save_checkpoint()`
+Current behavior:
+
+- fitness can be assigned only once;
+- non-finite values fail before the callback is invoked; and
+- the method performs no communication.
+
+## `should_save_checkpoint()`
 
 ```python
 should_save = controller.should_save_checkpoint()
 ```
 
-The first call:
+Current first-call behavior:
 
-1. requires local fitness;
-2. exchanges fitness across the complete population;
-3. verifies the configured population size;
-4. selects one winner using the shared direction and stable rank tie-break; and
-5. returns whether the local member is that winner.
+1. require previously assigned local fitness;
+2. invoke the provisional callback;
+3. require the configured sequence length;
+4. require finite returned values;
+5. apply `select_winner_id(population, mode)`; and
+6. cache whether the selected sequence position equals `member_id`.
 
-The result is cached. Repeated calls return the same boolean without performing another
-collective operation.
+Later calls return the cached Boolean and do not invoke the callback again.
 
-The method does not construct, load, wrap, annotate, or report a checkpoint.
+The caching behavior is an accepted requirement because later producer-provenance guards
+must not enter a second Ray collective.
 
-### `save_genome(checkpoint)`
+The current callback, sequence result, identity assumption, and constructor split remain
+provisional.
 
-```python
-if controller.should_save_checkpoint():
-    checkpoint = controller.save_genome(checkpoint)
-```
+## Not currently implemented
 
-This method is valid only when the controller has resolved that the local member is the
-winner.
+The active controller does not yet implement:
 
-It merges this mapping into the checkpoint metadata:
+- a genome constructor argument;
+- an independently copied genome mapping;
+- `save_genome(checkpoint)`;
+- Ray collective group construction;
+- `make_cbt_controller()`;
+- timeout or distributed failure handling; or
+- generation isolation.
+
+## Planned producer metadata
+
+After the Ray population-resolution interface is accepted, the selected worker will
+record:
 
 ```python
 {
     "clan_based_tuning": {
         "schema_version": 1,
         "member_id": member_id,
-        "genome": copied_genome,
+        "genome": dict(genome),
     }
 }
 ```
 
-It returns the same checkpoint reference.
+before reporting the checkpoint.
 
-It does not:
+That future operation will:
 
-- construct the Lightning checkpoint;
-- deserialize or modify the checkpoint payload;
-- report the checkpoint to Tune;
-- write a round index or Tune trial ID;
-- write fitness;
-- derive child genomes; or
-- persist scheduler mutation or lineage state.
+- require the already cached local save decision to be `True`;
+- perform no second Ray collective;
+- preserve unrelated checkpoint metadata and payload;
+- return the same checkpoint reference unless framework evidence requires a different
+  public contract; and
+- write no generation index, Tune trial ID, fitness, child genomes, mutation state, or
+  lineage.
 
-Calling `save_genome()` before the save decision is resolved, or on a losing member, is
-an error. The checkpoint object's public metadata operation is allowed to fail directly
-if the supplied genome is not serializable or the backing storage cannot be updated.
+The exact method name and checkpoint API remain subject to the later provenance
+implementation review.
 
-## Genome authority
+## Framework-independent evolution API
 
-The Tune scheduler is the evolutionary authority. It decides the current and next
-population genomes, mutation state, lineage, and recovery behavior.
-
-For an active worker, `Trial.config` contains the scheduler's materialized genome
-assignment. The controller contains an immutable copy used only to prove which values
-produced the winner checkpoint.
-
-The scheduler must verify the checkpoint's `member_id` and `genome` against the selected
-winner and its active trial configuration before accepting the transition.
-
-## `MutationSpec`
+### `MutationSpec`
 
 ```python
 from clan_based_tuning import MutationSpec
@@ -145,42 +154,20 @@ lr_mutation = MutationSpec(
 )
 ```
 
-`standard_deviation`
-: Gaussian displacement scale.
-
-`geometry`
-: `"linear"` adds the displacement. `"log"` multiplies by its exponential.
-
-`minimum`, `maximum`
-: Inclusive bounds applied after mutation.
-
-`mutation.mutate(value, random_stream)` returns one bounded mutation. The CBT Tune
-scheduler owns the random stream and applies mutation while constructing target trial
-genomes. The worker controller does not use or retain mutation state.
-
-`MutationSpec` remains temporarily exported but belongs to an evolution or
-scheduler-types module rather than `controller_types.py`.
-
-## Shared selection primitive
+`MutationSpec` lives in `evolution.py` and belongs to scheduler/evolution policy rather
+than worker-controller state.
 
 ### `select_winner_id(population, mode)`
 
-Returns the stable winning rank from rank-ordered fitness values. The worker controller
-and scheduler use the same implementation so checkpoint-source selection and scheduler
-verification cannot disagree on comparison direction or ties.
+`select_winner_id()` lives in `evolution.py` and defines the current deterministic
+minimizing/maximizing and lower-position tie rule.
 
-This helper belongs in a neutral selection module, not in a module named for controller
-types.
+The accepted architecture requires one shared pure selection policy for worker-side Ray
+resolution and scheduler verification. The final member-associated input type may change
+when the stable identity contract is designed; the current sequence input is not
+necessarily the final public form.
 
-## Removed metadata builder
+## Design reference
 
-The previous `build_parent_genome_metadata(...)` design included round identity, trial
-identity, and parent-genome construction for a later scheduler-side checkpoint update.
-That shape is superseded.
-
-Producer metadata is now written by the selected controller before reporting and
-contains only:
-
-- schema version;
-- stable member ID; and
-- the controller's copied current genome.
+See [Ray population-resolution design](../design/population_resolution.md) for the fixed
+requirements and open interface choices that govern the replacement.
