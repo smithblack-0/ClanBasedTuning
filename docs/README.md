@@ -18,6 +18,12 @@ This is the active documentation entry point.
 - [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
   assigns ownership at that boundary.
 
+## Public lowering
+
+- [`api.md`](api.md) records the current and accepted intended public surface while
+  leaving internal helpers, transport collaborators, framework hooks, and metadata
+  representation free to evolve.
+
 ## Current implementation choice and evidence boundary
 
 - [`implementation/ray_population_resolution.md`](implementation/ray_population_resolution.md)
