@@ -90,7 +90,7 @@ def _run_ddp_member(config):
             "backend": model.observed_backend,
             "reduced_gradient": model.reduced_gradient,
             "final_weight": float(model.weight.detach().item()),
-            "group_initialized_after_fit": torch.distributed.is_initialized(),
+            "group_active_until_trial_exit": torch.distributed.is_initialized(),
         }
     )
 
@@ -163,4 +163,4 @@ def test_two_tune_trials_form_one_framework_managed_ddp_world(tmp_path):
     assert [item["backend"] for item in metrics] == ["gloo", "gloo"]
     assert [item["reduced_gradient"] for item in metrics] == pytest.approx([1.5, 1.5])
     assert [item["final_weight"] for item in metrics] == pytest.approx([-1.5, -1.5])
-    assert [item["group_initialized_after_fit"] for item in metrics] == [False, False]
+    assert [item["group_active_until_trial_exit"] for item in metrics] == [True, True]
