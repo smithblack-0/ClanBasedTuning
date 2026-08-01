@@ -35,8 +35,9 @@ That internal choice remains open to direct Ray evidence.
 ## Documentation
 
 Start with [`docs/README.md`](docs/README.md). The governing product roadmap is
-[`docs/product_roadmap.md`](docs/product_roadmap.md), current implementation state is in
-[`STATUS.md`](STATUS.md), and the active work sequence is [`docs/plan.md`](docs/plan.md).
+[`docs/product_roadmap.md`](docs/product_roadmap.md), the accepted public lowering is in
+[`docs/api.md`](docs/api.md), current implementation state is in [`STATUS.md`](STATUS.md),
+and the active work sequence is [`docs/plan.md`](docs/plan.md).
 
 ## Development
 
