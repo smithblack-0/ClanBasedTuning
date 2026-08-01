@@ -7,9 +7,9 @@ Status: accepted architectural contract
 This document defines the behavior that must remain true when the live Clan decides
 which member may retain and report the generation checkpoint.
 
-These invariants constrain every implementation. They do not prescribe a Ray backend,
-tensor device, dtype, container type, class name, timeout value, or exact collective
-primitive unless that choice changes the behavior below.
+These invariants constrain every implementation. They do not prescribe a distributed
+backend, tensor device, dtype, container type, helper name, timeout value, or exact
+collective primitive unless that choice changes the behavior below.
 
 ## Population boundary
 
@@ -22,9 +22,13 @@ primitive unless that choice changes the behavior below.
 5. A successful boundary contains one valid contribution from every required member and
    no contribution from another generation.
 
-The population-resolution path uses Ray collective communication. PyTorch distributed
-training remains responsible for training-gradient communication and is not substituted
-for this Clan-level boundary.
+For the initial DDP path, population resolution uses the framework-managed distributed
+context already spanning the live Clan for shared training. Population-resolution logic
+does not establish, choose the backend for, or tear down another process group.
+
+A later model-sharded Clan topology may contain more than one distributed group or process
+dimension. The invariant remains that framework integration owns those groups and the
+population operation uses the appropriate established Clan-wide context.
 
 ## Selection result
 
@@ -50,9 +54,10 @@ The worker-side controller stores one local fitness and resolves one local answe
 
 > Is this stable member the selected checkpoint source?
 
-The first save-decision query may enter the Ray population-resolution boundary. Once the
-answer is known, the controller caches it. Repeated queries and later producer-provenance
-checks read the cache and do not perform population communication again.
+The first save-decision query may enter the framework-managed population-resolution
+boundary. Once the answer is known, the controller caches it. Repeated queries and later
+producer-provenance checks read the cache and do not perform population communication
+again.
 
 ## Failure and generation isolation
 
@@ -69,7 +74,8 @@ An invalid boundary must not:
 
 The concrete timeout, cancellation, exception, and generation-token mechanisms belong to
 implementation and qualification work. Their observable result must satisfy this failure
-invariant.
+invariant without transferring process-group lifecycle to the controller or population
+operation.
 
 ## Scheduler verification
 
@@ -93,12 +99,11 @@ checkpoint redistribution.
 The implementation may choose any internal representation that preserves the invariants
 above. In particular, architecture does not require:
 
-- stable member identity to equal collective rank, only an unambiguous proven mapping;
+- stable member identity to equal distributed rank, only an unambiguous proven mapping;
 - a tuple, list, dictionary, tensor, or object as the population-fitness container;
-- CPU or accelerator storage for collective payloads;
+- CPU or accelerator storage for the fitness payload;
 - a particular floating-point dtype;
-- GLOO, NCCL, or another supported Ray collective backend;
-- one specific Ray collective primitive rather than an equivalent composition;
+- one specific collective operation over the established framework-owned context;
 - a specific internal collaborator, class, method, or module name; or
 - one fixed timeout duration.
 
