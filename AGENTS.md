@@ -1,22 +1,25 @@
 # Repository instructions for coding agents
 
-For substantial engineering, design, review, or documentation work, read
-[`docs/llm/README.md`](docs/llm/README.md) before acting.
+Before substantial engineering, design, review, or documentation work:
 
-Before editing a documentation subtree, read its nearest `README.md`. In
-particular, read [`docs/milestones/README.md`](docs/milestones/README.md) before
-editing milestone gates or plans.
+1. Read [`docs/README.md`](docs/README.md) and [`STATUS.md`](STATUS.md).
+2. Identify the requested result and the smallest coherent review unit.
+3. Read the governing roadmap, decisions, architecture, active contracts, current source, tests, consumers, and framework evidence relevant to that unit.
+4. Use [`docs/process/engineering.md`](docs/process/engineering.md) for engineering and review work.
+5. Use [`docs/process/writing.md`](docs/process/writing.md) for substantial documentation.
 
-[`STATUS.md`](STATUS.md) is shared project documentation written for humans and
-tools. It describes the repository's latest durable position, but it is not an
-instruction queue and does not establish the user's current objective.
+Code and tests establish current behavior. Design documents establish accepted targets. Historical material under `docs/archive/` is evidence, not active authority.
 
-A pull request must be a self-contained, mergeable increment that performs one
-coherent task and leaves the repository in a stable state. Do not create a PR or
-persistent repository file solely to ask the user a design question. Preliminary
-reasoning belongs in scratchwork while it is useful; accepted decisions must be
-applied in the artifacts that own them.
+Do not reconstruct intent from names or reuse a previous iteration merely because code already exists. Begin from the current accepted contract and inspect the whole affected boundary.
 
-Follow the authority, change-control, engineering, and writing rules linked from
-`docs/llm/README.md`. Do not merge pull requests, modify CI/workflow files, or
-change governing product meaning without explicit authorization.
+A pull request must:
+
+- perform one coherent small-to-medium task;
+- leave a stable, mergeable repository state;
+- keep title, body, diff, tests, and documentation in sync;
+- distinguish implemented behavior, accepted design, evidence, and future work; and
+- avoid bundling unrelated design, implementation, integration, and cleanup.
+
+Tentative reasoning may live in `scratchwork/` while useful. It does not override active authority and must not become a substitute for updating the artifact that owns an accepted correction.
+
+Do not modify CI/workflow files, change product or milestone authority, broaden support claims, or merge pull requests without explicit authorization.

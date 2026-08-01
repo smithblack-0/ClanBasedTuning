@@ -21,10 +21,10 @@ The root [`STATUS.md`](../STATUS.md) states current implementation and active wo
 
 ## Current implementation decision
 
-- [`implementation/population_resolution.md`](implementation/population_resolution.md) — the initial Ray collective mechanism and evidence required before support is claimed.
+- [`implementation/population_resolution.md`](implementation/population_resolution.md) — the initial Ray collective mechanism and the evidence required before support is claimed.
 
 ## Working process
 
-Root [`AGENTS.md`](../AGENTS.md) and [`llm/README.md`](llm/README.md) route substantial engineering and documentation work. Their consolidation is a separate cleanup slice.
+Engineering and writing workflows live under [`process/`](process/). Root [`AGENTS.md`](../AGENTS.md) is the contributor entry point.
 
 Completed and superseded records live under [`archive/`](archive/) and are not active authority. Tentative reasoning belongs in `scratchwork/` only while useful.
