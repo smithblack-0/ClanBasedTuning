@@ -191,18 +191,14 @@ artifacts that own the affected behavior or claim.
 ## Development direction
 
 Development first establishes and directly qualifies a complete framework-native
-implementation of Clan Tuning. Later work extends that same system where use and
-evidence require it: easier assembly, broader optimizer configuration support,
-additional distributed execution modes, and stronger operational support.
+implementation of Clan Tuning. Later capabilities must extend that same public system
+rather than replace it with separate convenience, research, or production
+implementations.
 
-These are capability directions rather than a fixed milestone or document
-system. Their ordering may overlap when dependencies permit. Current sequencing,
-acceptance criteria, implementation choices, and qualification boundaries belong
-in the active contracts, designs, plan, and evidence records rather than this
-roadmap.
-
-Live project position belongs in [`STATUS.md`](../STATUS.md). This roadmap does
-not track the current branch, active pull request, or day-to-day work queue.
+Current sequencing, acceptance boundaries, and implementation choices belong in the
+active contracts, designs, plan, and qualification records rather than this roadmap.
+Live project position belongs in [`STATUS.md`](../STATUS.md); this roadmap does not track
+the current branch, active pull request, or day-to-day work queue.
 
 ## Project success
 
