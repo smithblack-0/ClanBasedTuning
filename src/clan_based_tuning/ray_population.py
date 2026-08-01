@@ -88,7 +88,7 @@ class RayPopulationRuntime:
                     )
                 }
                 outcome.put((population, None))
-            except BaseException as error:
+            except Exception as error:
                 outcome.put((None, error))
 
         operation = Thread(target=allgather, daemon=True)
@@ -102,6 +102,8 @@ class RayPopulationRuntime:
         population, error = outcome.get_nowait()
         if error is not None:
             raise error
+        if population is None:
+            raise RuntimeError("population collective returned no result")
         return population
 
     def destroy(self) -> None:
