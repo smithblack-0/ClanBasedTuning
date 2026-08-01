@@ -1,22 +1,20 @@
 # Repository instructions for coding agents
 
-For substantial engineering, design, review, or documentation work, read
-[`docs/llm/README.md`](docs/llm/README.md) before acting.
+For substantial work, begin with [`docs/README.md`](docs/README.md). Read the governing
+[`docs/product_roadmap.md`](docs/product_roadmap.md), then the design, contract,
+implementation, qualification, or plan that owns the change.
 
-Before editing a documentation subtree, read its nearest `README.md`. In
-particular, read [`docs/milestones/README.md`](docs/milestones/README.md) before
-editing milestone gates or plans.
+Use [`docs/llm/README.md`](docs/llm/README.md) for the standing engineering and writing
+process. Apply [`docs/reviews/framework_native_review.md`](docs/reviews/framework_native_review.md)
+when a change affects a meaningful framework boundary.
 
-[`STATUS.md`](STATUS.md) is shared project documentation written for humans and
-tools. It describes the repository's latest durable position, but it is not an
-instruction queue and does not establish the user's current objective.
+[`STATUS.md`](STATUS.md) records current repository state. It is not an instruction queue
+and does not replace the user's current objective. [`docs/plan.md`](docs/plan.md) sequences
+only the active implementation work and cannot change the roadmap or accepted contracts.
 
-A pull request must be a self-contained, mergeable increment that performs one
-coherent task and leaves the repository in a stable state. Do not create a PR or
-persistent repository file solely to ask the user a design question. Preliminary
-reasoning belongs in scratchwork while it is useful; accepted decisions must be
-applied in the artifacts that own them.
+A pull request must perform one coherent reviewable task and leave a stable intermediate
+state. Do not create repository files merely to ask a design question. Tentative reasoning
+belongs in scratchwork; accepted corrections belong in the artifact that owns them.
 
-Follow the authority, change-control, engineering, and writing rules linked from
-`docs/llm/README.md`. Do not merge pull requests, modify CI/workflow files, or
-change governing product meaning without explicit authorization.
+Do not merge pull requests, modify CI/workflow files, or change product meaning without
+explicit authorization.

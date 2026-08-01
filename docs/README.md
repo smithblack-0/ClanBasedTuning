@@ -1,22 +1,50 @@
 # ClanBasedTuning documentation
 
-Use this page as the single documentation entry point.
+This is the active documentation entry point.
 
-## Active authority
+## Governing product direction
 
-- [`product_roadmap.md`](product_roadmap.md) defines product meaning, development criteria, and milestone sequence.
-- [`decisions/project_decisions.md`](decisions/project_decisions.md) records accepted cross-milestone decisions.
-- [`design/README.md`](design/README.md) enters the active Milestone 3 architecture and behavioral contracts.
-- [`milestones/README.md`](milestones/README.md) identifies the active milestone gate and the role of future gates.
-- [`framework_alignment/evidence_ledger.md`](framework_alignment/evidence_ledger.md) preserves version-sensitive framework evidence.
-- [`llm/README.md`](llm/README.md) routes substantial engineering and documentation work through the project workflows.
+- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning, the project goals, and
+  the stable criteria by which development is judged.
 
-## Current state
+## Current accepted design
 
-The root [`STATUS.md`](../STATUS.md) states what is implemented, what remains unimplemented, and the accepted next boundary. Code and tests establish current behavior; planned interfaces are not current package surfaces merely because they appear in design documents.
+- [`design/integration.md`](design/integration.md) defines the current framework lifecycle,
+  state authority, and deliberately open integration surface.
+- [`contracts/system_behavior.md`](contracts/system_behavior.md) states the observable
+  behavior of a complete Clan Tuning integration.
+- [`contracts/population_resolution_invariants.md`](contracts/population_resolution_invariants.md)
+  states what the pre-report population boundary must preserve.
+- [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
+  assigns ownership at that boundary.
 
-## History
+## Public lowering
 
-Completed and superseded material belongs under [`archive/`](archive/). Archived documents explain prior decisions but do not compete with active authority.
+- [`api.md`](api.md) records the current and accepted intended public surface while
+  leaving internal helpers, transport collaborators, framework hooks, and metadata
+  representation free to evolve.
 
-Tentative reasoning belongs in [`scratchwork/`](scratchwork/) only while it remains useful and is never project authority.
+## Current implementation choice and evidence boundary
+
+- [`implementation/ray_population_resolution.md`](implementation/ray_population_resolution.md)
+  chooses the first Ray collective mechanism without turning it into architecture.
+- [`qualification/ray_population_resolution.md`](qualification/ray_population_resolution.md)
+  states what must be demonstrated before a backend, device, or topology is supported.
+
+## Current work
+
+- [`plan.md`](plan.md) sequences the present implementation work.
+- Root [`STATUS.md`](../STATUS.md) records what the repository actually implements now.
+- Code and tests remain authoritative for current executable behavior.
+
+## Engineering process
+
+- [`llm/README.md`](llm/README.md) routes substantial engineering and writing work.
+- [`reviews/framework_native_review.md`](reviews/framework_native_review.md) checks that
+  Clan-specific behavior remains narrow and framework-native.
+
+## Non-active material
+
+Completed and superseded records live under [`archive/`](archive/) and do not compete
+with current authority. Tentative reasoning belongs under [`scratchwork/`](scratchwork/)
+until accepted in the artifact that owns it.

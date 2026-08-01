@@ -1,16 +1,15 @@
 # Population-resolution invariants
 
-Status: Milestone 3 design candidate  
-Date: 2026-07-31
+Status: accepted architectural contract
 
 ## Purpose
 
 This document defines the behavior that must remain true when the live Clan decides
 which member may retain and report the generation checkpoint.
 
-These are architectural invariants. They constrain every implementation. They do not
-prescribe a Ray backend, tensor device, dtype, container type, class name, timeout value,
-or exact collective primitive unless that choice changes the behavior below.
+These invariants constrain every implementation. They do not prescribe a Ray backend,
+tensor device, dtype, container type, class name, timeout value, or exact collective
+primitive unless that choice changes the behavior below.
 
 ## Population boundary
 
@@ -23,9 +22,9 @@ or exact collective primitive unless that choice changes the behavior below.
 5. A successful boundary contains one valid contribution from every required member and
    no contribution from another generation.
 
-The population-resolution path uses Ray collective communication. PyTorch DDP remains
-responsible for training-gradient communication and is not substituted for this
-Clan-level boundary.
+The population-resolution path uses Ray collective communication. PyTorch distributed
+training remains responsible for training-gradient communication and is not substituted
+for this Clan-level boundary.
 
 ## Selection result
 
@@ -74,18 +73,20 @@ invariant.
 
 ## Scheduler verification
 
-The Tune scheduler independently receives one result from every required trial, applies
-the same selection policy, and verifies all of the following:
+The CBT Tune scheduler independently receives one result from every required trial,
+applies the same selection policy, and verifies all of the following:
 
 - exactly the selected member supplied a checkpoint;
 - no losing member supplied a checkpoint;
-- the checkpoint producer metadata matches the selected member and its active genome;
-  and
-- the complete next-population transition is committed before any target is released.
+- the checkpoint producer provenance matches the selected member and its active
+  controlled optimizer configuration; and
+- the complete next-population transition is durably accepted before any target is
+  released.
 
-Worker agreement is therefore necessary but not authoritative. The Tune scheduler remains
-the evolutionary authority over winner verification, mutation, child genomes, lineage,
-recovery, target configuration, and checkpoint redistribution.
+Worker agreement is therefore necessary but not authoritative. The CBT Tune scheduler
+remains the evolutionary authority over winner verification, mutation, child
+configurations, mutation random state, lineage, recovery, target configuration, and
+checkpoint redistribution.
 
 ## Representation freedom
 
