@@ -18,12 +18,23 @@ The package currently contains:
 - a thin `ClanController` that stores one local fitness and resolves a cached
   checkpoint-source decision through an injected `exchange_fitness` callback;
 - one deterministic selection function;
-- `MutationSpec` for bounded linear or logarithmic mutation; and
-- plain type aliases for scheduler-owned optimizer configurations.
+- `MutationSpec` for bounded linear or logarithmic mutation;
+- plain type aliases for scheduler-owned optimizer configurations; and
+- an internal Lightning `ClusterEnvironment` that presents externally assigned Tune
+  member topology without owning process-group lifecycle.
 
-There is no production Tune-trial-to-DDP topology integration, CBT Tune scheduler,
-Lightning checkpoint integration, producer-provenance path, framework-managed population
-exchange, or repeated end-to-end Clan run.
+A real two-member single-node CPU contract establishes that two concurrent Tune function
+trials can use that environment as two externally launched Lightning processes and two
+ranks in one native PyTorch DDP world. Lightning/PyTorch reduce distinct local gradients
+to one common gradient. For the qualified external-launch path, the process group remains
+active after ordinary `Trainer.fit()` returns and is released when the Tune trial process
+ends.
+
+This baseline does not establish production cohort admission, repeated-round lifecycle,
+population exchange, checkpoint integration, the CBT Tune scheduler, CUDA/NCCL, or
+multi-node support. No custom Trainer or replacement training loop is part of the design;
+Clan-specific training behavior enters through callbacks and supported strategy or
+environment seams.
 
 ## Current objective
 
@@ -32,28 +43,28 @@ preserving the ordinary Ray Tune, Lightning, and PyTorch distributed lifecycles.
 
 ## Work sequence
 
-### 1. Tune-member DDP cohort
+### 1. Complete Tune-member DDP cohort integration
 
-Directly establish and qualify the initial topology in which one live Tune trial is one
-stable Clan member and one rank in a native Lightning/PyTorch DDP group spanning the
-complete Clan.
+The externally launched Lightning topology handoff and shared-gradient path are directly
+qualified for an already available two-member CPU cohort.
 
-This work must resolve the smallest framework-native seams for:
+The remaining cohort work must resolve the smallest framework-native seams for:
 
 - admitting the complete Clan with its required resources;
-- assigning stable member and distributed-rank identity;
-- supplying world-size and rendezvous facts to Lightning's externally launched process
-  path;
-- preventing independent trial lifecycle changes while the DDP cohort is active; and
-- letting Lightning/PyTorch initialize and tear down the group.
+- assigning stable member and distributed-rank identity in production;
+- assigning world-size, rendezvous, and cohort identity without test-harness constants;
+- preventing independent trial lifecycle changes while the DDP cohort is active;
+- retaining the established group across the required round and population boundaries;
+  and
+- surfacing incomplete-cohort and member failures through framework lifecycle behavior.
 
 Do not add package-owned GLOO, NCCL, CUDA, Ray collective, or PyTorch process-group
-lifecycle. Complete the direct evidence required by
+lifecycle. Complete the remaining evidence required by
 [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md).
 
-A minimal harness or narrow scheduler seam may be used to prove the topology. It must not
-prematurely implement the full evolutionary transition or replace Tune's native trial and
-resource ownership.
+A narrow scheduler or native Tune integration seam may coordinate admission and topology.
+It must not replace Tune's trial/resource ownership, subclass or replace Lightning's
+Trainer, or prematurely implement the full evolutionary transition.
 
 ### 2. Population resolution over the established context
 
@@ -90,10 +101,12 @@ Do not restore the rejected persistent evolutionary-controller architecture.
 
 ### 5. Complete Lightning/PyTorch training integration
 
-Complete the narrow integration required for a Lightning-produced round boundary, native
-DDP common gradients, member-local optimizer application, selected-member checkpoint
-persistence, and restoration followed by target-configuration application.
+Complete the narrow callback- and strategy-based integration required for a
+Lightning-produced round boundary, native DDP common gradients, member-local optimizer
+application, selected-member checkpoint persistence, and restoration followed by
+target-configuration application.
 
+Do not subclass or replace Lightning's Trainer or create a package-owned training loop.
 Qualify the first supported optimizer, precision, device, and launch path rather than
 claiming adjacent configurations by inference.
 
