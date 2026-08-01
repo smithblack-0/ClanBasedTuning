@@ -168,12 +168,10 @@ those capabilities become enforceable.
 
 ## Supporting record
 
-The reasoning and source evidence behind these decisions and revisions are recorded in:
-
-- [Framework-alignment research report](../framework_alignment/research_report.md)
-- [Framework-alignment evidence ledger](../framework_alignment/evidence_ledger.md)
-- [Milestone 1 acceptance record](../framework_alignment/review_record.md)
-- [Framework-alignment review audit](../framework_alignment/review_audit.md)
+- [Framework evidence ledger](../framework_alignment/evidence_ledger.md)
+- [Milestone 1 framework research](../archive/milestone_1/framework_research.md)
+- [Milestone 1 acceptance record](../archive/milestone_1/acceptance_record.md)
+- [Milestone 1 review audit](../archive/milestone_1/review_audit.md)
 - [Milestone 3 system architecture](../design/system_architecture.md)
 - [Population-resolution invariants](../design/population_resolution_invariants.md)
 - [Population-resolution responsibilities](../design/population_resolution_responsibilities.md)
