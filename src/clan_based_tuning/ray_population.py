@@ -20,7 +20,7 @@ class RayPopulationRuntime:
         member_id: int,
         member_ids_by_rank: Sequence[int],
         group_name: str,
-        timeout_ms: int = 30_000,
+        timeout_ms: int,
     ):
         member_ids_by_rank = tuple(member_ids_by_rank)
         population_size = len(member_ids_by_rank)
