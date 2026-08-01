@@ -15,18 +15,23 @@ The package currently exposes:
 The current controller still receives an injected `exchange_fitness` callback. That is a
 framework-independent test seam, not the production distributed integration.
 
-The repository also contains the shared deterministic winner-selection function and
-plain scheduler-state type aliases as internal implementation pieces.
+The repository also contains the shared deterministic winner-selection function, plain
+scheduler-state type aliases, and an internal Lightning `ClusterEnvironment` for one
+externally launched Tune member. The environment reports assigned topology facts but does
+not create, release, or choose the backend for a process group.
+
+A real two-trial CPU contract establishes that ordinary Tune function trials can use that
+environment to become ranks in one Lightning/PyTorch DDP world and share one reduced
+gradient. It does not yet establish complete-cohort admission or the full Clan lifecycle.
 
 ## Accepted work not yet implemented
 
-The accepted initial topology requires:
+The remaining initial topology work requires:
 
-- one Ray Tune trial per stable Clan member;
-- one externally launched Lightning process and native PyTorch DDP rank per member;
-- framework-managed distributed setup and teardown rather than a package-owned
-  population process group;
-- population fitness exchange through that established distributed context;
+- complete-cohort admission and production assignment of member, rank, world-size, and
+  rendezvous facts;
+- coherent lifecycle of the externally launched member processes across Clan boundaries;
+- population fitness exchange through the established distributed context;
 - a selected-worker checkpoint and producer-provenance path;
 - a CBT Tune scheduler that owns the authoritative generation transition;
 - member-local optimizer application without erasing shared-gradient divergence; and
