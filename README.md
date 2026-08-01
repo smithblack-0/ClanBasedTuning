@@ -24,13 +24,13 @@ The accepted design requires:
 
 - a Ray collective population runtime with explicit stable-member association;
 - a selected-worker checkpoint and producer-provenance path;
-- one Tune-side authoritative generation transition;
+- a CBT Tune scheduler that owns the authoritative generation transition;
 - Lightning/PyTorch integration for shared gradients, selected persistence, restoration,
   and target optimizer-configuration application; and
 - a repeated real multi-member workflow.
 
-The Tune integration may use a scheduler specialization or another narrow native adapter.
-That internal choice remains open to direct Ray evidence.
+The scheduler's exact Ray superclass, delegated native machinery, and hook path remain
+open to direct framework evidence.
 
 ## Documentation
 
