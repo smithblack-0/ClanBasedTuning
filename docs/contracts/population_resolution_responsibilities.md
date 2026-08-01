@@ -43,18 +43,19 @@ remain implementation decisions requiring direct framework evidence.
 
 ## Framework-managed distributed context
 
-Lightning and PyTorch own:
+Lightning, PyTorch, and the external trial process lifecycle own:
 
-- process-group initialization and teardown;
+- process-group initialization and lifetime;
 - backend and device behavior;
 - rank and world-size realization from the supplied topology;
 - training-gradient communication;
-- barriers and collective execution; and
+- barriers and collective execution;
+- release through the qualified strategy or trial-process lifecycle; and
 - propagation of distributed failures through the supported framework lifecycle.
 
 For the initial DDP path, the already-established training group also carries the
 population fitness exchange. Population-resolution code does not create, configure,
-rendezvous, time out, or destroy a second Ray, GLOO, NCCL, CUDA, or PyTorch process group.
+rendezvous, time out, or release a second Ray, GLOO, NCCL, CUDA, or PyTorch process group.
 
 A later ClanFSDP extension may require a composed topology with multiple framework-owned
 groups. That does not transfer group lifecycle into the controller or selection logic.
@@ -107,7 +108,7 @@ exchange does not contain a second winner-selection rule.
 - one cached local save decision; and
 - copied current-configuration provenance and winner-only provenance writing.
 
-The controller does not create or destroy distributed groups. It does not expose ranks,
+The controller does not create or release distributed groups. It does not expose ranks,
 rendezvous details, or transport buffers to the user training function. It does not
 mutate configurations, derive child configurations, advance generations, or persist Tune
 transition state.
@@ -125,7 +126,7 @@ requiring the user training function to assemble those details manually.
 
 The same integration supplies the scheduler-assigned distributed topology to Lightning
 through a supported externally launched process seam. It does not call distributed
-initialization or choose the backend itself.
+initialization, release the process group, or choose the backend itself.
 
 Additional factory arguments, advanced construction paths, and internal wiring remain
 open. The ordinary path and its responsibility do not: hide framework wiring while
@@ -160,7 +161,9 @@ evidence.
 
 Lightning owns training-loop cadence, the qualifying validation-and-checkpoint boundary,
 checkpoint construction, restoration, and the distributed strategy lifecycle. Native
-PyTorch DDP owns shared-gradient communication for the supported initial path.
+PyTorch DDP owns shared-gradient communication for the supported initial path. Ray Tune
+owns the externally launched trial process whose termination may release the process group
+for that qualified path.
 
 Every required training process participates in the Lightning checkpoint boundary. Only
 the selected member retains the persistent continuation passed to Tune.
@@ -176,8 +179,8 @@ Each layer fails the facts it owns:
 - the selection policy rejects invalid comparison input;
 - the population exchange rejects malformed, incomplete, or ambiguously associated
   population results;
-- Lightning and PyTorch surface distributed initialization, communication, and member
-  failure;
+- Lightning, PyTorch, and the trial process lifecycle surface distributed initialization,
+  communication, member failure, and cleanup;
 - Lightning surfaces checkpoint-construction failure; and
 - the CBT Tune scheduler rejects incomplete or inconsistent cohort and generation
   transitions.
