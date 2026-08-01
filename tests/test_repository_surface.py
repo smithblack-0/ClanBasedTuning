@@ -3,8 +3,8 @@
 from pathlib import Path
 
 
-def test_active_package_contains_only_the_thin_worker_and_evolution_core():
-    """Historical integration and superseded round code stay outside the source tree."""
+def test_active_package_contains_only_current_accepted_components():
+    """Superseded round and standalone collective code stay outside the source tree."""
 
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
