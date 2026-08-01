@@ -57,13 +57,15 @@ Source inspection and executable behavior prove that:
 
 - Ray Tune creates and resources the trial processes;
 - ClanBasedTuning supplies only Clan cohort and topology metadata;
-- Lightning/PyTorch initialize and tear down the distributed group;
+- Lightning/PyTorch initialize and own the distributed group;
+- the qualified framework or external trial-process lifecycle releases the group;
 - backend and device behavior come from the qualified Lightning/PyTorch path; and
 - production ClanBasedTuning code does not call Ray collective-group construction,
-  `torch.distributed.init_process_group`, or equivalent backend lifecycle APIs.
+  `torch.distributed.init_process_group`, `torch.distributed.destroy_process_group`, or
+  equivalent backend lifecycle APIs.
 
 A test harness may configure the framework path, but the production population component
-must not own process-group creation or teardown.
+must not own process-group creation or release.
 
 ## Shared-training evidence
 
@@ -112,8 +114,9 @@ Each case demonstrates that:
   behavior rather than a package-owned communication watchdog; and
 - the experiment does not continue with a silently reduced Clan.
 
-The exact timeout and cancellation behavior may differ by qualified framework path. The
-evidence must state how the common failure outcome is achieved.
+The exact timeout, cancellation, and process-group release behavior may differ by
+qualified framework path. The evidence must state how the common failure outcome and
+resource release are achieved.
 
 ## Checkpoint and scheduler evidence
 
@@ -153,6 +156,7 @@ Every implementation change that establishes or broadens support records:
 - trial, stable-member, rank, and device mapping;
 - cohort-admission and rendezvous mechanism;
 - collective operation and payload representation;
+- process-group lifetime and release mechanism;
 - timeout and failure configuration;
 - commands or retained harness used;
 - pass/fail output; and
