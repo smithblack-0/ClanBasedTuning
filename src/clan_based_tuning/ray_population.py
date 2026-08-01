@@ -83,9 +83,7 @@ class RayPopulationRuntime:
                 collective.allgather(gathered, local, self.group_name)
                 population = {
                     member_id: float(fitness.item())
-                    for member_id, fitness in zip(
-                        self.member_ids_by_rank, gathered, strict=True
-                    )
+                    for member_id, fitness in zip(self.member_ids_by_rank, gathered, strict=True)
                 }
                 outcome.put((population, None))
             except Exception as error:
