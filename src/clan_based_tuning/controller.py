@@ -1,17 +1,24 @@
 """Worker-side collective checkpoint decision for Clan Tuning."""
 
 import math
-from collections.abc import Callable, Sequence
+from collections.abc import Mapping
+from typing import Protocol
 
 from clan_based_tuning.evolution import select_winner_id
+
+
+class PopulationRuntime(Protocol):
+    """Return complete member-associated fitness for one population boundary."""
+
+    def resolve(self, local_fitness: float) -> Mapping[int, float]: ...
 
 
 class ClanController:
     """Resolve whether this Tune worker should provide the round checkpoint.
 
     The controller is deliberately ephemeral. It owns one local fitness value and one
-    collective decision. Population evolution, trial configuration, checkpoint loading,
-    and scheduler state belong to the Tune scheduler and surrounding training function.
+    population decision. Population transport, evolution, trial configuration,
+    checkpoint loading, and scheduler state belong to their surrounding owners.
     """
 
     def __init__(
@@ -20,7 +27,7 @@ class ClanController:
         member_id: int,
         population_size: int,
         mode: str,
-        exchange_fitness: Callable[[float], Sequence[float]],
+        population_runtime: PopulationRuntime,
     ):
         if population_size < 2:
             raise ValueError("population_size must be at least two")
@@ -32,12 +39,12 @@ class ClanController:
         self.member_id = member_id
         self.population_size = population_size
         self._mode = mode
-        self._exchange_fitness = exchange_fitness
+        self._population_runtime = population_runtime
         self._fitness = None
         self._save_checkpoint = None
 
     def set_fitness(self, fitness):
-        """Store this worker's finite fitness for the collective decision."""
+        """Store this worker's finite fitness for the population decision."""
 
         if self._fitness is not None:
             raise RuntimeError("fitness is already set")
@@ -46,10 +53,10 @@ class ClanController:
         self._fitness = float(fitness)
 
     def should_save_checkpoint(self):
-        """Collect fitness once and return whether this worker is the winner.
+        """Resolve fitness once and return whether this worker is the winner.
 
-        The first call blocks in the injected collective exchange. Later calls return
-        the cached decision and never enter the collective again.
+        The first call blocks in the configured population runtime. Later calls return
+        the cached decision and never enter population communication again.
         """
 
         if self._fitness is None:
@@ -57,12 +64,14 @@ class ClanController:
         if self._save_checkpoint is not None:
             return self._save_checkpoint
 
-        population = list(self._exchange_fitness(self._fitness))
-        if len(population) != self.population_size:
-            raise RuntimeError("fitness collective returned the wrong population size")
-        if any(not math.isfinite(fitness) for fitness in population):
-            raise RuntimeError("fitness collective returned a non-finite value")
+        population = dict(self._population_runtime.resolve(self._fitness))
+        expected_members = set(range(self.population_size))
+        if set(population) != expected_members:
+            raise RuntimeError("population runtime returned the wrong member set")
+        if any(not math.isfinite(fitness) for fitness in population.values()):
+            raise RuntimeError("population runtime returned a non-finite value")
 
-        winner_id = select_winner_id(population, self._mode)
+        ordered_fitness = [population[member_id] for member_id in range(self.population_size)]
+        winner_id = select_winner_id(ordered_fitness, self._mode)
         self._save_checkpoint = self.member_id == winner_id
         return self._save_checkpoint
