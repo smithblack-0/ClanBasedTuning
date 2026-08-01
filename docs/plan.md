@@ -21,8 +21,8 @@ The package currently contains:
 - `MutationSpec` for bounded linear or logarithmic mutation; and
 - plain type aliases for scheduler-owned optimizer configurations.
 
-There is no production Ray population runtime, Tune generation transition, Lightning
-checkpoint integration, producer-provenance path, or repeated end-to-end Clan run.
+There is no production Ray population runtime, CBT Tune scheduler, Lightning checkpoint
+integration, producer-provenance path, or repeated end-to-end Clan run.
 
 ## Current objective
 
@@ -43,27 +43,30 @@ Complete the focused tests and real multi-process qualification required by
 ### 2. Selected-checkpoint provenance
 
 Identify and qualify the narrow Ray and Lightning seams through which only the selected
-member retains and reports the training continuation. Add enough producer provenance for
-Tune-side verification without introducing a second checkpoint payload or a second
+member retains and reports the training continuation. Implement the accepted public
+producer-provenance behavior without introducing a second checkpoint payload or a second
 configuration authority.
 
-The exact metadata container and worker-facing helper are chosen in this work, not in the
-architecture.
+The stable member and exact controlled configuration are required provenance. The exact
+metadata keys, container, and framework hook are chosen in this work.
 
-### 3. Tune generation transition
+### 3. CBT Tune scheduler
 
-Use direct Ray evidence to choose between a scheduler specialization and another narrow
-native adapter. Implement one authoritative complete-population transition that verifies
-the selected continuation, applies the shared policy, derives target optimizer
-configurations, assigns the common continuation, and releases the population together.
+Implement the accepted scheduler and its authoritative complete-population transition.
+Use direct Ray evidence to choose its exact superclass, delegated native scheduler
+machinery, persistence seam, and hook path.
+
+The scheduler verifies the selected continuation, applies the shared policy, derives
+one target optimizer configuration per stable member, persists mutation and recovery
+state, assigns the common continuation, and releases the population together.
 
 Do not restore the rejected persistent evolutionary-controller architecture.
 
 ### 4. Lightning/PyTorch training integration
 
-Implement the narrow integration required for common distributed gradients,
-member-local optimizer application, selected-member checkpoint persistence, and
-restoration followed by target-configuration application.
+Implement the narrow integration required for a Lightning-produced round boundary,
+native DDP common gradients, member-local optimizer application, selected-member
+checkpoint persistence, and restoration followed by target-configuration application.
 
 Qualify the first supported optimizer, precision, device, and launch path rather than
 claiming adjacent configurations by inference.
