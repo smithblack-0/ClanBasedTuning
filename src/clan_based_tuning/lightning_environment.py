@@ -8,8 +8,9 @@ class TuneMemberEnvironment(ClusterEnvironment):
 
     Ray Tune launches and resources the current process. This environment reports the
     immutable rank, world-size, and rendezvous facts assigned to that process so
-    Lightning and PyTorch can establish and tear down their native distributed context.
-    It never initializes, destroys, or selects a process-group backend.
+    Lightning and PyTorch can establish and use their native distributed context. The
+    surrounding framework process lifecycle remains responsible for releasing it. This
+    environment never initializes, destroys, or selects a process-group backend.
     """
 
     def __init__(
