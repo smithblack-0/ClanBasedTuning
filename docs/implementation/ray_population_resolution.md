@@ -1,7 +1,7 @@
 # Initial Ray population-resolution implementation
 
-Status: accepted initial implementation decision  
-Framework basis: Ray 2.56.x
+Status: accepted and partially implemented initial decision  
+Framework basis: Ray 2.56.1, PyTorch 2.10.x
 
 ## Authority
 
@@ -13,128 +13,134 @@ It is not architecture. A later implementation may replace any choice here witho
 reopening those contracts, provided the replacement preserves them and is qualified
 directly.
 
-## Decision
+## Implemented decision
 
-The first Ray population runtime uses `ray.util.collective.allgather`.
+The internal Ray population runtime uses `ray.util.collective.allgather` over a persistent
+GLOO collective group.
 
-Each live member contributes one scalar fitness through a Ray collective group spanning
-the complete active Clan. The group is constructed from the complete ordered member set
-and records an explicit mapping between stable member identity and collective rank.
+Each live member contributes one scalar fitness. The runtime returns a complete mapping
+from stable member identity to fitness. `ClanController` applies the shared deterministic
+selection policy and caches whether its local member is the selected checkpoint source.
+The Ray runtime does not select the winner.
 
-The implementation does not rely on rank and member identity being the same concept. It
-may assign equal integer values for convenience, but it retains the mapping as runtime
-state and interprets gathered values through that mapping.
+The runtime is internal. The accepted public `make_cbt_controller(genome=...)` factory and
+its automatic worker wiring are not implemented by this slice.
 
-Each member:
+## Identity mapping
 
-1. converts its local fitness into a one-element tensor or array supported by the chosen
-   Ray collective backend;
-2. allocates one receive element per collective rank;
-3. performs one all-gather;
-4. converts the gathered values into the semantic stable-member-to-fitness association;
-   and
-5. returns that complete association to `ClanController`.
+Collective rank is transport state, not stable member identity.
 
-`ClanController` then applies the shared deterministic selection policy and caches
-whether its local member is the selected checkpoint source.
+The runtime receives one ordered `member_ids_by_rank` mapping for the complete configured
+population. It derives its local collective rank from that mapping and translates the
+all-gather result back into a stable-member-keyed mapping before returning it to the
+controller.
 
-The Ray population runtime does not select the winner.
+The implementation therefore does not depend on stable member ID and collective rank
+having the same value. Incidental Ray buffer order is not exposed as controller meaning.
 
-## Backend and device policy
+## Transport precision and device
 
-The runtime selects a Ray-supported collective backend compatible with the configured
-execution device and payload representation.
+The implemented path uses:
 
-The controller and scheduler contracts are independent of backend, tensor library,
-device placement, and transport dtype. Those details remain runtime configuration or
-internal implementation choices.
+- Ray GLOO;
+- CPU tensors; and
+- `torch.float64` scalar fitness.
 
-A choice is acceptable only when it preserves the ordering and comparison semantics of
-the supported fitness values. A transport conversion that can change the selected member
-is a correctness defect.
+CPU transport keeps the population collective independent of the model-training device.
+`float64` preserves Python-float comparison behavior for the qualified path and avoids an
+unjustified narrowing to `float32` that could change the selected member for close values.
+
+These are choices of the initial implementation, not architectural requirements. Another
+backend, device, or representation may be introduced when direct evidence shows that it
+preserves member association and selection semantics.
 
 ## Group lifecycle
 
-The worker integration constructs one Ray collective group for the complete active Clan
-and gives the Ray population runtime access to:
+The complete population joins one collective group before entering a population boundary.
+The same initialized group may serve consecutive boundaries for the same stable live
+population. The worker integration destroys it when that population ends.
 
-- the complete stable member set;
-- the member-to-rank mapping;
-- the group identity;
-- the chosen backend and payload placement; and
-- failure and timeout configuration supported by that backend.
+`ClanController` does not initialize or destroy collective groups. It receives the
+population runtime and invokes only the semantic resolution operation.
 
-The population runtime owns group use and teardown. `ClanController` does not call Ray
-collective construction APIs directly.
+A group must not be reused across a membership change. Elastic membership and world-size
+changes remain unsupported.
 
-The same group may be reused across generation boundaries only when the implementation
-preserves generation isolation and the CBT Tune scheduler does not release the next
-generation before the current complete transition is accepted.
+## Operation timeout and actor failure
 
-Skipped, duplicated, failed, or misordered participation must surface as failure rather
-than being accepted as another population.
+Ray 2.56.1 applies `gloo_timeout` to its rendezvous metadata wait, but its GLOO wrapper
+does not pass an operation timeout into the underlying torch distributed collective.
+Consequently, a member that never enters an already initialized all-gather can otherwise
+leave its peers blocked indefinitely.
 
-## Result semantics
+The runtime therefore executes each all-gather on a daemon thread and waits for the
+configured population-boundary timeout. If the operation is still blocked, the runtime
+exits the current Ray actor. The actor failure is visible to Ray and prevents the worker
+from reporting a checkpoint or continuing as a reduced Clan.
 
-The output to the controller is a complete association between stable member identity
-and finite fitness.
+This is the first qualified failure mechanism for Ray 2.56.1. A future Ray version or
+backend with a native cancellable collective may replace it without changing the
+population-resolution contracts.
 
-The concrete Python container is internal. The implementation may use a dictionary,
-sequence plus explicit rank mapping, dedicated value object, or another representation.
-It must not expose incidental Ray buffer ordering as an undocumented controller
-contract.
+The runtime does not retry the failed operation as though the same generation remained
+valid. Recovery belongs to the enclosing CBT scheduler and experiment lifecycle.
 
-## Validation and failure
+## Result validation
 
-Before communication, invalid local fitness is rejected according to the shared
-selection policy.
+Before communication, `ClanController` rejects non-finite local fitness.
 
-After communication, the Ray population runtime or controller verifies:
+After communication, it requires:
 
-- one gathered value for every configured collective participant;
-- a complete one-to-one mapping to the configured stable members; and
-- values valid for the shared selection policy.
+- exactly one entry for every configured stable member;
+- no unconfigured member;
+- finite gathered fitness; and
+- deterministic selection through the shared policy.
 
-Group initialization failure, participant failure, collective failure, timeout,
-malformed output, or incomplete identity association fails the complete boundary.
-
-The initial implementation does not retry a failed collective as though the same
-population were still valid. Recovery belongs to the enclosing scheduler and experiment
-lifecycle.
+Malformed or incomplete member association fails before a save decision is cached.
 
 ## Public and internal surfaces
 
-The implementation must support the accepted `make_cbt_controller(genome=...)` public
-flow. This decision does not freeze additional factory arguments, an internal
-collaborator class name, constructor wiring, transport container, or helper-function
-name. Those details may change without revisiting this decision when ownership and
-behavior remain unchanged.
+This implementation adds no package-root export. The concrete runtime class, its
+constructor, lifecycle methods, timeout mechanism, rank mapping container, and transport
+buffers remain internal.
 
-## Why all-gather
+The implementation must ultimately support the accepted
+`make_cbt_controller(genome=...)` flow. That factory will hide stable identity,
+population membership, group naming, collective construction, and comparison wiring from
+the ordinary user.
 
-The worker controller applies the same framework-independent selection policy used by
-the CBT Tune scheduler. All-gather gives every worker the complete population information
-needed to apply that policy without duplicating selection inside the Ray runtime.
+## Qualified evidence so far
 
-Ray 2.56 collective communication provides all-gather on supported backends and requires
-an output list matching the collective world size. That directly matches the
-complete-population requirement.
+The retained Ray framework contract exercises:
 
-## Superseded implementation
+- three live Ray actors;
+- GLOO on CPU;
+- an explicit rank order different from stable member order;
+- adjacent Python `float64` values that would expose unsafe narrowing;
+- minimizing and maximizing selection with a stable tie;
+- cached controller decisions;
+- two consecutive boundaries through one initialized group; and
+- one required member omitting the all-gather, causing the blocked actor to exit.
 
-The current injected callback:
+The broader support and failure evidence still required is tracked in
+[`../qualification/ray_population_resolution.md`](../qualification/ray_population_resolution.md).
+
+## Superseded seam
+
+The previous injected callback:
 
 ```python
 exchange_fitness(local_fitness) -> Sequence[float]
 ```
 
-is transitional evidence, not the target interface. It lacks an explicit Ray runtime
-owner and leaves stable member association implicit.
+has been removed from `ClanController`. The controller now depends on a semantic
+population runtime returning member-associated fitness. Framework-independent unit tests
+supply a fake runtime; production wiring will supply the Ray runtime.
 
-The implementation must be replaced from the responsibility contract rather than renamed
-in place or copied from an older controller architecture.
+## Framework references
 
-## Framework reference
-
-- Ray 2.56 collective communication documentation:
+- Ray collective communication documentation:
   https://docs.ray.io/en/latest/ray-more-libs/ray-collective.html
+- Ray 2.56.1 GLOO implementation inspected for rendezvous and collective timeout
+  behavior:
+  `python/ray/util/collective/collective_group/torch_gloo_collective_group.py`
