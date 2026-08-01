@@ -94,9 +94,7 @@ def test_controller_resolves_once_across_consecutive_generations(local_ray):
     first_group = _group_name()
     first_results = ray.get(
         [
-            members[member_id].should_save.remote(
-                first_population[member_id], first_group, "min"
-            )
+            members[member_id].should_save.remote(first_population[member_id], first_group, "min")
             for member_id in range(3)
         ]
     )
