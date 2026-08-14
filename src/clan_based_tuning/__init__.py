@@ -1,8 +1,8 @@
 """Clan Tuning integration for Ray Tune, Lightning, and PyTorch."""
 
 __all__ = [
-    "ClanScheduler",
     "ClanDDPStrategy",
+    "ClanScheduler",
     "ClanTuneReportCallback",
 ]
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 
 import pytest
@@ -249,12 +250,8 @@ def test_tuner_restore_rebuilds_clan_runtime_and_continues_after_interruption(tm
                 verbose=0,
             ),
         )
-        try:
+        with contextlib.suppress(Exception):
             tuner.fit()
-        except Exception:
-            # The qualification intentionally fails the next invocation after the first
-            # successful Clan transition. The durable experiment is the artifact under test.
-            pass
     finally:
         ray.shutdown()
 

@@ -192,9 +192,10 @@ def get_or_create_coordinator(runtime_spec: ClanRuntimeSpec):
 def join_runtime() -> ClanRuntime:
     """Discover and join the Clan assigned to the current ordinary Tune function trial."""
 
+    from uuid import uuid4
+
     import ray
     from ray import tune
-    from uuid import uuid4
 
     if _torch_distributed_is_initialized():
         raise RuntimeError(
