@@ -19,6 +19,9 @@ That path already includes:
 - production stable-member/rendezvous assignment for the initial one-trial/one-rank
   topology;
 - Lightning/PyTorch shared-gradient DDP over the framework-managed process group;
+- ordinary rank-partitioned Lightning training data;
+- replicated Lightning-managed validation data so every candidate sees the same held-out
+  examples, including the sanity-validation loader setup path;
 - member-local fitness exchange through the active Lightning strategy;
 - deterministic worker and scheduler winner agreement;
 - winner-only persistent CBT checkpointing while retaining Lightning's checkpoint barrier;
@@ -34,7 +37,7 @@ logic used to establish that result.
 
 ## Current objective
 
-Turn the initial qualified mechanics path into a robust and usable supported path without
+Turn the initial qualified mechanics path into a robust and useful supported path without
 changing its userspace ownership boundary or replacing framework-native lifecycle
 machinery.
 
@@ -43,27 +46,13 @@ machinery.
 ### 1. Finish synchronization and public mechanics example
 
 Keep the public API, design, behavioral contracts, qualification record, status, and
-examples aligned with the code that actually passed.
+example aligned with the code that actually passed.
 
-Add a small reproducible mechanics example using the same public function API once its
-validation-data arrangement is explicit enough not to teach an accidental unsupported
-pattern. The example must show genome use as ordinary user code, not through a CBT helper.
+Add a small reproducible mechanics example using the same public function API. It should
+use the qualified Lightning-managed data path and show genome use as ordinary user code,
+not through a CBT helper.
 
-### 2. Make comparable evaluation convenient and explicit
-
-Lightning normally injects distributed samplers into validation dataloaders under DDP.
-Clan selection instead needs member-local candidate fitness values that are valid to
-compare.
-
-Resolve and qualify a framework-native ordinary path for equivalent held-out evaluation.
-Possible implementation work may use supported Lightning data/strategy seams, but it must
-not silently rewrite arbitrary user sampler semantics without a contracted behavior.
-
-Acceptance requires a multi-example validation test that would detect accidental
-rank-specific evaluation and a documented rule against reducing the candidate fitness
-metric across the Clan.
-
-### 3. Harden complete-cohort admission and failure behavior
+### 2. Harden complete-cohort admission and failure behavior
 
 The initial runtime waits for the complete assigned population and has a bounded pre-DDP
 rendezvous timeout, but all members must already fit concurrently on the cluster.
@@ -76,21 +65,31 @@ Separately qualify what happens when a participant disappears inside an active f
 collective. Do not claim bounded recovery until the real failure path releases healthy
 participants or fails the experiment predictably.
 
-### 4. Qualify GPU execution
+### 3. Qualify GPU execution
 
 Run the same public path on the intended CUDA/NCCL configuration. Production code must
 continue to use the backend selected by Lightning/PyTorch rather than adding a CBT backend
 switch.
 
-Evidence must cover shared gradients, member-local divergence, fitness exchange,
-winner-only checkpoint persistence, full continuation restore, and repeated generation
-transition.
+Evidence must cover shared gradients, partitioned training, replicated validation,
+member-local divergence, fitness exchange, winner-only checkpoint persistence, full
+continuation restore, userspace genome use, and repeated generation transition.
 
-### 5. Qualify multi-node execution
+### 4. Qualify multi-node execution
 
 Extend the same one-member/one-rank DDP path across nodes. Resolve only topology and
 rendezvous behavior actually required by the framework evidence. Do not replace the
 single-node integration with a separate multi-node training system.
+
+### 5. Harden advanced integration surfaces and observability
+
+Qualify only the extensions users actually need, including explicit/custom distributed
+validation samplers and custom or sharded checkpoint plugins where relevant.
+
+Improve mutation/transition observability without faking Ray's native PBT mutation table
+or copying private PBT exploit machinery merely to alter its console logging. The current
+custom `MutationSpec` behavior is authoritative even though stock PBT's built-in explore
+log does not describe those mutations.
 
 ### 6. Expand scientific and operational evidence
 
@@ -116,7 +115,6 @@ The initial CPU mechanics path is complete when the synchronized documentation a
 qualification record agree with a green exact-head CI run. It is not equivalent to a
 broad production-support claim.
 
-The next practical milestone is a documented, reproducible public path with comparable
-evaluation and predictable cohort/failure behavior on the intended GPU environment. All
-later work must preserve the same fundamental contract: CBT supplies a genome; the user
-owns what happens with it.
+The next practical milestone after that review boundary is predictable complete-cohort and
+failure behavior on the intended GPU environment. All later work must preserve the same
+fundamental contract: CBT supplies a genome; the user owns what happens with it.
