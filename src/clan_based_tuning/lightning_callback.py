@@ -28,6 +28,9 @@ from clan_based_tuning.protocol import (
 _LOGGER = logging.getLogger(__name__)
 
 
+# Main
+
+
 class ClanTuneReportCallback(Callback):
     """Resolve one Clan boundary and report it through ordinary Ray Tune.
 
@@ -106,6 +109,8 @@ class ClanTuneReportCallback(Callback):
 
     @staticmethod
     def _metric_value(trainer: Trainer, metric: str) -> float:
+        """Read one required callback metric and normalize tensor/scalar values to float."""
+
         try:
             value = trainer.callback_metrics[metric]
         except KeyError as error:
@@ -117,6 +122,8 @@ class ClanTuneReportCallback(Callback):
         return float(value)
 
     def _extra_report(self, trainer: Trainer) -> dict[str, float]:
+        """Return explicitly requested auxiliary Lightning metrics under their Ray names."""
+
         metrics = self._extra_metrics
         if metrics is None:
             return {}
