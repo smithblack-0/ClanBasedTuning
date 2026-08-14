@@ -4,8 +4,8 @@ Last updated: 2026-08-14
 
 ## Current implementation
 
-The active function-API branch now contains a complete initial Clan Tuning path built on
-Ray Tune, Lightning, and PyTorch rather than a package-owned training system.
+The active function-API branch contains a complete initial Clan Tuning path built on Ray
+Tune, Lightning, and PyTorch rather than a package-owned training system.
 
 The implemented pieces are:
 
@@ -15,7 +15,8 @@ The implemented pieces are:
 - `ClanScheduler.wrap(train)`, which carries hidden cohort/rendezvous context while
   forwarding Ray's config dictionary unchanged to the user's function;
 - `ClanDDPStrategy`, which presents the externally assigned Tune-member topology to
-  Lightning and uses the framework's existing distributed backend/process group;
+  Lightning, uses the framework's existing distributed backend/process group, preserves
+  partitioned training, and replicates Lightning-managed validation across candidates;
 - `ClanTuneReportCallback`, which resolves member-local fitness, performs winner-only CBT
   checkpoint persistence, and reports the round to Tune;
 - `ClanController`, the framework-independent one-fitness/one-decision primitive used by
@@ -43,6 +44,9 @@ The contract establishes that:
 
 - the two Tune trials form one Lightning/PyTorch DDP world;
 - both members contribute to one common reduced gradient;
+- normal Lightning-managed training remains partitioned between ranks;
+- Lightning-managed validation is replicated so both diverged candidates see the same
+  complete multi-example held-out set, including the normal sanity-validation setup path;
 - member-local optimizer choices produce candidate divergence;
 - every member reaches the same population winner through the active distributed context;
 - all ranks participate in Lightning checkpoint construction/barrier while only the
@@ -89,6 +93,11 @@ The fully qualified Lightning restore example in [`docs/api.md`](docs/api.md) sh
 explicit userspace pattern for applying a changed optimizer genome while retaining
 Lightning's complete checkpoint restoration.
 
+For ordinary Lightning-managed dataloaders, training keeps DDP partitioning while the
+automatically injected validation sampler is replicated across Clan members. If a user
+explicitly supplies a `DistributedSampler`, CBT leaves it alone; that sampler's evaluation
+semantics remain userspace.
+
 ## Known limits and remaining work
 
 The current complete-path evidence does **not** yet establish:
@@ -97,15 +106,14 @@ The current complete-path evidence does **not** yet establish:
 - multi-node execution;
 - actor reuse across generations;
 - bounded recovery after a member disappears inside an active distributed collective;
-- automatic replication of an identical validation workload to every member;
+- semantics of explicitly user-supplied distributed validation samplers;
 - arbitrary/custom/sharded checkpoint plugins;
 - model-sharded Clan execution / ClanFSDP; or
 - scaled scientific usefulness beyond the mechanics contract.
 
-Lightning normally inserts distributed samplers for validation under DDP. The initial path
-therefore requires the user to arrange a fitness workload whose member-local values are
-valid to compare and to avoid reducing the candidate fitness metric across the Clan.
-Improving this validation-data usability is active follow-up work.
+The candidate fitness metric must remain member-local until CBT's population exchange;
+logging it with cross-rank reduction would collapse the candidate distinction selection
+needs.
 
 The complete Clan must also be concurrently schedulable. The initial runtime waits for the
 whole assigned cohort rather than safely time-multiplexing DDP members; a stronger gang
@@ -113,9 +121,9 @@ admission/failure story remains hardening work.
 
 ## Current work
 
-The code path is no longer waiting on scheduler, population-exchange, checkpoint, or
-repeated-generation implementation. Current work is to finish synchronization and
-qualification of that path, then extend it without changing its userspace boundary.
+The initial CPU mechanics path is implemented and qualified. Current work is final
+synchronization/review of that path, followed by cohort/failure hardening and GPU
+qualification without changing its userspace boundary.
 
 The active sequence is in [`docs/plan.md`](docs/plan.md). Exact evidence for the complete
 function path is recorded in [`docs/qualification/function_api.md`](docs/qualification/function_api.md).
