@@ -18,6 +18,8 @@ from tests.support.tiny_mlp import (
 
 
 def _parse_args() -> argparse.Namespace:
+    """Parse the requested number of complete Clan generation boundaries to measure."""
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generations", type=int, default=3)
     return parser.parse_args()
