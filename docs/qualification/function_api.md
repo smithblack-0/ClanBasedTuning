@@ -11,7 +11,7 @@ accepted userspace genome boundary.
 
 This qualification is intentionally narrow. It establishes the mechanics listed below for
 the tested versions and topology; it does not imply adjacent GPU, multi-node, failure, or
-sampler support.
+explicit-user-sampler support.
 
 ## Qualified environment
 
@@ -68,7 +68,35 @@ The previously qualified environment contract verifies that distinct local gradi
 reduced to one common gradient by Lightning/PyTorch. No CBT process-group initialization,
 backend selection, or second population group is used.
 
-### 3. Member-local updates diverge after the common gradient
+### 3. Training remains partitioned while validation is replicated
+
+The end-to-end contract supplies four distinct training examples and four distinct
+validation examples.
+
+For training, Lightning's ordinary DDP sampler remains active. With one training batch per
+round, the two final member reports contain two distinct training sample values. The exact
+sample positions are intentionally not contracted because restored Lightning loop/sampler
+progress determines where each rank resumes inside its shard.
+
+For validation, `ClanDDPStrategy` changes only Lightning's automatically injected sampler
+kwargs while the Trainer is validating or sanity checking. Every member receives an
+effective one-replica sampler over the complete validation dataset.
+
+The test enables Lightning's ordinary sanity validation, allowing the validation loader to
+be prepared and cached through that normal path. At the real Clan validation boundary,
+every member must report:
+
+- validation sample count `4`; and
+- validation sample sum `6` for examples `[0, 1, 2, 3]`.
+
+Both members therefore evaluate the same complete held-out examples while training
+remains partitioned.
+
+Lightning does not automatically replace an explicitly user-supplied `DistributedSampler`.
+CBT likewise leaves such a sampler untouched; its semantics are not established by this
+qualification.
+
+### 4. Member-local updates diverge after the common gradient
 
 The initial genomes are `lr=0.1` and `lr=0.2`. Both members receive the same reduced
 gradient, then apply their own optimizer configuration in ordinary Lightning/PyTorch
@@ -77,7 +105,7 @@ optimization.
 The candidate with `lr=0.2` reaches weight `0.8` and wins the first minimizing
 `weight**2` validation boundary over the `lr=0.1` member.
 
-### 4. All members agree on one winner before Tune transition
+### 5. All members agree on one winner before Tune transition
 
 At validation end, each member contributes one local scalar fitness through
 `trainer.strategy.all_gather()` on the active Lightning strategy.
@@ -88,7 +116,7 @@ worker/scheduler disagreement.
 
 The test completes the boundary successfully with one common winner.
 
-### 5. One persistent CBT continuation is produced
+### 6. One persistent CBT continuation is produced
 
 Every rank enters `Trainer.save_checkpoint()`, so Lightning constructs the required local
 checkpoint state and executes its framework-owned post-save barrier.
@@ -104,7 +132,7 @@ This establishes the intended storage distinction:
 > transient framework materialization is allowed; persistent Clan continuations remain
 > winner-only.
 
-### 6. Ray transfers the selected continuation to the next function invocation
+### 7. Ray transfers the selected continuation to the next function invocation
 
 The next generation receives the first winner's checkpoint through
 `tune.get_checkpoint()`.
@@ -118,7 +146,7 @@ The strengthened full-restore contract verifies that both next members begin fro
 Thus the generation transition preserves model state, optimizer history, and Lightning
 training progress through the ordinary Lightning checkpoint restore path.
 
-### 7. Every next member receives a sibling mutation of the selected parent genome
+### 8. Every next member receives a sibling mutation of the selected parent genome
 
 The scheduler snapshots the selected parent's `lr=0.2` config before mutating any target.
 With mutation seed `7`, both next members receive independent mutations of that same
@@ -133,7 +161,7 @@ This rejects stock-PBT semantics where the source member would retain its exact 
 and it rejects chained mutation where a later child would accidentally mutate an already
 mutated sibling.
 
-### 8. The supplied next genome is actually used by userspace
+### 9. The supplied next genome is actually used by userspace
 
 Each second-generation model logs the learning rate visible in its optimizer after the
 user's restore/application block. The test requires that value to equal the corresponding
@@ -152,8 +180,7 @@ This qualification does not establish:
 - multi-node execution;
 - actor/process reuse across generations;
 - recovery after a member disappears inside an active distributed collective;
-- arbitrary or custom validation-sampler arrangements;
-- automatic replication of an identical validation set to each member;
+- semantics of explicitly user-supplied distributed validation samplers;
 - custom or sharded checkpoint plugins;
 - model-sharded Clan execution / ClanFSDP; or
 - scientific performance on realistic workloads.
@@ -162,13 +189,14 @@ The current runtime requires enough resources for the complete Clan to become re
 concurrently. It has a bounded pre-DDP rendezvous timeout but no CBT-specific cancellation
 layer around an active framework collective.
 
-Lightning normally injects distributed samplers into validation dataloaders under DDP.
-The qualified mechanics test uses an evaluation arrangement where the resulting local
-fitness values are comparable. General evaluation-data usability remains follow-up work.
-
 The candidate fitness metric must remain member-local until CBT's population exchange;
 logging it with cross-rank reduction would collapse the candidate distinction selection
 needs.
+
+Ray's stock PBT console logger currently reports no native hyperparameter mutations because
+CBT's `MutationSpec` policy intentionally does not populate Ray's built-in mutation table.
+The resulting child configs are directly asserted by the contract; richer mutation
+observability is follow-up work rather than part of this support claim.
 
 ## Acceptance meaning
 
