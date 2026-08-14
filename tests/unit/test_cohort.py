@@ -1,8 +1,8 @@
 """Unit contracts for experiment identity, stable members, and invocation rendezvous.
 
 The cohort state is deliberately tested without Ray actors. These contracts establish that
-concurrent experiments cannot collide in the registry and that a DDP session opens only for
-one complete set of fresh invocation tokens.
+concurrent experiments cannot collide in the registry, completed assignments are releasable,
+and a DDP session opens only for one complete set of fresh invocation tokens.
 """
 
 import pytest
@@ -14,6 +14,8 @@ def _runtime_spec(
     coordinator_name: str = "coordinator-a",
     experiment_name: str = "experiment-a",
 ) -> ClanRuntimeSpec:
+    """Build one small immutable cohort assignment for pure-state unit contracts."""
+
     return ClanRuntimeSpec(
         coordinator_name=coordinator_name,
         experiment_name=experiment_name,
@@ -26,8 +28,8 @@ def _runtime_spec(
     )
 
 
-def test_registry_scopes_trial_ids_by_experiment_and_rejects_conflicts() -> None:
-    """Identical trial IDs may belong to different experiments but not two Clans in one run."""
+def test_registry_scopes_trial_ids_by_experiment_rejects_conflicts_and_releases() -> None:
+    """Registry identity is experiment-scoped, conflict-safe, and removable after completion."""
 
     registry = RuntimeRegistry()
     first = _runtime_spec()
@@ -46,6 +48,11 @@ def test_registry_scopes_trial_ids_by_experiment_and_rejects_conflicts() -> None
             ["trial-a"],
             _runtime_spec("coordinator-c", "experiment-a"),
         )
+
+    registry.unregister_trials("experiment-a", ["trial-a", "trial-b"])
+    assert registry.get_runtime_spec("experiment-a", "trial-a") is None
+    assert registry.get_runtime_spec("experiment-a", "trial-b") is None
+    assert registry.get_runtime_spec("experiment-b", "trial-a") == second_experiment
 
 
 def test_coordinator_assigns_stable_members_and_opens_only_complete_sessions() -> None:
