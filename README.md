@@ -9,8 +9,7 @@ population selection.
 The active integration follows Ray Tune's ordinary function-trainable/PBT shape:
 
 ```python
-def train(genome):
-    ...
+def train(genome): ...
 ```
 
 Ray supplies each member's current genome. ClanBasedTuning selects the common parent and
