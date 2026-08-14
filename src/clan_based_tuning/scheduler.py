@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import copy
 import random
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 from uuid import uuid4
 
 from ray.air.constants import TRAINING_ITERATION
@@ -144,7 +145,9 @@ class ClanScheduler(PopulationBasedTraining):
                 raise RuntimeError("Clan result is missing stable member identity") from error
             expected_member = self._member_ids[trial.trial_id]
             if member_id != expected_member:
-                raise RuntimeError("Clan result member identity disagrees with scheduler assignment")
+                raise RuntimeError(
+                    "Clan result member identity disagrees with scheduler assignment"
+                )
             if member_id in by_member:
                 raise RuntimeError("Clan boundary contains a duplicated member")
             by_member[member_id] = (trial, result)
@@ -152,7 +155,10 @@ class ClanScheduler(PopulationBasedTraining):
         if set(by_member) != set(range(self.population_size)):
             raise RuntimeError("Clan boundary does not contain the complete configured population")
 
-        fitnesses = [float(by_member[member_id][1][self._metric]) for member_id in range(self.population_size)]
+        fitnesses = [
+            float(by_member[member_id][1][self._metric])
+            for member_id in range(self.population_size)
+        ]
         winner_id = select_winner_id(fitnesses, self._mode)
 
         for member_id, (trial, result) in by_member.items():
@@ -162,10 +168,14 @@ class ClanScheduler(PopulationBasedTraining):
             if bool(result[CLAN_CHECKPOINT_SOURCE]) != expected_checkpoint_source:
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
             if result[CLAN_GENOME] != self._controlled_genome(trial.config):
-                raise RuntimeError("reported producer genome disagrees with the active Tune config")
+                raise RuntimeError(
+                    "reported producer genome disagrees with the active Tune config"
+                )
 
         winner_trial = by_member[winner_id][0]
-        losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
+        losers = [
+            trial for member_id, (trial, _) in by_member.items() if member_id != winner_id
+        ]
         return losers, [winner_trial]
 
     def _get_new_config(self, trial, trial_to_clone):
