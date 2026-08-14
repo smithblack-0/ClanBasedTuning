@@ -33,11 +33,13 @@ def _train_member(genome):
             self.round_start_weight = None
             self.round_start_global_step = None
             self.momentum_before_step = None
+            self.training_sample_value = None
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
 
         def training_step(self, batch, batch_index):
-            del batch, batch_index
+            del batch_index
+            self.training_sample_value = float(batch[0].item())
             return self.weight
 
         def on_train_start(self):
@@ -64,6 +66,7 @@ def _train_member(genome):
                 self.log("round_start_weight", self.round_start_weight)
                 self.log("round_start_global_step", self.round_start_global_step)
                 self.log("momentum_before_step", self.momentum_before_step)
+                self.log("training_sample_value", self.training_sample_value)
 
         def on_validation_epoch_end(self):
             if not self.trainer.sanity_checking:
@@ -96,10 +99,15 @@ def _train_member(genome):
         state["optimizer_states"][0] = model.optimizer.state_dict()
         torch.save(state, checkpoint_path)
 
-    train_data = DataLoader(TensorDataset(torch.tensor([0.0])), batch_size=1)
+    train_data = DataLoader(
+        TensorDataset(torch.tensor([0.0, 1.0, 2.0, 3.0])),
+        batch_size=1,
+        shuffle=False,
+    )
     validation_data = DataLoader(
         TensorDataset(torch.tensor([0.0, 1.0, 2.0, 3.0])),
         batch_size=1,
+        shuffle=False,
     )
     trainer = lightning.Trainer(
         accelerator="cpu",
@@ -112,6 +120,7 @@ def _train_member(genome):
                     "round_start_weight",
                     "round_start_global_step",
                     "momentum_before_step",
+                    "training_sample_value",
                     "validation_sample_sum",
                     "validation_sample_count",
                 ]
@@ -186,6 +195,11 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         assert result.metrics["momentum_before_step"] == pytest.approx(1.0)
         assert result.metrics["validation_sample_count"] == pytest.approx(4.0)
         assert result.metrics["validation_sample_sum"] == pytest.approx(6.0)
+
+    # Training remains normally partitioned across ranks. With shuffle disabled and one
+    # training batch, rank 0 receives sample 0 and rank 1 receives sample 1.
+    training_samples = sorted(result.metrics["training_sample_value"] for result in results)
+    assert training_samples == pytest.approx([0.0, 1.0])
 
     # The first winner used lr=0.2. Every second-round member receives an independent
     # deterministic mutation of that same selected parent genome, including the winner.
