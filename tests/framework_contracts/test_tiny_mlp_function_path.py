@@ -48,9 +48,7 @@ def test_tiny_mlp_repeats_training_and_optimizer_restoration(tmp_path: Path) -> 
         assert result.metrics["training_iteration"] >= 2
         assert math.isfinite(float(result.metrics["val_loss"]))
         assert result.metrics["lr_seen"] == pytest.approx(result.config["lr"])
-        assert result.metrics["weight_decay_seen"] == pytest.approx(
-            result.config["weight_decay"]
-        )
+        assert result.metrics["weight_decay_seen"] == pytest.approx(result.config["weight_decay"])
         assert result.metrics["restored_global_step"] > 0
         assert result.metrics["device_is_cuda"] == pytest.approx(0.0)
         assert result.metrics["backend_is_nccl"] == pytest.approx(0.0)
