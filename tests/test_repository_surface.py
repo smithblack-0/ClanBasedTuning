@@ -16,7 +16,12 @@ def test_active_package_contains_only_current_accepted_components():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/evolution.py",
+        "src/clan_based_tuning/lightning_callback.py",
         "src/clan_based_tuning/lightning_environment.py",
+        "src/clan_based_tuning/lightning_strategy.py",
+        "src/clan_based_tuning/protocol.py",
+        "src/clan_based_tuning/runtime.py",
+        "src/clan_based_tuning/scheduler.py",
         "src/clan_based_tuning/scheduler_types.py",
     }
 
@@ -33,6 +38,7 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
     assert test_files == {
+        "tests/framework_contracts/test_clan_function_api.py",
         "tests/framework_contracts/test_removed_integration_surface.py",
         "tests/framework_contracts/test_tune_member_lightning_environment.py",
         "tests/test_package.py",
@@ -42,8 +48,20 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
 
+def test_production_package_does_not_own_genome_application():
+    """Genome interpretation stays entirely in the user's Tune function."""
+
+    repository_root = Path(__file__).resolve().parents[1]
+    package_root = repository_root / "src" / "clan_based_tuning"
+    source = "\n".join(path.read_text() for path in package_root.rglob("*.py"))
+
+    assert "apply_genome" not in source
+    assert "optimizer.param_groups" not in source
+    assert "load_optimizer_state_dict" not in source
+
+
 def test_no_active_training_example_precedes_the_new_integration():
-    """Examples must be rebuilt only after the accepted Tune and Lightning seams."""
+    """Examples remain separate until the function API contract is qualified."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"
