@@ -9,8 +9,8 @@ boundaries. It does not redefine the Clan Tuning method or duplicate the public 
 example in [`../api.md`](../api.md).
 
 The design is firm where implementation and direct framework evidence have selected a
-working path. Unqualified hardware, failure, sampler, and model-sharding extensions remain
-open rather than being implied by the initial CPU evidence.
+working path. Unqualified hardware, failure, explicit-sampler, and model-sharding
+extensions remain open rather than being implied by the initial CPU evidence.
 
 ## Runtime model
 
@@ -62,15 +62,23 @@ Lightning and PyTorch own:
 - process-group lifetime within the qualified externally launched trial lifecycle.
 
 CBT does not establish a second process group for population resolution and does not
-hardcode GLOO, NCCL, CPU, CUDA, or another backend. The CPU qualification harness chooses
-GLOO only because that is the test environment.
+hardcode GLOO, NCCL, CPU, CUDA, or another backend. The CPU qualification harness reaches
+GLOO through Lightning/PyTorch's ordinary setup.
 
 The strategy disables DDP per-forward buffer broadcast after setup. This prevents later
 member-local persistent buffers from being silently replaced by rank-zero values after the
 members have diverged.
 
-Training data follows Lightning's ordinary distributed-sampler behavior unless the user
-configures otherwise.
+For Lightning-managed dataloaders, training keeps ordinary DDP partitioning. Validation
+has a different Clan requirement: every diverged candidate must be scored on the same
+held-out examples. When Lightning would automatically inject a `DistributedSampler` for
+validation or sanity validation, `ClanDDPStrategy` supplies sampler kwargs equivalent to a
+single replica (`num_replicas=1, rank=0`) on every member. Each member therefore evaluates
+the complete validation dataset while training remains partitioned.
+
+Lightning only performs that automatic replacement when the user has not already supplied
+a `DistributedSampler`. An explicitly supplied distributed sampler remains userspace and
+CBT does not replace or reinterpret it.
 
 ## Round boundary and member-local fitness
 
@@ -91,11 +99,11 @@ a disagreement.
 The fitness metric must remain member-local until CBT compares it. User logging that
 reduces the candidate fitness across ranks would destroy the distinction CBT needs.
 
-Lightning normally partitions validation loaders under DDP. The current implementation
-does not silently replace user samplers in order to force identical validation examples on
-all members. The qualified path therefore requires the user to arrange a held-out workload
-whose local fitness values are valid to compare. Automatic identical-set replication is a
-remaining usability/qualification item.
+The qualified default Lightning data path verifies both sides of the intended sampling
+behavior with a multi-example dataset: the two training members consume distinct shard
+samples, while both validation members see all four held-out examples (count `4`, sum
+`6`), including when Lightning first prepares the validation loader for its normal sanity
+check.
 
 ## One selected continuation
 
@@ -175,12 +183,16 @@ interpret the mutated keys.
 - **Lightning/PyTorch** own distributed initialization, backend/device behavior, DDP,
   gradients, collectives, training/validation cadence, full-state restoration, checkpoint
   construction, and checkpoint barriers.
+- **`ClanDDPStrategy`** supplies the Clan topology, preserves training partitioning, and
+  adapts only Lightning's automatically managed validation sampler to replicate the
+  held-out set across candidates.
 - **`ClanTuneReportCallback`** bridges one Lightning validation boundary to one Tune
   report and winner-only CBT checkpoint.
 - **`ClanController`** owns one local fitness, one complete-population decision, and the
   cached selected-member answer.
 - **User code** owns the genome's meaning and every effect it has on model, optimizer, or
-  other program state.
+  other program state; explicit user-supplied distributed samplers are likewise not
+  rewritten by CBT.
 
 The integration contains no package-owned Trainer, Trainable subclass, replacement
 training loop, second process group, second checkpoint payload, or CBT-owned genome
@@ -190,15 +202,16 @@ application system.
 
 The complete path is directly qualified for two concurrent members on one CPU node with
 Ray 2.56.1, Lightning 2.6.5, PyTorch 2.10.0, and Python 3.11. The test covers two
-successive generations through the real public function path.
+successive generations through the real public function path and the ordinary
+Lightning-managed training/validation sampler path.
 
 The current evidence does not establish:
 
 - CUDA/NCCL behavior;
 - multi-node execution;
 - actor reuse;
-- automatic identical validation-set replication;
 - failure recovery or bounded release after a failed collective participant;
+- semantics of explicitly user-supplied distributed validation samplers;
 - custom/sharded checkpoint plugins; or
 - ClanFSDP/model-sharded execution.
 
