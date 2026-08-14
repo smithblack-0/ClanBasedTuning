@@ -29,8 +29,8 @@ class ClanScheduler(PopulationBasedTraining):
 
     Ray remains responsible for trial execution, pausing, checkpoint transfer, restore,
     and configuration replacement. This scheduler changes the population policy: one
-    selected member is the parent for the whole next generation and every losing target
-    receives a mutation of that parent's Tune config.
+    selected member is the parent for the whole next generation and every target receives
+    an independent mutation of that parent's Tune config.
 
     The config's meaning is not part of this class. CBT supplies the config to the user's
     function and never applies its values to an optimizer, model, or other user state.
@@ -61,6 +61,7 @@ class ClanScheduler(PopulationBasedTraining):
         self._random = random.Random(seed)
         self._trial_ids: set[str] = set()
         self._member_ids: dict[str, int] = {}
+        self._parent_config: dict[str, Any] | None = None
         self._coordinator_handle = None
         self._runtime_spec = ClanRuntimeSpec(
             coordinator_name=f"clan-runtime-{uuid4().hex}",
@@ -165,14 +166,26 @@ class ClanScheduler(PopulationBasedTraining):
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
 
         winner_trial = by_member[winner_id][0]
+        self._parent_config = copy.deepcopy(winner_trial.config)
         losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
         return losers, [winner_trial]
 
-    def _get_new_config(self, trial, trial_to_clone):
-        """Clone the selected Tune config and mutate only declared genome keys."""
+    def _checkpoint_or_exploit(self, trial, tune_controller, upper_quantile, lower_quantile):
+        """Use PBT transfer, then give the selected source its own next mutation too."""
 
-        del trial
-        new_config = copy.deepcopy(trial_to_clone.config)
+        super()._checkpoint_or_exploit(trial, tune_controller, upper_quantile, lower_quantile)
+        if trial in upper_quantile:
+            new_config, _ = self._get_new_config(trial, trial)
+            trial.set_config(new_config)
+
+    def _get_new_config(self, trial, trial_to_clone):
+        """Mutate a fresh copy of the selected round parent's Tune config."""
+
+        del trial, trial_to_clone
+        if self._parent_config is None:
+            raise RuntimeError("Clan parent config was not resolved before mutation")
+
+        new_config = copy.deepcopy(self._parent_config)
         operations = {}
         for key, mutation in self._mutations.items():
             old_value = new_config[key]
