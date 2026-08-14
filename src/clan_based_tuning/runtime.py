@@ -84,7 +84,9 @@ class _ClanCoordinator:
         if len(set(trial_ids)) != len(trial_ids):
             raise ValueError("Tune trial IDs must be unique")
 
-        assignment = {trial_id: member_id for member_id, trial_id in enumerate(sorted(trial_ids))}
+        assignment = {
+            trial_id: member_id for member_id, trial_id in enumerate(sorted(trial_ids))
+        }
         if self.member_ids and self.member_ids != assignment:
             raise RuntimeError("Clan coordinator was already registered with another population")
         self.member_ids = assignment
@@ -165,13 +167,13 @@ def current_runtime() -> ClanRuntime:
     return runtime
 
 
-def _activate_runtime(runtime: ClanRuntime):
-    """Set process-local runtime state without closing over it in Ray's trainable wrapper."""
+def _activate_wrapped_runtime(runtime_spec: ClanRuntimeSpec, genome: dict[str, Any]):
+    """Join the Clan and install runtime state inside the remote process."""
 
-    return _CURRENT_RUNTIME.set(runtime)
+    return _CURRENT_RUNTIME.set(_join_runtime(runtime_spec, genome))
 
 
-def _deactivate_runtime(token) -> None:
+def _deactivate_wrapped_runtime(token) -> None:
     """Restore process-local runtime state after a wrapped trainable returns."""
 
     _CURRENT_RUNTIME.reset(token)
@@ -185,12 +187,19 @@ def wrap_function_trainable(
 
     @functools.wraps(trainable)
     def wrapped(genome: dict[str, Any]):
-        runtime = _join_runtime(runtime_spec, genome)
-        token = _activate_runtime(runtime)
+        # Local imports keep the non-picklable process-local ContextVar out of Ray's
+        # serialized function closure. Only the user's trainable and runtime spec cross
+        # the driver/worker boundary.
+        from clan_based_tuning.runtime import (
+            _activate_wrapped_runtime,
+            _deactivate_wrapped_runtime,
+        )
+
+        token = _activate_wrapped_runtime(runtime_spec, genome)
         try:
             return trainable(genome)
         finally:
-            _deactivate_runtime(token)
+            _deactivate_wrapped_runtime(token)
 
     return wrapped
 
@@ -229,7 +238,10 @@ def _join_runtime(runtime_spec: ClanRuntimeSpec, genome: dict[str, Any]) -> Clan
     handle = None
     while handle is None and time.monotonic() < deadline:
         try:
-            handle = ray.get_actor(runtime_spec.coordinator_name, namespace=runtime_spec.namespace)
+            handle = ray.get_actor(
+                runtime_spec.coordinator_name,
+                namespace=runtime_spec.namespace,
+            )
         except ValueError:
             time.sleep(runtime_spec.poll_interval_s)
     if handle is None:
