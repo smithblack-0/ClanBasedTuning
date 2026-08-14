@@ -20,6 +20,11 @@ class ClanDDPStrategy(DDPStrategy):
     Tune trials. Backend selection, process-group initialization, collectives, gradient
     reduction, and teardown remain Lightning/PyTorch responsibilities.
 
+    Training uses ordinary DDP data partitioning. When Lightning auto-injects a sampler
+    for validation (including sanity validation), every Clan member instead receives the
+    full validation dataset so candidate fitness is evaluated on the same held-out data.
+    Explicit user-supplied distributed samplers remain user-owned and are not replaced.
+
     Per-forward buffer broadcast is disabled so one member's post-update buffers cannot
     overwrite another member's local state. CBT round checkpointing temporarily selects
     one rank as the writer; every rank still participates in Lightning checkpoint
@@ -48,8 +53,11 @@ class ClanDDPStrategy(DDPStrategy):
 
     @property
     def distributed_sampler_kwargs(self) -> dict[str, int]:
-        """Partition data across the complete cross-trial DDP world."""
+        """Partition training while replicating Lightning-managed validation data."""
 
+        trainer = self.lightning_module.trainer if self.lightning_module is not None else None
+        if trainer is not None and (trainer.validating or trainer.sanity_checking):
+            return {"num_replicas": 1, "rank": 0}
         return {"num_replicas": self.world_size, "rank": self.global_rank}
 
     def setup_environment(self) -> None:
