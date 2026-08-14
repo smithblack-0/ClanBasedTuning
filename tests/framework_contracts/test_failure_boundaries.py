@@ -66,8 +66,13 @@ def test_insufficient_capacity_fails_with_bounded_rendezvous(tmp_path: Path) -> 
 def test_active_collective_peer_exit_is_bounded(tmp_path: Path) -> None:
     """Opt-in test kills one live DDP member and requires the experiment to terminate."""
 
-    if os.environ["CLAN_RUN_DESTRUCTIVE_FAILURE"] != "1" if "CLAN_RUN_DESTRUCTIVE_FAILURE" in os.environ else True:
-        pytest.skip("set CLAN_RUN_DESTRUCTIVE_FAILURE=1 to run destructive peer-exit qualification")
+    if (
+        "CLAN_RUN_DESTRUCTIVE_FAILURE" not in os.environ
+        or os.environ["CLAN_RUN_DESTRUCTIVE_FAILURE"] != "1"
+    ):
+        pytest.skip(
+            "set CLAN_RUN_DESTRUCTIVE_FAILURE=1 to run destructive peer-exit qualification"
+        )
 
     param_space = tiny_param_space(accelerator="cpu", ddp_timeout_s=5.0)
     param_space["crash_member_id"] = 0
