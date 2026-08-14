@@ -14,11 +14,10 @@ module has no asynchronous mode, quantiles, resampling policy, or independent pa
 
 import logging
 import random
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from typing import Any
 from uuid import uuid4
 
-import ray
 from ray.air.constants import TRAINING_ITERATION
 from ray.tune.experiment import Trial
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler
@@ -37,11 +36,19 @@ from clan_based_tuning.ray_compat import (
 )
 from clan_based_tuning.runtime import (
     build_runtime_spec,
-    get_or_create_coordinator,
-    get_or_create_registry,
+    register_runtime_assignment,
+    release_runtime_assignment,
 )
 
 _LOGGER = logging.getLogger(__name__)
+_RuntimeRegistrar = Callable[
+    [ClanRuntimeSpec, list[str], Any | None, Any | None],
+    tuple[Any, Any],
+]
+_RuntimeReleaser = Callable[[ClanRuntimeSpec, list[str], Any | None, Any | None], None]
+
+
+# Main
 
 
 class ClanScheduler(FIFOScheduler):
@@ -54,7 +61,8 @@ class ClanScheduler(FIFOScheduler):
 
     The implementation intentionally does not subclass ``PopulationBasedTraining``. CBT
     owns the small synchronous transition it needs so future Ray PBT refactors cannot change
-    Clan semantics. ``ray_compat`` isolates the remaining low-level Tune transfer operations.
+    Clan semantics. ``ray_compat`` isolates the remaining low-level Tune transfer operations,
+    while runtime actor construction/release is injected from the runtime construction layer.
 
     Args:
         population_size: Number of concurrently resident Clan members. Tune must create
@@ -65,6 +73,9 @@ class ClanScheduler(FIFOScheduler):
         seed: Seed for the scheduler-owned mutation random stream.
         join_timeout_s: Maximum seconds a member waits for the complete Clan rendezvous.
         poll_interval_s: Poll interval used while members rendezvous.
+        _runtime_spec_builder: Injectable construction function for immutable runtime facts.
+        _runtime_registrar: Injectable operation that creates/reuses and registers Ray actors.
+        _runtime_releaser: Injectable operation that removes a completed runtime assignment.
 
     Raises:
         ValueError: If population or mutation/rendezvous configuration is invalid.
@@ -85,6 +96,9 @@ class ClanScheduler(FIFOScheduler):
         seed: int = 0,
         join_timeout_s: float = 120.0,
         poll_interval_s: float = 0.05,
+        _runtime_spec_builder: Callable[..., ClanRuntimeSpec] = build_runtime_spec,
+        _runtime_registrar: _RuntimeRegistrar = register_runtime_assignment,
+        _runtime_releaser: _RuntimeReleaser = release_runtime_assignment,
     ) -> None:
         if population_size < 2:
             raise ValueError("population_size must be at least two")
@@ -103,13 +117,18 @@ class ClanScheduler(FIFOScheduler):
         self._trial_ids: set[str] = set()
         self._member_ids: dict[str, int] = {}
         self._reports: dict[str, dict[str, Any]] = {}
+        self._finished_trial_ids: set[str] = set()
         self._completed_boundary = 0
         self._coordinator_name = f"clan-runtime-{uuid4().hex}"
         self._join_timeout_s = float(join_timeout_s)
         self._poll_interval_s = float(poll_interval_s)
+        self._runtime_spec_builder = _runtime_spec_builder
+        self._runtime_registrar = _runtime_registrar
+        self._runtime_releaser = _runtime_releaser
         self._runtime_spec: ClanRuntimeSpec | None = None
         self._coordinator_handle: Any | None = None
         self._registry_handle: Any | None = None
+        self._runtime_registered = False
 
     def set_search_properties(self, metric: str | None, mode: str | None, **spec: Any) -> bool:
         """Receive Tune's metric/mode and retain the Clan selection direction."""
@@ -149,7 +168,7 @@ class ClanScheduler(FIFOScheduler):
             raise RuntimeError("one Clan population must belong to exactly one Tune experiment")
 
         experiment_name = experiment_names.pop()
-        self._runtime_spec = build_runtime_spec(
+        self._runtime_spec = self._runtime_spec_builder(
             coordinator_name=self._coordinator_name,
             experiment_name=experiment_name,
             population_size=self.population_size,
@@ -266,6 +285,22 @@ class ClanScheduler(FIFOScheduler):
         self._reports = {}
         return TrialScheduler.NOOP if trial.status == Trial.PAUSED else TrialScheduler.PAUSE
 
+    def on_trial_complete(
+        self,
+        tune_controller: Any,
+        trial: Trial,
+        result: dict[str, Any],
+    ) -> None:
+        """Release runtime actors after every member of the successful population completes."""
+
+        super().on_trial_complete(tune_controller, trial, result)
+        if trial.trial_id not in self._trial_ids:
+            return
+
+        self._finished_trial_ids.add(trial.trial_id)
+        if self._finished_trial_ids == self._trial_ids:
+            self._release_runtime()
+
     def debug_string(self) -> str:
         """Return a concise scheduler description for Tune console output."""
 
@@ -293,6 +328,15 @@ class ClanScheduler(FIFOScheduler):
             if bool(report[CLAN_CHECKPOINT_SOURCE]) != expected_checkpoint_source:
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
 
+    def _ordered_trial_ids(self) -> list[str]:
+        return [
+            trial_id
+            for trial_id, _member_id in sorted(
+                self._member_ids.items(),
+                key=lambda item: item[1],
+            )
+        ]
+
     def _ordered_trials(self, tune_controller: Any) -> list[Trial]:
         by_id = {
             candidate.trial_id: candidate
@@ -301,13 +345,7 @@ class ClanScheduler(FIFOScheduler):
         }
         if set(by_id) != set(self._member_ids):
             raise RuntimeError("Tune controller does not contain the complete registered Clan")
-        return [
-            by_id[trial_id]
-            for trial_id, _member_id in sorted(
-                self._member_ids.items(),
-                key=lambda item: item[1],
-            )
-        ]
+        return [by_id[trial_id] for trial_id in self._ordered_trial_ids()]
 
     def _require_mode(self) -> str:
         if self._mode is None:
@@ -315,29 +353,37 @@ class ClanScheduler(FIFOScheduler):
         return self._mode
 
     def _register_runtime(self) -> None:
+        """Register one complete runtime assignment once per live scheduler process."""
+
+        if self._runtime_registered:
+            return
         if len(self._member_ids) != self.population_size or self._runtime_spec is None:
             return
 
-        if self._registry_handle is None:
-            self._registry_handle = get_or_create_registry()
-        if self._coordinator_handle is None:
-            self._coordinator_handle = get_or_create_coordinator(self._runtime_spec)
-
-        ordered = [
-            trial_id
-            for trial_id, _member_id in sorted(
-                self._member_ids.items(),
-                key=lambda item: item[1],
-            )
-        ]
-        ray.get(self._coordinator_handle.register_trials.remote(ordered))
-        ray.get(
-            self._registry_handle.register_trials.remote(
-                self._runtime_spec.experiment_name,
-                ordered,
-                self._runtime_spec,
-            )
+        self._registry_handle, self._coordinator_handle = self._runtime_registrar(
+            self._runtime_spec,
+            self._ordered_trial_ids(),
+            self._registry_handle,
+            self._coordinator_handle,
         )
+        self._runtime_registered = True
+
+    def _release_runtime(self) -> None:
+        """Remove one completed assignment and terminate its scheduler-owned coordinator."""
+
+        if self._runtime_spec is None or not self._runtime_registered:
+            return
+
+        self._runtime_releaser(
+            self._runtime_spec,
+            self._ordered_trial_ids(),
+            self._registry_handle,
+            self._coordinator_handle,
+        )
+        self._registry_handle = None
+        self._coordinator_handle = None
+        self._runtime_registered = False
+        _LOGGER.info("Clan runtime released experiment=%s", self._runtime_spec.experiment_name)
 
     def __getstate__(self) -> dict[str, Any]:
         """Strip live actor handles while preserving restorable scheduler authority."""
@@ -345,4 +391,5 @@ class ClanScheduler(FIFOScheduler):
         state = self.__dict__.copy()
         state["_coordinator_handle"] = None
         state["_registry_handle"] = None
+        state["_runtime_registered"] = False
         return state
