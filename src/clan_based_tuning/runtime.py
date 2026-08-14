@@ -5,9 +5,10 @@ from __future__ import annotations
 import functools
 import socket
 import time
+from collections.abc import Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 
@@ -164,6 +165,18 @@ def current_runtime() -> ClanRuntime:
     return runtime
 
 
+def _activate_runtime(runtime: ClanRuntime):
+    """Set process-local runtime state without closing over it in Ray's trainable wrapper."""
+
+    return _CURRENT_RUNTIME.set(runtime)
+
+
+def _deactivate_runtime(token) -> None:
+    """Restore process-local runtime state after a wrapped trainable returns."""
+
+    _CURRENT_RUNTIME.reset(token)
+
+
 def wrap_function_trainable(
     trainable: Callable[[dict[str, Any]], Any],
     runtime_spec: ClanRuntimeSpec,
@@ -173,11 +186,11 @@ def wrap_function_trainable(
     @functools.wraps(trainable)
     def wrapped(genome: dict[str, Any]):
         runtime = _join_runtime(runtime_spec, genome)
-        token = _CURRENT_RUNTIME.set(runtime)
+        token = _activate_runtime(runtime)
         try:
             return trainable(genome)
         finally:
-            _CURRENT_RUNTIME.reset(token)
+            _deactivate_runtime(token)
 
     return wrapped
 
