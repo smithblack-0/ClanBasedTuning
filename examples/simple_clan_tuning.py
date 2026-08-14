@@ -15,8 +15,7 @@ import torch
 from ray import tune
 from torch.utils.data import DataLoader, TensorDataset
 
-from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCallback
-from clan_based_tuning import MutationSpec
+from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCallback, MutationSpec
 
 POPULATION_SIZE = 2
 CHECKPOINT_FILENAME = "checkpoint.ckpt"
