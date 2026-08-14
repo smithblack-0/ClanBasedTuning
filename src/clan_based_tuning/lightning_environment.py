@@ -16,8 +16,16 @@ from lightning.pytorch.plugins.environments import ClusterEnvironment
 from clan_based_tuning.cohort import ClanRuntime
 
 
+# Main
+
+
 class TuneMemberEnvironment(ClusterEnvironment):
-    """Expose scheduler-assigned one-process-per-member topology to Lightning."""
+    """Give Lightning topology facts it cannot infer from independently launched Tune trials.
+
+    Each instance represents one already-running Clan member process. It exposes the complete
+    external world size/rank and DDP rendezvous endpoint while reporting local rank zero so
+    Lightning uses the one process/device Ray already assigned instead of spawning another.
+    """
 
     def __init__(
         self,
@@ -98,11 +106,22 @@ class TuneMemberEnvironment(ClusterEnvironment):
         return self._node_rank
 
 
+# Construction
+
+
 def build_tune_member_environment(
     runtime: ClanRuntime,
     _cls: type[TuneMemberEnvironment] = TuneMemberEnvironment,
 ) -> TuneMemberEnvironment:
-    """Construct Lightning's topology adapter from one resolved Clan runtime."""
+    """Construct Lightning's topology adapter from one resolved Clan runtime.
+
+    Args:
+        runtime: Stable member identity and DDP rendezvous facts discovered from Ray.
+        _cls: Injectable environment type for isolated construction tests.
+
+    Returns:
+        Explicit Lightning cluster environment for the current Tune member process.
+    """
 
     return _cls(
         global_rank=runtime.member_id,
