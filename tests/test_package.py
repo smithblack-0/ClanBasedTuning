@@ -1,8 +1,8 @@
 """Package-level public-surface checks."""
 
 
-def test_package_exports_the_worker_controller_and_mutation_spec():
-    """The package root exposes the active CBT surface and no rejected lifecycle API."""
+def test_package_exports_the_dependency_free_policy_surface():
+    """The package root stays importable without optional Ray/Lightning dependencies."""
 
     import clan_based_tuning
 
@@ -17,7 +17,6 @@ def test_package_exports_the_worker_controller_and_mutation_spec():
     removed_names = {
         "ClanRound",
         "ClanBasedTraining",
-        "ClanDDPStrategy",
         "ClanLightningEnvironment",
         "ClanLightningPlugins",
         "apply_optimizer_strategy",
