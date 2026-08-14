@@ -15,7 +15,6 @@ from typing import Any
 
 from ray.train._internal.session import _FutureTrainingResult, _TrainingResult
 from ray.tune import Checkpoint
-from ray.tune.execution.tune_controller import TuneController
 from ray.tune.experiment import Trial
 
 
@@ -38,7 +37,7 @@ def _resolve_scheduled_checkpoint(
 
 
 def capture_trial_checkpoint(
-    tune_controller: TuneController,
+    tune_controller: Any,
     trial: Trial,
     result: dict[str, Any],
 ) -> Checkpoint:
@@ -64,7 +63,7 @@ def capture_trial_checkpoint(
     return checkpoint
 
 
-def pause_trial_without_checkpoint(tune_controller: TuneController, trial: Trial) -> None:
+def pause_trial_without_checkpoint(tune_controller: Any, trial: Trial) -> None:
     """Pause ``trial`` without asking Tune to create a second checkpoint."""
 
     if trial.status != Trial.PAUSED:
