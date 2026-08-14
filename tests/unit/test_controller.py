@@ -2,7 +2,7 @@ import math
 
 import pytest
 
-from clan_based_tuning import ClanController
+from clan_based_tuning.controller import ClanController
 
 
 class FitnessExchange:

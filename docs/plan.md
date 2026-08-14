@@ -6,115 +6,135 @@ Status: current implementation sequence
 
 This plan sequences present work. It does not change the governing
 [roadmap](product_roadmap.md), [system behavior](contracts/system_behavior.md),
-[population invariants](contracts/population_resolution_invariants.md), or
-[userspace API](api.md).
+[population invariants](contracts/population_resolution_invariants.md), or public API
+contract in [`api.md`](api.md).
 
 ## Current baseline
 
-The first complete Ray Tune function path is implemented and directly qualified on a
-single CPU node with two members over two generations.
+The first complete single-node CPU function path is implemented through Ray Tune,
+Lightning, and PyTorch. The productization pass has normalized the ordinary user path to
+framework-native extension points:
 
-That path already includes:
+- ordinary Ray function trainable, with no CBT trainable wrapper;
+- `ClanScheduler` through `TuneConfig.scheduler`;
+- metric and mode through `TuneConfig`;
+- one Ray trial/resource allocation per Clan member;
+- `ClanDDPStrategy` through Lightning's strategy interface;
+- `ClanTuneReportCallback` through Lightning's callback interface; and
+- plain nested dictionaries for mutation configuration.
 
-- production stable-member/rendezvous assignment for the initial one-trial/one-rank
-  topology;
-- Lightning/PyTorch shared-gradient DDP over the framework-managed process group;
-- ordinary rank-partitioned Lightning training data;
-- replicated Lightning-managed validation data so every candidate sees the same held-out
-  examples, including the sanity-validation loader setup path;
-- member-local fitness exchange through the active Lightning strategy;
-- deterministic worker and scheduler winner agreement;
-- winner-only persistent CBT checkpointing while retaining Lightning's checkpoint barrier;
-- synchronous Ray PBT transfer of the selected continuation;
-- independent mutation of the selected parent genome for every next member, including the
-  preceding winner; and
-- a receiving function that restores the selected Lightning continuation and explicitly
-  applies the newly assigned genome in userspace.
-
-The real contract verifies inherited model state, optimizer momentum, and Lightning
-training progress across the generation boundary. CBT owns none of the genome-application
-logic used to establish that result.
+The public example exposes userspace optimizer application inline instead of hiding it in an
+application helper. The complete CPU framework contract covers repeated generation
+transition and a separate interrupted-experiment `Tuner.restore` path.
 
 ## Current objective
 
-Turn the initial qualified mechanics path into a robust and useful supported path without
-changing its userspace ownership boundary or replacing framework-native lifecycle
-machinery.
+Reach a repository state worth adopting before broadening the support envelope. A green
+mechanics test is necessary but insufficient. The ordinary path, documentation, examples,
+packaging, lifecycle recovery, test priorities, failure behavior, and repository hygiene all
+need their own evidence.
+
+## Readiness criteria
+
+Before a production-ready claim, the repository should have:
+
+1. a short, framework-native ordinary API with no duplicate configuration or development
+   seams exposed to users;
+2. self-contained public class/function documentation and a runnable end-to-end example;
+3. an explicit scientific-validity boundary beside genome configuration;
+4. unit tests for core policy and validation, integration tests for framework seams, and
+   end-to-end tests for the user-visible lifecycle rather than tests that freeze file shape;
+5. demonstrated checkpoint continuation and interrupted-experiment restoration;
+6. a clean install/build path and CI that exercises the distribution artifact rather than
+   only an editable checkout;
+7. documented resource, failure, compatibility, and support boundaries;
+8. useful diagnostics/observability for normal operation and failure;
+9. standard repository adoption signals such as a license, security policy, contributing
+   guidance, version/release policy, and appropriately scoped dependency metadata; and
+10. no archived scaffolding, placeholder modules, negative tests for long-deleted APIs, or
+    other development residue in the active tree without a current maintenance purpose.
+
+Current readiness is recorded in root [`STATUS.md`](../STATUS.md).
 
 ## Work sequence
 
-### 1. Finish synchronization and public mechanics example
+### 1. Complete productization review
 
-Keep the public API, design, behavioral contracts, qualification record, status, and
-example aligned with the code that actually passed.
+Keep the public API, README, API guide, example, source exports, and tests aligned with the
+framework-native path. Remove obsolete construction scaffolding and keep only durable
+architecture/qualification records.
 
-Add a small reproducible mechanics example using the same public function API. It should
-use the qualified Lightning-managed data path and show genome use as ordinary user code,
-not through a CBT helper.
+Finish direct qualification of the new no-wrapper runtime discovery and interrupted-run
+restore. Review public docstrings and error messages from an external user's perspective.
 
-### 2. Harden complete-cohort admission and failure behavior
+### 2. Packaging and release hygiene
 
-The initial runtime waits for the complete assigned population and has a bounded pre-DDP
-rendezvous timeout, but all members must already fit concurrently on the cluster.
+After the project owner selects a license, add the legal/release metadata needed for
+external adoption. Add a security/reporting policy appropriate to the intended support
+level and establish the minimal version/changelog/release convention.
 
-Investigate the smallest Ray-native mechanism for stronger gang/cohort admission if one is
-needed. Qualify incomplete-resource behavior and member failure without creating a second
-training scheduler or taking process-group ownership from Lightning/PyTorch.
+CI should eventually build a wheel/sdist and verify a clean non-editable install, but CI
+workflow changes remain separately approved work.
 
-Separately qualify what happens when a participant disappears inside an active framework
-collective. Do not claim bounded recovery until the real failure path releases healthy
-participants or fails the experiment predictably.
+Decide whether a static type-checking/PEP 561 support claim is worth maintaining; do not add
+a checker merely as a badge if the project will not keep its annotations trustworthy.
 
-### 3. Qualify GPU execution
+### 3. Harden complete-cohort admission and failure behavior
 
-Run the same public path on the intended CUDA/NCCL configuration. Production code must
-continue to use the backend selected by Lightning/PyTorch rather than adding a CBT backend
-switch.
+The initial runtime requires enough resources for the complete Clan to become resident and
+has a bounded pre-DDP rendezvous timeout.
+
+Investigate the smallest Ray-native mechanism for predictable cohort admission if the
+current scheduler/resource interaction can deadlock or fail unclearly. Qualify insufficient
+capacity and member failure without creating a second scheduler or taking process-group
+ownership from Lightning/PyTorch.
+
+Separately qualify a participant disappearing inside an active framework collective. Do not
+claim bounded recovery until healthy participants terminate or recover predictably in the
+real path.
+
+### 4. Qualify GPU execution
+
+Run the same public path on CUDA/NCCL. Production code must continue to use the backend and
+device visibility supplied by Ray/Lightning/PyTorch rather than introducing a CBT backend
+or device selector.
 
 Evidence must cover shared gradients, partitioned training, replicated validation,
 member-local divergence, fitness exchange, winner-only checkpoint persistence, full
-continuation restore, userspace genome use, and repeated generation transition.
+continuation restore, interrupted-experiment restore where practical, and repeated
+generation transition.
 
-### 4. Qualify multi-node execution
+Add a realistic GPU optimizer example only after this path is actually qualified.
 
-Extend the same one-member/one-rank DDP path across nodes. Resolve only topology and
-rendezvous behavior actually required by the framework evidence. Do not replace the
-single-node integration with a separate multi-node training system.
+### 5. Qualify multi-node execution
 
-### 5. Harden advanced integration surfaces and observability
+Extend the one-member/one-rank path across nodes. Resolve only topology and rendezvous gaps
+shown by framework evidence. Do not replace the single-node integration with a separate
+training system.
 
-Qualify only the extensions users actually need, including explicit/custom distributed
-validation samplers and custom or sharded checkpoint plugins where relevant.
+### 6. Advanced integration and observability
 
-Improve mutation/transition observability without faking Ray's native PBT mutation table
-or copying private PBT exploit machinery merely to alter its console logging. The current
-custom `MutationSpec` behavior is authoritative even though stock PBT's built-in explore
-log does not describe those mutations.
+Qualify user-supplied distributed validation samplers, custom/sharded checkpoint plugins,
+and any other extension surface real users require.
 
-### 6. Expand scientific and operational evidence
+Improve Clan-specific diagnostics for cohort formation, round transition, selected source,
+mutation, checkpoint provenance, and failure without duplicating Ray/Lightning logging.
 
-Once the mechanics path is stable on the intended hardware, add realistic optimizer
-studies using the public package. Establish useful round frequencies, overhead, checkpoint
-cost, and optimizer-policy behavior empirically rather than inferring scientific value
-from the mechanics test.
+### 7. Scientific and operational evidence
 
-Add observability and diagnostics where real workloads expose missing information.
+Use the public package on realistic optimizer studies. Measure useful round frequencies,
+overhead, checkpoint cost, optimizer-policy behavior, and scaling empirically. Examples
+should expose costs and limitations, not be engineered to guarantee favorable results.
 
 ## Later ClanFSDP work
 
-Model-sharded Clan execution remains a separate later design and qualification effort. It
-may require a composed topology representing both model shards and Clan members, while
-retaining framework ownership of the resulting process groups.
+Model-sharded Clan execution remains a separate later design/qualification effort. It may
+require a composed topology representing model shards and Clan members while retaining
+framework ownership of the relevant process groups.
 
-The current DDP implementation must not pre-build that topology or use it to justify a
-second population communication runtime.
+## Completion boundary
 
-## Current completion boundary
-
-The initial CPU mechanics path is complete when the synchronized documentation and
-qualification record agree with a green exact-head CI run. It is not equivalent to a
-broad production-support claim.
-
-The next practical milestone after that review boundary is predictable complete-cohort and
-failure behavior on the intended GPU environment. All later work must preserve the same
-fundamental contract: CBT supplies a genome; the user owns what happens with it.
+The current CPU path is a qualified mechanics and lifecycle foundation, not a production
+release. Production readiness requires closure of the repository-readiness gaps as well as
+broader hardware/failure evidence. All work must preserve the central ownership contract:
+CBT supplies/mutates the Tune config; user code owns what its values mean and what they do.

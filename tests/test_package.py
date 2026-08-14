@@ -1,28 +1,16 @@
-"""Package-level public-surface checks."""
+"""Public package-surface checks."""
 
 
-def test_package_exports_the_dependency_free_policy_surface():
-    """The package root stays importable without optional Ray/Lightning dependencies."""
-
+def test_package_root_names_the_actual_user_integration_surface():
     import clan_based_tuning
 
-    assert clan_based_tuning.__name__ == "clan_based_tuning"
     assert clan_based_tuning.__all__ == [
-        "ClanController",
-        "MutationSpec",
+        "ClanScheduler",
+        "ClanDDPStrategy",
+        "ClanTuneReportCallback",
     ]
-    for name in clan_based_tuning.__all__:
-        assert getattr(clan_based_tuning, name) is not None
 
-    removed_names = {
-        "ClanRound",
-        "ClanBasedTraining",
-        "ClanLightningEnvironment",
-        "ClanLightningPlugins",
-        "apply_optimizer_strategy",
-        "make_clan_lightning_plugins",
-        "prepare_clan_trainer",
-        "replicated_sampler",
-        "tune_checkpoint_path",
-    }
-    assert not any(hasattr(clan_based_tuning, name) for name in removed_names)
+    # Internal policy objects and application helpers are not ordinary-user API.
+    assert "ClanController" not in clan_based_tuning.__all__
+    assert "MutationSpec" not in clan_based_tuning.__all__
+    assert not hasattr(clan_based_tuning, "apply_genome")

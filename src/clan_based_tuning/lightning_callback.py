@@ -17,15 +17,30 @@ from clan_based_tuning.protocol import (
     CLAN_MEMBER_ID,
     CLAN_WINNER_ID,
 )
-from clan_based_tuning.runtime import current_runtime
 
 
 class ClanTuneReportCallback(Callback):
-    """Resolve one Clan boundary, persist one continuation, and report to Tune.
+    """Resolve a Clan boundary and report it through ordinary Ray Tune.
 
-    This callback has no genome-application behavior. It reads Lightning metrics,
-    exchanges member-local fitness through the active Lightning strategy, selects the
-    checkpoint source, and reports the resulting round to Ray Tune.
+    The callback reads one member-local Lightning metric, exchanges fitness through the
+    active ``ClanDDPStrategy``, selects the common winner, has every rank participate in
+    Lightning checkpoint construction, and reports one Ray checkpoint from the selected
+    member only. It has no genome-application behavior.
+
+    Args:
+        lightning_metric: Lightning callback-metric name to use as fitness. By default this
+            is the same metric configured on ``tune.TuneConfig``.
+        extra_metrics: Optional Lightning callback metrics to forward to Ray. A list keeps
+            the same names; a mapping uses ``{ray_name: lightning_name}``.
+        filename: File name used inside the temporary Ray checkpoint directory.
+
+    Raises:
+        TypeError: If used without ``ClanDDPStrategy``.
+        RuntimeError: If the required Lightning metric is absent.
+
+    Notes:
+        The fitness metric must remain member-local. Do not log it with cross-rank
+        ``sync_dist`` reduction before CBT compares the diverged candidates.
     """
 
     def __init__(
@@ -46,7 +61,7 @@ class ClanTuneReportCallback(Callback):
         if not isinstance(trainer.strategy, ClanDDPStrategy):
             raise TypeError("ClanTuneReportCallback requires ClanDDPStrategy")
 
-        runtime = current_runtime()
+        runtime = trainer.strategy.clan_runtime
         lightning_metric = self._lightning_metric or runtime.spec.metric
         fitness = self._metric_value(trainer, lightning_metric)
 

@@ -10,25 +10,41 @@ from lightning.pytorch.utilities.rank_zero import rank_zero_only
 from lightning_utilities.core.rank_zero import rank_zero_only as utilities_rank_zero_only
 
 from clan_based_tuning.lightning_environment import TuneMemberEnvironment
-from clan_based_tuning.runtime import current_runtime
+from clan_based_tuning.runtime import ClanRuntime, join_runtime
 
 
 class ClanDDPStrategy(DDPStrategy):
     """Use Lightning's native DDP across independently launched Tune trials.
 
+    Each Ray Tune trial is one Clan member and one Lightning process. Ray owns the per-trial
+    resource allocation; ordinary users should normally leave ``Trainer(devices=...)`` at
+    Lightning's default and request one CPU/GPU device per trial through Ray.
+
     The strategy supplies only topology facts that Lightning cannot infer across separate
     Tune trials. Backend selection, process-group initialization, collectives, gradient
     reduction, and teardown remain Lightning/PyTorch responsibilities.
 
-    Training uses ordinary DDP data partitioning. When Lightning auto-injects a sampler
-    for validation (including sanity validation), every Clan member instead receives the
-    full validation dataset so candidate fitness is evaluated on the same held-out data.
+    Training uses ordinary DDP data partitioning. When Lightning auto-injects a sampler for
+    validation (including sanity validation), every Clan member instead receives the full
+    validation dataset so candidate fitness is evaluated on the same held-out examples.
     Explicit user-supplied distributed samplers remain user-owned and are not replaced.
 
     Per-forward buffer broadcast is disabled so one member's post-update buffers cannot
-    overwrite another member's local state. CBT round checkpointing temporarily selects
-    one rank as the writer; every rank still participates in Lightning checkpoint
-    construction and the Trainer's post-save barrier.
+    overwrite another member's local state. CBT round checkpointing temporarily selects one
+    rank as the writer; every rank still participates in Lightning checkpoint construction
+    and the Trainer's post-save barrier.
+
+    Args:
+        **ddp_kwargs: Ordinary Lightning ``DDPStrategy`` keyword arguments. Do not provide a
+            custom ``cluster_environment``; CBT supplies the Tune-member topology. A normal
+            Lightning ``process_group_backend`` override remains available when deliberately
+            required by the user/framework configuration.
+
+    Raises:
+        TypeError: If a custom cluster environment is supplied.
+        ValueError: If DDP buffer broadcasting is explicitly enabled.
+        RuntimeError: During setup if Lightning resolves more than one local process/device
+            for the Tune trial.
     """
 
     def __init__(self, **ddp_kwargs: Any) -> None:
@@ -37,7 +53,7 @@ class ClanDDPStrategy(DDPStrategy):
         if ddp_kwargs.get("broadcast_buffers") is True:
             raise ValueError("Clan members require broadcast_buffers=False after DDP setup")
 
-        runtime = current_runtime()
+        runtime = join_runtime()
         environment = TuneMemberEnvironment(
             global_rank=runtime.member_id,
             world_size=runtime.world_size,
@@ -48,8 +64,15 @@ class ClanDDPStrategy(DDPStrategy):
         )
         ddp_kwargs["broadcast_buffers"] = False
 
+        self._clan_runtime = runtime
         self._round_checkpoint_source: int | None = None
         super().__init__(cluster_environment=environment, **ddp_kwargs)
+
+    @property
+    def clan_runtime(self) -> ClanRuntime:
+        """Return the stable Clan identity assigned to this Tune trial."""
+
+        return self._clan_runtime
 
     @property
     def distributed_sampler_kwargs(self) -> dict[str, int]:
@@ -65,8 +88,8 @@ class ClanDDPStrategy(DDPStrategy):
 
         if self.num_processes != 1:
             raise RuntimeError(
-                "the initial Clan DDP path requires exactly one Lightning device/process "
-                "per Tune trial"
+                "ClanDDPStrategy requires one Lightning process/device per Tune trial; "
+                "request the trial's device through Ray and leave Trainer devices at one/auto"
             )
         super().setup_environment()
 

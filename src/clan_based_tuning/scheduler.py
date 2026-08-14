@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import copy
 import random
-from collections.abc import Callable
+from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
 
 from ray.air.constants import TRAINING_ITERATION
 from ray.tune.schedulers import PopulationBasedTraining
 
-from clan_based_tuning.evolution import MutationSpec, select_winner_id
+from clan_based_tuning.evolution import _MutationRule, select_winner_id
 from clan_based_tuning.protocol import (
     CLAN_CHECKPOINT_SOURCE,
     CLAN_MEMBER_ID,
@@ -20,20 +20,40 @@ from clan_based_tuning.protocol import (
 from clan_based_tuning.runtime import (
     ClanRuntimeSpec,
     get_or_create_coordinator,
-    wrap_function_trainable,
+    get_or_create_registry,
 )
 
 
 class ClanScheduler(PopulationBasedTraining):
     """Run Clan Tuning through Ray's synchronous PBT execution lifecycle.
 
-    Ray remains responsible for trial execution, pausing, checkpoint transfer, restore,
-    and configuration replacement. This scheduler changes the population policy: one
-    selected member is the parent for the whole next generation and every target receives
-    an independent mutation of that parent's Tune config.
+    Ray remains responsible for trial execution, resources, pausing, checkpoint transfer,
+    restoration, and config replacement. This scheduler changes only the population policy:
+    one selected member is the parent for the whole next generation and every next member
+    receives an independent mutation of that parent's Tune config.
 
-    The config's meaning is not part of this class. CBT supplies the config to the user's
-    function and never applies its values to an optimizer, model, or other user state.
+    Configure the optimization metric and direction through ``tune.TuneConfig(metric=...,
+    mode=...)`` like other Ray schedulers. ``mutations`` is a mapping from Tune-config keys
+    to plain dictionaries with ``standard_deviation``, ``geometry`` (``"linear"`` or
+    ``"log"``), ``minimum``, and ``maximum``.
+
+    Args:
+        population_size: Number of concurrently resident Clan members. The Tune run must
+            create exactly this many trials and the cluster must have resources for all of
+            them at once.
+        mutations: Mutation rules for the Tune-config values that may vary between Clan
+            members. CBT mutates values only; user code owns their meaning and application.
+        seed: Seed for the scheduler-owned mutation random stream.
+        join_timeout_s: Maximum seconds a member waits for the complete Clan rendezvous.
+        poll_interval_s: Poll interval used while members rendezvous.
+
+    Raises:
+        ValueError: If population or mutation configuration is invalid.
+
+    Notes:
+        A scientifically valid Clan genome may vary only choices applied after the shared
+        gradient has been computed (normally optimizer-side policy). CBT deliberately does
+        not infer or enforce what config keys mean.
     """
 
     _supports_buffered_results = False
@@ -42,40 +62,39 @@ class ClanScheduler(PopulationBasedTraining):
         self,
         *,
         population_size: int,
-        metric: str,
-        mode: str,
-        mutations: dict[str, MutationSpec],
+        mutations: Mapping[str, Mapping[str, Any]],
         seed: int = 0,
         join_timeout_s: float = 120.0,
         poll_interval_s: float = 0.05,
     ) -> None:
         if population_size < 2:
             raise ValueError("population_size must be at least two")
-        if mode not in {"min", "max"}:
-            raise ValueError("mode must be 'min' or 'max'")
         if not mutations:
             raise ValueError("mutations must contain at least one genome key")
+        if join_timeout_s <= 0:
+            raise ValueError("join_timeout_s must be positive")
+        if poll_interval_s <= 0:
+            raise ValueError("poll_interval_s must be positive")
 
         self.population_size = population_size
-        self._mutations = dict(mutations)
+        self._mutations = {
+            key: _MutationRule.from_config(rule) for key, rule in mutations.items()
+        }
         self._random = random.Random(seed)
         self._trial_ids: set[str] = set()
         self._member_ids: dict[str, int] = {}
         self._parent_config: dict[str, Any] | None = None
+        self._coordinator_name = f"clan-runtime-{uuid4().hex}"
+        self._join_timeout_s = float(join_timeout_s)
+        self._poll_interval_s = float(poll_interval_s)
+        self._runtime_spec: ClanRuntimeSpec | None = None
         self._coordinator_handle = None
-        self._runtime_spec = ClanRuntimeSpec(
-            coordinator_name=f"clan-runtime-{uuid4().hex}",
-            population_size=population_size,
-            metric=metric,
-            mode=mode,
-            join_timeout_s=join_timeout_s,
-            poll_interval_s=poll_interval_s,
-        )
+        self._registry_handle = None
 
         super().__init__(
             time_attr=TRAINING_ITERATION,
-            metric=metric,
-            mode=mode,
+            metric=None,
+            mode=None,
             perturbation_interval=1,
             burn_in_period=0,
             hyperparam_mutations={},
@@ -87,15 +106,27 @@ class ClanScheduler(PopulationBasedTraining):
             synch=True,
         )
 
-    def wrap(
-        self,
-        trainable: Callable[[dict[str, Any]], Any],
-    ) -> Callable[[dict[str, Any]], Any]:
-        """Carry Clan cohort context without changing the function's config argument."""
+    def set_search_properties(self, metric: str | None, mode: str | None, **spec) -> bool:
+        """Receive the ordinary Tune metric/mode and make them available to members."""
 
-        return wrap_function_trainable(trainable, self._runtime_spec)
+        if metric is None:
+            raise ValueError("ClanScheduler requires tune.TuneConfig(metric=...)")
+        if mode not in {"min", "max"}:
+            raise ValueError("ClanScheduler requires tune.TuneConfig(mode='min' or 'max')")
+
+        accepted = super().set_search_properties(metric, mode, **spec)
+        self._runtime_spec = ClanRuntimeSpec(
+            coordinator_name=self._coordinator_name,
+            population_size=self.population_size,
+            metric=metric,
+            mode=mode,
+            join_timeout_s=self._join_timeout_s,
+            poll_interval_s=self._poll_interval_s,
+        )
+        return accepted
 
     def on_trial_add(self, tune_controller, trial) -> None:
+        self._require_runtime_spec()
         super().on_trial_add(tune_controller, trial)
         self._trial_ids.add(trial.trial_id)
         if len(self._trial_ids) > self.population_size:
@@ -104,16 +135,22 @@ class ClanScheduler(PopulationBasedTraining):
         if len(self._trial_ids) == self.population_size:
             ordered = sorted(self._trial_ids)
             self._member_ids = {trial_id: member_id for member_id, trial_id in enumerate(ordered)}
-        self._ensure_coordinator()
+            self._register_runtime()
+
+    def choose_trial_to_run(self, tune_controller):
+        """Re-establish runtime actors before Ray launches or restores a member."""
+
+        self._register_runtime()
+        return super().choose_trial_to_run(tune_controller)
 
     def on_trial_result(self, tune_controller, trial, result: dict[str, Any]) -> str:
         if len(self._member_ids) != self.population_size:
             raise RuntimeError(
-                "the complete Clan was not created before a member reported; set "
-                "max_concurrent_trials to population_size and provide enough resources "
-                "for every member to run together"
+                "the complete Clan was not created before a member reported; create exactly "
+                "population_size trials and provide enough resources for every member "
+                "to run together"
             )
-        self._ensure_coordinator()
+        self._register_runtime()
         return super().on_trial_result(tune_controller, trial, result)
 
     def _quantiles(self):
@@ -152,6 +189,8 @@ class ClanScheduler(PopulationBasedTraining):
         if len(iterations) != 1:
             raise RuntimeError("Clan members reported different generation boundaries")
 
+        if self._metric is None or self._mode is None:
+            raise RuntimeError("Tune did not configure the Clan metric and mode")
         fitnesses = [
             float(by_member[member_id][1][self._metric])
             for member_id in range(self.population_size)
@@ -188,26 +227,43 @@ class ClanScheduler(PopulationBasedTraining):
         new_config = copy.deepcopy(self._parent_config)
         operations = {}
         for key, mutation in self._mutations.items():
+            if key not in new_config:
+                raise KeyError(f"Clan mutation key {key!r} is missing from the Tune config")
             old_value = new_config[key]
             new_config[key] = mutation.mutate(old_value, self._random)
             operations[key] = f"clan mutation: {old_value!r} -> {new_config[key]!r}"
         return new_config, operations
 
-    def _ensure_coordinator(self) -> None:
-        if self._coordinator_handle is None:
-            self._coordinator_handle = get_or_create_coordinator(self._runtime_spec)
-        if len(self._member_ids) == self.population_size:
-            import ray
+    def _require_runtime_spec(self) -> ClanRuntimeSpec:
+        runtime_spec = self._runtime_spec
+        if runtime_spec is None:
+            raise RuntimeError(
+                "ClanScheduler has no metric/mode; configure both on tune.TuneConfig"
+            )
+        return runtime_spec
 
-            ordered = [
-                trial_id
-                for trial_id, _ in sorted(self._member_ids.items(), key=lambda item: item[1])
-            ]
-            ray.get(self._coordinator_handle.register_trials.remote(ordered))
+    def _register_runtime(self) -> None:
+        if len(self._member_ids) != self.population_size:
+            return
+
+        import ray
+
+        runtime_spec = self._require_runtime_spec()
+        if self._registry_handle is None:
+            self._registry_handle = get_or_create_registry()
+        if self._coordinator_handle is None:
+            self._coordinator_handle = get_or_create_coordinator(runtime_spec)
+
+        ordered = [
+            trial_id for trial_id, _ in sorted(self._member_ids.items(), key=lambda item: item[1])
+        ]
+        ray.get(self._coordinator_handle.register_trials.remote(ordered))
+        ray.get(self._registry_handle.register_trials.remote(ordered, runtime_spec))
 
     def __getstate__(self) -> dict[str, Any]:
         state = self.__dict__.copy()
         state["_coordinator_handle"] = None
+        state["_registry_handle"] = None
         return state
 
 

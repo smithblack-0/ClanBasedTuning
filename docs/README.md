@@ -1,62 +1,45 @@
 # ClanBasedTuning documentation
 
-This is the active documentation entry point.
+This is the documentation entry point for users and maintainers.
 
-## Governing product direction
+## Start with the user path
 
-- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning, the project goals, the
-  userspace genome-ownership boundary, and the stable criteria by which development is
-  judged.
+- [`../README.md`](../README.md) gives installation, the minimal function API, resource
+  semantics, the scientific genome boundary, and interrupted-run restore.
+- [`api.md`](api.md) is the detailed public API and lifecycle guide.
+- [`../examples/function_api.py`](../examples/function_api.py) is the runnable two-member
+  CPU mechanics example.
+- Root [`STATUS.md`](../STATUS.md) separates the currently qualified behavior from broader
+  repository/production-readiness gaps.
 
-## Current design and contracts
+## Product and architecture
 
-- [`design/integration.md`](design/integration.md) defines the implemented initial
-  Ray/Lightning/PyTorch lifecycle and responsibility boundaries.
-- [`contracts/system_behavior.md`](contracts/system_behavior.md) states the observable
-  behavior a complete Clan Tuning integration must produce.
+- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning, project goals, userspace
+  ownership, and stable development criteria.
+- [`design/integration.md`](design/integration.md) records the current Ray/Lightning/PyTorch
+  integration and responsibility boundaries.
+- [`contracts/system_behavior.md`](contracts/system_behavior.md) states observable complete
+  Clan behavior.
 - [`contracts/population_resolution_invariants.md`](contracts/population_resolution_invariants.md)
-  states what the pre-report population boundary and next-generation assignment must
-  preserve.
-- [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
-  assigns ownership at that boundary for the initial DDP implementation.
+  and [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
+  define the generation boundary and ownership split.
 
-## Public API
+## Evidence and support
 
-- [`api.md`](api.md) documents the implemented Ray Tune function API, including the
-  explicit userspace Lightning checkpoint/application pattern. CBT supplies genomes; user
-  code owns their meaning and application.
-
-## Implementation evidence
-
-- [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
-  records the foundation for one Tune trial/member/process/rank while retaining
-  Lightning/PyTorch ownership of the distributed lifecycle and the qualified
-  training/validation sampler behavior.
 - [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
-  records the narrower distributed-environment qualification that preceded the complete
-  integration.
+  records the original external Tune-member DDP seam qualification.
 - [`qualification/function_api.md`](qualification/function_api.md) records direct evidence
-  for the current complete two-generation single-node CPU function path, including shared
-  gradients, partitioned training, replicated Lightning-managed validation, winner-only
-  checkpoint persistence, full continuation restore, userspace genome use, and independent
-  mutation of every next member.
+  for the complete repeated function path and its current support envelope.
+- [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
+  records framework evidence behind the topology/data/checkpoint seams.
 
-## Current state and next work
+## Maintainer process
 
-- Root [`STATUS.md`](../STATUS.md) records what the repository implements and qualifies now.
-- [`plan.md`](plan.md) sequences the next work: final mechanics/example synchronization,
-  cohort/failure hardening, GPU qualification, multi-node qualification, advanced
-  integration surfaces, and later scientific/scaled evidence.
-- Code and tests remain authoritative for executable behavior.
+- [`plan.md`](plan.md) sequences current work and repository-readiness requirements.
+- [`reviews/framework_native_review.md`](reviews/framework_native_review.md) is the standing
+  framework-ownership review.
+- [`llm/README.md`](llm/README.md) contains the repository's engineering and technical-writing
+  process used by coding agents and maintainers doing substantial work.
 
-## Engineering process
-
-- [`llm/README.md`](llm/README.md) routes substantial engineering and writing work.
-- [`reviews/framework_native_review.md`](reviews/framework_native_review.md) checks that
-  Clan-specific behavior remains narrow and framework-native.
-
-## Non-active material
-
-Completed and superseded records live under [`archive/`](archive/) and do not compete with
-current authority. Tentative reasoning belongs under [`scratchwork/`](scratchwork/) until
-accepted in the artifact that owns it.
+Git history, rather than an active archive or placeholder `old_code` tree, retains superseded
+implementations and previous milestone records.

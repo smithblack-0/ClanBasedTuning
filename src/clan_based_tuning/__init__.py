@@ -1,16 +1,14 @@
-"""Clan Tuning policy primitives and optional Ray/Lightning integration."""
-
-from clan_based_tuning.controller import ClanController
-from clan_based_tuning.evolution import MutationSpec
+"""Clan Tuning integration for Ray Tune, Lightning, and PyTorch."""
 
 __all__ = [
-    "ClanController",
-    "MutationSpec",
+    "ClanScheduler",
+    "ClanDDPStrategy",
+    "ClanTuneReportCallback",
 ]
 
 
 def __getattr__(name: str):
-    """Load the optional Ray/Lightning integration only when explicitly requested."""
+    """Load optional Ray/Lightning integration objects only when requested."""
 
     if name == "ClanScheduler":
         try:
@@ -27,7 +25,7 @@ def __getattr__(name: str):
         try:
             from clan_based_tuning.lightning_strategy import ClanDDPStrategy
         except ModuleNotFoundError as error:
-            if error.name in {"lightning", "lightning_utilities"}:
+            if error.name in {"lightning", "lightning_utilities", "ray"}:
                 raise ModuleNotFoundError(
                     'ClanDDPStrategy requires: pip install "clan-based-tuning[ray]"'
                 ) from error

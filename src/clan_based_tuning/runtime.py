@@ -1,20 +1,18 @@
-"""Runtime context joining one Ray Tune function trial to a Clan DDP cohort."""
+"""Runtime rendezvous joining Ray Tune trials to one Clan DDP cohort."""
 
 from __future__ import annotations
 
-import functools
 import socket
 import time
-from collections.abc import Callable
-from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
-from uuid import uuid4
+
+_RUNTIME_REGISTRY_NAME = "clan-based-tuning-runtime-registry"
+_RUNTIME_NAMESPACE = "clan-based-tuning"
 
 
 @dataclass(frozen=True, slots=True)
 class ClanRuntimeSpec:
-    """Driver-created identity shared by the scheduler and wrapped function trainable."""
+    """Scheduler-owned identity and configuration required by one Clan cohort."""
 
     coordinator_name: str
     population_size: int
@@ -22,7 +20,7 @@ class ClanRuntimeSpec:
     mode: str
     join_timeout_s: float
     poll_interval_s: float
-    namespace: str = "clan-based-tuning"
+    namespace: str = _RUNTIME_NAMESPACE
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +51,26 @@ class _Session:
     tokens: dict[str, str]
     main_address: str
     main_port: int
+
+
+class _RuntimeRegistry:
+    """Map Tune trial IDs to scheduler-owned Clan runtime specifications."""
+
+    def __init__(self) -> None:
+        self._runtime_specs: dict[str, ClanRuntimeSpec] = {}
+
+    def register_trials(self, trial_ids: list[str], runtime_spec: ClanRuntimeSpec) -> None:
+        for trial_id in trial_ids:
+            existing = self._runtime_specs.get(trial_id)
+            if existing is not None and existing != runtime_spec:
+                raise RuntimeError(
+                    f"Tune trial {trial_id!r} is already registered with another Clan runtime"
+                )
+        for trial_id in trial_ids:
+            self._runtime_specs[trial_id] = runtime_spec
+
+    def get_runtime_spec(self, trial_id: str) -> ClanRuntimeSpec | None:
+        return self._runtime_specs.get(trial_id)
 
 
 class _ClanCoordinator:
@@ -141,50 +159,22 @@ class _ClanCoordinator:
         self._pending = {}
 
 
-_CURRENT_RUNTIME: ContextVar[ClanRuntime | None] = ContextVar(
-    "clan_based_tuning_runtime", default=None
-)
+def get_or_create_registry():
+    """Return the cluster-local registry used to discover Clan runtime assignments."""
 
+    import ray
 
-def current_runtime() -> ClanRuntime:
-    """Return the active Clan runtime for the current wrapped Tune function."""
-
-    runtime = _CURRENT_RUNTIME.get()
-    if runtime is None:
-        raise RuntimeError(
-            "no active Clan runtime; pass the Tune function through ClanScheduler.wrap()"
-        )
-    return runtime
-
-
-def _activate_runtime(runtime: ClanRuntime):
-    return _CURRENT_RUNTIME.set(runtime)
-
-
-def _deactivate_runtime(token) -> None:
-    _CURRENT_RUNTIME.reset(token)
-
-
-def wrap_function_trainable(
-    trainable: Callable[[dict[str, Any]], Any],
-    runtime_spec: ClanRuntimeSpec,
-) -> Callable[[dict[str, Any]], Any]:
-    """Carry hidden cohort context beside a function without inspecting its config."""
-
-    @functools.wraps(trainable)
-    def wrapped(genome: dict[str, Any]):
-        runtime = _join_runtime(runtime_spec)
-        token = _activate_runtime(runtime)
-        try:
-            return trainable(genome)
-        finally:
-            _deactivate_runtime(token)
-
-    return wrapped
+    remote = ray.remote(_RuntimeRegistry)
+    return remote.options(
+        name=_RUNTIME_REGISTRY_NAME,
+        namespace=_RUNTIME_NAMESPACE,
+        get_if_exists=True,
+        num_cpus=0,
+    ).remote()
 
 
 def get_or_create_coordinator(runtime_spec: ClanRuntimeSpec):
-    """Return the named Ray coordinator owned by the Tune scheduler."""
+    """Return the named cohort coordinator owned by the Tune scheduler."""
 
     import ray
 
@@ -199,9 +189,12 @@ def get_or_create_coordinator(runtime_spec: ClanRuntimeSpec):
     return handle
 
 
-def _join_runtime(runtime_spec: ClanRuntimeSpec) -> ClanRuntime:
+def join_runtime() -> ClanRuntime:
+    """Discover and join the Clan assigned to the current ordinary Tune function trial."""
+
     import ray
     from ray import tune
+    from uuid import uuid4
 
     if _torch_distributed_is_initialized():
         raise RuntimeError(
@@ -211,42 +204,63 @@ def _join_runtime(runtime_spec: ClanRuntimeSpec) -> ClanRuntime:
 
     trial_id = tune.get_context().get_trial_id()
     if not trial_id:
-        raise RuntimeError("ClanScheduler.wrap() must execute inside a Ray Tune trial")
+        raise RuntimeError("ClanDDPStrategy must execute inside a Ray Tune trial")
+
+    registry = None
+    deadline = time.monotonic() + 120.0
+    while registry is None and time.monotonic() < deadline:
+        try:
+            registry = ray.get_actor(_RUNTIME_REGISTRY_NAME, namespace=_RUNTIME_NAMESPACE)
+        except ValueError:
+            time.sleep(0.05)
+    if registry is None:
+        raise TimeoutError("ClanScheduler did not create the runtime registry")
+
+    runtime_spec = None
+    while runtime_spec is None and time.monotonic() < deadline:
+        runtime_spec = ray.get(registry.get_runtime_spec.remote(trial_id))
+        if runtime_spec is None:
+            time.sleep(0.05)
+    if runtime_spec is None:
+        raise TimeoutError(
+            "this Tune trial was not assigned to a complete Clan before its rendezvous timeout"
+        )
 
     deadline = time.monotonic() + runtime_spec.join_timeout_s
-    handle = None
-    while handle is None and time.monotonic() < deadline:
+    coordinator = None
+    while coordinator is None and time.monotonic() < deadline:
         try:
-            handle = ray.get_actor(runtime_spec.coordinator_name, namespace=runtime_spec.namespace)
+            coordinator = ray.get_actor(
+                runtime_spec.coordinator_name,
+                namespace=runtime_spec.namespace,
+            )
         except ValueError:
             time.sleep(runtime_spec.poll_interval_s)
-    if handle is None:
+    if coordinator is None:
         raise TimeoutError("Clan coordinator was not created by the Tune scheduler")
 
     member_id = None
     while member_id is None and time.monotonic() < deadline:
-        member_id = ray.get(handle.get_member_id.remote(trial_id))
+        member_id = ray.get(coordinator.get_member_id.remote(trial_id))
         if member_id is None:
             time.sleep(runtime_spec.poll_interval_s)
     if member_id is None:
-        raise TimeoutError(
-            "the complete Clan was not registered before this Tune trial attempted to start"
-        )
+        raise TimeoutError("the complete Clan was not registered before this trial started")
 
     token = uuid4().hex
     host = ray.util.get_node_ip_address()
     port = _find_free_port() if member_id == 0 else None
-    ray.get(handle.announce.remote(trial_id, token, host, port))
+    ray.get(coordinator.announce.remote(trial_id, token, host, port))
 
     session = None
     while session is None and time.monotonic() < deadline:
-        session = ray.get(handle.get_session.remote(trial_id, token))
+        session = ray.get(coordinator.get_session.remote(trial_id, token))
         if session is None:
             time.sleep(runtime_spec.poll_interval_s)
     if session is None:
         raise TimeoutError(
             "the complete Clan did not become resident before the rendezvous timeout; "
-            "the initial path requires enough resources to run every member concurrently"
+            "provide enough Ray resources to run every member concurrently"
         )
 
     return ClanRuntime(
