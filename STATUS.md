@@ -4,12 +4,10 @@ Last updated: 2026-08-14
 
 ## Current corrective branch
 
-The draft function-API branch is being refactored from a working mechanics implementation
-into the architecture intended for continued maintenance.
+The function-API branch now contains the corrected architecture intended for continued
+maintenance. The public user shape remains:
 
-The public user shape remains unchanged:
-
-- ordinary Ray Tune function trainable receiving the current genome/config;
+- an ordinary Ray Tune function receiving the current genome/config;
 - `ClanScheduler` through `TuneConfig(scheduler=...)`;
 - `ClanDDPStrategy` through Lightning's strategy interface;
 - `ClanTuneReportCallback` through Lightning callbacks; and
@@ -20,15 +18,16 @@ Genome application remains entirely userspace.
 ## Architecture correction
 
 The corrective implementation removes inheritance from Ray's stock PBT internals. The
-scheduler now owns the small synchronous Clan transition itself and isolates unavoidable
-Tune checkpoint/config transfer details in `ray_compat.py`. This avoids tying package users
+scheduler owns the small synchronous Clan transition and isolates the unavoidable Tune
+checkpoint/config transfer details in `ray_compat.py`. Package users are therefore not tied
 to one Ray minor release merely to preserve PBT subclass internals.
 
-The same wave also:
+The same wave:
 
 - removes the one-use stateful `ClanController`;
 - makes generation selection/mutation one pure deterministic operation in stable member
   order;
+- prevents paused early reporters from re-entering before the complete generation transition;
 - separates pure cohort/session state from Ray runtime effects;
 - scopes runtime registry identity by Tune experiment and trial;
 - documents the one-process-per-member Lightning topology as logical rather than physical;
@@ -36,39 +35,60 @@ The same wave also:
   application in `on_train_start()` after optimizer restore; and
 - makes Ray/Lightning/PyTorch ordinary runtime dependencies of the usable package.
 
-## Qualification state
+## Current qualification
 
-Before this correction, the two-member CPU path had direct evidence for repeated generation
-transition and fresh-runtime `Tuner.restore` with Ray 2.56.x, Lightning 2.6.x, PyTorch 2.10.x,
-and Python 3.11.
+The corrected CPU path is directly qualified by GitHub Actions run `31849703451`.
 
-Because scheduler state-transfer implementation changed materially, that evidence must be
-re-established on the exact corrective branch head. Until the real Ray framework-contract
-job is green, the branch is a qualification target rather than a newly qualified release.
+The real Ray contract ran with:
+
+- Python 3.11.15;
+- Ray 2.57.0;
+- Lightning 2.6.5;
+- PyTorch 2.10.0+cpu;
+- Linux;
+- one CPU node; and
+- two concurrently live Clan members.
+
+All four real framework contracts passed: repeated single-parent generation transition,
+fresh-runtime `Tuner.restore` after a deliberate post-restore failure, logical external
+Lightning topology, and a real two-rank framework-managed DDP world. The repeated-transition
+contract also preserves the accepted seed-7 sibling learning rates.
+
+The non-Ray validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
+wheel/sdist installation metadata and import checks, package surface checks, pure cohort
+contracts, and pure evolution contracts.
+
+The package dependency range is intentionally broader than this evidence: currently
+`ray[tune]>=2.56,<3`, `lightning>=2.6,<3`, and `torch>=2.10,<3`. That range avoids needless
+minor-version installation breakage; it is not a claim that every admitted version has been
+qualified. Ray 2.57.0 is the current directly established scheduler compatibility point.
 
 ## Deliberate support limits
 
-The current product direction still requires the complete Clan to be runnable concurrently.
-It does not yet claim CUDA/NCCL, multi-node execution, bounded recovery after a participant
-disappears inside an active collective, custom/sharded checkpoint plugins, arbitrary
-user-supplied distributed validation samplers, model-sharded Clan execution, or realistic
-scientific/performance overhead.
+The complete Clan must fit concurrently. The current path does not yet claim:
+
+- CUDA/NCCL;
+- physical multi-node execution;
+- bounded recovery after a participant disappears inside an active collective;
+- custom/sharded checkpoint plugins;
+- arbitrary user-supplied distributed validation samplers;
+- model-sharded Clan execution; or
+- realistic scientific/performance overhead.
 
 Function-trainable actor reuse is not a current target. Restart cost should be measured
 before reopening the accepted function API.
 
-## Repository readiness
+## Remaining production/adoption gates
 
-Packaging, documentation, examples, tests, and architecture are being corrected together.
-Remaining production/adoption gates include:
+The corrected CPU mechanics/lifecycle path is qualified, but that is not a production-ready
+claim. Remaining work includes:
 
-- exact-head Ray/Lightning/PyTorch framework qualification after this refactor;
 - GPU/multi-node/failure evidence for any corresponding support claim;
-- realistic performance/overhead measurements;
-- Clan-specific diagnostics;
-- a maintained typing policy if static typing is claimed;
+- realistic generation-boundary, checkpoint, restart, throughput, and scaling measurements;
+- Clan-specific diagnostics for cohort/round/parent/mutation/checkpoint/failure events;
+- a maintained static typing/PEP 561 policy if typing is claimed as supported API;
 - a project-owner license decision;
 - security reporting and release/version policy; and
 - a real release/distribution process.
 
-CI workflow expansion remains separately approved work and is not modified by this branch.
+CI workflow expansion remains separately approved work and was not modified by this branch.

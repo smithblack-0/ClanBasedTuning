@@ -1,6 +1,6 @@
 # Public API
 
-Status: corrective pre-release function path
+Status: qualified pre-release function path
 
 ## Mental model
 
@@ -25,9 +25,9 @@ python -m pip install .
 Ray Tune, Lightning, and PyTorch are runtime dependencies because the public package is their
 integration. Dependency metadata deliberately does not pin one Ray minor release. The current
 minimums are Ray 2.56, Lightning 2.6, and PyTorch 2.10, all bounded below the next major
-version. A version is a support claim only after direct qualification; the broad dependency
-range prevents needless installation breakage while one narrow compatibility module contains
-version-sensitive Tune transfer operations.
+version. Direct current qualification is Ray 2.57.0, Lightning 2.6.5, PyTorch 2.10.0+cpu,
+Python 3.11.15, Linux, one CPU node, and two members. The broader dependency range indicates
+installability, not automatic qualification.
 
 ## End-to-end shape
 
@@ -131,8 +131,8 @@ results = tune.Tuner(
 There is no CBT trainable wrapper and no CBT application callback. `tune.get_checkpoint()`
 contains the selected training continuation; the function argument contains the receiving
 member's current child genome. Lightning restores model/optimizer/progress through its normal
-`ckpt_path` mechanism. User code then applies any desired config values to the restored
-optimizer in its own Lightning lifecycle.
+`ckpt_path` mechanism. User code then applies desired config values to the restored optimizer
+in its own Lightning lifecycle.
 
 ## Genome validity
 
@@ -142,8 +142,8 @@ momentum/betas, and other optimizer-side update policy are the intended genes. A
 training examples, forward computation, or loss variation would make members contribute
 gradients for different problems and is not valid Clan Tuning.
 
-Candidate fitness must remain member-local until the population comparison. Logging the
-selection metric with `sync_dist=True` would collapse the signal CBT needs.
+Candidate fitness must remain member-local until population comparison. Logging the selection
+metric with `sync_dist=True` would collapse the signal CBT needs.
 
 ## Resources and topology
 
@@ -158,8 +158,9 @@ identity. Multi-node qualification must revisit the representation if physical t
 becomes relevant.
 
 The complete Clan must fit concurrently. The scheduler waits until Tune has created the
-configured trial population before launching members, and the runtime has a bounded pre-DDP
-rendezvous. The project currently does not own a separate cross-trial gang scheduler.
+configured trial population before launching members and will not resume an early-paused
+member while another member is still completing the current generation boundary. The runtime
+also has a bounded pre-DDP rendezvous. CBT does not own a separate cross-trial gang scheduler.
 
 ## `ClanScheduler`
 
@@ -183,19 +184,15 @@ Configure `metric` and `mode` once through `TuneConfig`, like other Tune schedul
 rules have exactly four fields: Gaussian `standard_deviation`, `geometry` (`linear` additive
 or `log` multiplicative), and inclusive `minimum`/`maximum` bounds.
 
-At one completed boundary, the scheduler:
-
-1. verifies one result from every stable member at the same Tune iteration;
-2. independently selects the same winner reported by the workers;
-3. captures the selected member's Tune checkpoint;
-4. snapshots its current config;
-5. creates one sibling mutation from that same snapshot for every member in stable member-ID
-   order, including the prior winner; and
-6. assigns the selected checkpoint plus each child config before Tune resumes the population.
+At one completed boundary, the scheduler verifies one result from every stable member at the
+same Tune iteration, independently selects the same winner reported by workers, captures the
+selected member's Tune checkpoint, snapshots its config, creates one sibling mutation for
+every member in stable member-ID order, and assigns the selected checkpoint plus each child
+config before Tune resumes the population.
 
 The scheduler owns this small synchronous algorithm directly rather than subclassing Ray's
-private PBT implementation. Details of the remaining Tune checkpoint/config transfer are
-isolated in `ray_compat.py`; see the scheduler compatibility record.
+private PBT implementation. Remaining Tune checkpoint/config transfer details are isolated in
+`ray_compat.py`.
 
 ## `ClanDDPStrategy`
 
@@ -203,7 +200,7 @@ isolated in `ray_compat.py`; see the scheduler compatibility record.
 trainer = pl.Trainer(strategy=ClanDDPStrategy(), ...)
 ```
 
-The strategy supplies cross-trial topology facts that Lightning cannot infer. Lightning and
+The strategy supplies cross-trial topology facts Lightning cannot infer. Lightning and
 PyTorch still own backend selection, process-group initialization, DDP setup, gradient
 collectives, barriers, and teardown. CBT disables per-forward DDP buffer broadcast so one
 candidate's post-update persistent buffers do not overwrite another candidate.
@@ -243,14 +240,13 @@ results = restored.fit()
 ```
 
 Scheduler state preserves member assignment, mutation RNG, and runtime identity while live
-actor handles are excluded from serialization. Restore recreates/registers the named runtime
-actors before resumed members run.
+actor handles are excluded from serialization. The qualified CPU contract reconstructs those
+actors in a fresh Ray runtime and continues both errored members.
 
-## Support boundary
+## Current support boundary
 
-Exact support belongs to executable qualification, not dependency metadata. The correction
-branch must re-establish the real repeated-generation and fresh-runtime restore contracts
-before its scheduler-transfer implementation is considered qualified. CUDA/NCCL, multi-node,
-active-collective failure recovery, custom/sharded checkpoints, arbitrary distributed
-validation samplers, model-sharded Clan execution, and realistic performance remain separate
-support work.
+The corrected two-member single-node CPU path is directly qualified on Ray 2.57.0,
+Lightning 2.6.5, PyTorch 2.10.0+cpu, Python 3.11.15, and Linux. Package/non-Ray validation also
+passes on Python 3.13. CUDA/NCCL, physical multi-node execution, active-collective failure
+recovery, custom/sharded checkpoints, arbitrary distributed validation samplers,
+model-sharded Clan execution, and realistic performance remain separate support work.

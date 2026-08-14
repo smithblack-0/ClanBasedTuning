@@ -6,9 +6,10 @@ DDP world while retaining member-local optimizer state. At a validation boundary
 is selected as the sole training continuation, and every next member receives an independent
 mutation of that selected parent's Tune config.
 
-The project is pre-release. The currently targeted complete path is one CPU node with two
-concurrent members; GPU/NCCL, multi-node execution, active-collective failure recovery, and
-model-sharded execution remain separate qualification work.
+The project is pre-release. The corrected initial complete path is directly qualified for two
+concurrent CPU members on one node; GPU/NCCL, multi-node execution, active-collective failure
+recovery, and model-sharded execution remain separate qualification work. See [`STATUS.md`](STATUS.md)
+for the exact current evidence boundary.
 
 ## Install
 
@@ -30,10 +31,10 @@ python -m ruff format --check .
 ```
 
 Ray, Lightning, and PyTorch are core runtime dependencies because the package's public
-surface is their integration. Dependency metadata intentionally uses minimum versions rather
-than a point-version Ray pin. Support claims remain limited to versions actually qualified;
-Ray-specific low-level checkpoint transfer is isolated in one compatibility module so an
-upstream change requires a local adapter repair rather than a scheduler redesign.
+surface is their integration. Dependency metadata intentionally uses minimum/major-version
+bounds rather than a point-version Ray pin. Support claims remain limited to versions actually
+qualified; Ray-specific low-level checkpoint transfer is isolated in one compatibility module
+so an upstream change requires a local adapter repair rather than a scheduler redesign.
 
 ## Minimal function API
 
