@@ -1,132 +1,248 @@
 # Public API
 
-Status: current and accepted intended surface
+Status: implemented initial Ray Tune function path
 
-## Purpose
+## Ordinary use
 
-This document records the public lowering through which application and integration code
-use ClanBasedTuning. It distinguishes implemented behavior from accepted surface that is
-not yet connected to the production Ray Tune and Lightning integration.
+ClanBasedTuning follows Ray Tune's function-trainable shape. The dictionary passed to the
+user function is the member's current **genome**. CBT selects the common parent
+continuation and produces the next genomes; user code alone decides what a genome means
+and how to use it.
 
-It does not specify internal population-exchange collaborators, helper functions, module
-layout, distributed backend, or framework hooks that may change during implementation.
+CBT does not inspect optimizers, infer genome-key meanings, apply genomes, provide an
+application callback, or run a post-load application hook.
 
-## Worker flow
-
-The accepted worker-facing flow is:
-
-```python
-controller = make_cbt_controller(genome=genome)
-controller.set_fitness(fitness)
-
-if controller.should_save_checkpoint():
-    checkpoint = controller.save_genome(checkpoint)
-```
-
-`set_fitness()` and `should_save_checkpoint()` are implemented on `ClanController` now.
-The production factory and winner-side `save_genome()` path remain to be implemented.
-
-## `make_cbt_controller(genome=...)`
-
-This is the intended public integration constructor. The caller supplies the controlled
-optimizer configuration assigned to the current member. The integration supplies stable
-member identity, population membership, comparison mode, generation context, and access
-to the population exchange over the already-established framework-managed distributed
-context.
-
-The name and `genome` argument express the accepted public flow. Additional arguments,
-configuration objects, or advanced construction paths may be added when implementation
-evidence requires them. The factory must not make users manually construct distributed
-groups, choose a backend, supply rendezvous details, or assemble transport collaborators
-for the ordinary path.
-
-The factory does not itself initialize or tear down the Lightning/PyTorch distributed
-context. That lifecycle remains with the framework integration that launches the Tune
-trial as one member process.
-
-Direct `ClanController` construction remains useful for framework-independent testing and
-advanced composition. Its current injected `exchange_fitness` constructor seam is
-transitional and is not the target production signature.
-
-## `ClanController.set_fitness(fitness)`
-
-Stores one finite local fitness for the current population boundary.
+A complete Lightning shape is:
 
 ```python
-controller.set_fitness(validation_loss)
+from pathlib import Path
+import tempfile
+
+import lightning.pytorch as pl
+import torch
+from ray import tune
+
+from clan_based_tuning import (
+    ClanDDPStrategy,
+    ClanScheduler,
+    ClanTuneReportCallback,
+    MutationSpec,
+)
+
+
+class Model(pl.LightningModule):
+    def __init__(self, genome):
+        super().__init__()
+        self.network = ...
+        self.optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=genome["lr"],
+            weight_decay=genome["weight_decay"],
+        )
+
+    def training_step(self, batch, batch_index):
+        ...
+
+    def validation_step(self, batch, batch_index):
+        loss = ...
+        self.log("val_loss", loss)
+
+    def configure_optimizers(self):
+        return self.optimizer
+
+
+def apply_genome(optimizer, genome):
+    # USERSPACE. This function is not part of CBT and CBT never calls it.
+    for param_group in optimizer.param_groups:
+        param_group["lr"] = genome["lr"]
+        param_group["weight_decay"] = genome["weight_decay"]
+
+
+def train(genome):
+    model = Model(genome)
+    checkpoint = tune.get_checkpoint()
+
+    # Keep this local materialization alive for the Trainer invocation.
+    local_checkpoint = tempfile.TemporaryDirectory()
+    checkpoint_path = None
+
+    if checkpoint is not None:
+        checkpoint_dir = checkpoint.to_directory(local_checkpoint.name)
+        checkpoint_path = Path(checkpoint_dir, "checkpoint.ckpt")
+        state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+        # USERSPACE: inherit optimizer history, then apply this member's current genome.
+        model.optimizer.load_state_dict(state["optimizer_states"][0])
+        apply_genome(model.optimizer, genome)
+
+        # Lightning will perform the final full-state restore. Put the user's changed
+        # optimizer state into this member's local checkpoint copy before fit().
+        state["optimizer_states"][0] = model.optimizer.state_dict()
+        torch.save(state, checkpoint_path)
+
+    trainer = pl.Trainer(
+        devices=1,
+        strategy=ClanDDPStrategy(),
+        callbacks=[ClanTuneReportCallback()],
+        enable_checkpointing=False,
+        ...,
+    )
+
+    trainer.fit(
+        model,
+        train_dataloaders=train_loader,
+        val_dataloaders=val_loader,
+        ckpt_path=str(checkpoint_path) if checkpoint_path is not None else None,
+    )
 ```
 
-Fitness may be assigned only once. This operation does not enter population
-communication.
+The local checkpoint edit above is ordinary user code. It is one way to preserve
+Lightning's full checkpoint restoration while ensuring the newly assigned genome wins
+over the parent's optimizer hyperparameters. A user may choose another explicit
+userspace mechanism. CBT has no application protocol to satisfy.
 
-## `ClanController.should_save_checkpoint()`
+The qualified contract verifies that this pattern preserves the selected parent's model
+state, optimizer history, and Lightning training progress while the user changes the
+optimizer according to the newly received genome.
 
-Returns whether the local member is the sole selected checkpoint source.
+## Tune setup
+
+`ClanScheduler.wrap(train)` adds hidden cohort/rendezvous context beside the function. It
+does not add, remove, inspect, or rewrite keys in the dictionary passed to `train(genome)`.
 
 ```python
-should_save = controller.should_save_checkpoint()
+population_size = 4
+
+scheduler = ClanScheduler(
+    population_size=population_size,
+    metric="val_loss",
+    mode="min",
+    mutations={
+        "lr": MutationSpec(
+            standard_deviation=0.20,
+            geometry="log",
+            minimum=1e-5,
+            maximum=1e-2,
+        ),
+        "weight_decay": MutationSpec(
+            standard_deviation=0.20,
+            geometry="log",
+            minimum=1e-6,
+            maximum=1e-1,
+        ),
+    },
+    seed=7,
+)
+
+results = tune.Tuner(
+    tune.with_resources(
+        scheduler.wrap(train),
+        {"cpu": 1},
+    ),
+    param_space={
+        "lr": tune.loguniform(1e-4, 1e-3),
+        "weight_decay": tune.loguniform(1e-5, 1e-2),
+    },
+    tune_config=tune.TuneConfig(
+        scheduler=scheduler,
+        num_samples=population_size,
+        max_concurrent_trials=population_size,
+    ),
+).fit()
 ```
 
-The first call:
+For the initial path, all members must be resident concurrently. The cluster therefore
+needs enough resources for `population_size` copies of the per-trial resource request.
+Insufficient capacity cannot be time-multiplexed safely because the live members form one
+DDP world.
 
-1. requires local fitness;
-2. performs the complete-population exchange through the configured collaborator over
-   the established framework-managed distributed context;
-3. applies the shared comparison direction and deterministic tie policy; and
-4. caches whether the local stable member is selected.
+## `ClanScheduler`
 
-Repeated calls return the cached answer without a second population operation.
-The method does not initialize distributed communication, construct, annotate, persist,
-or report a checkpoint.
+`ClanScheduler` specializes Ray's synchronous `PopulationBasedTraining` lifecycle. Ray
+continues to own trial execution, pausing, checkpoint transfer, restart, and config
+replacement.
 
-## `ClanController.save_genome(checkpoint)`
+At each completed round the scheduler:
 
-This accepted method is valid only after `should_save_checkpoint()` has resolved `True`.
-It binds the selected checkpoint to the stable member and copied optimizer configuration
-that produced it, then returns the same checkpoint reference.
+1. waits for one result from every stable Clan member;
+2. verifies stable member identity and one common generation boundary;
+3. independently applies the same deterministic winner rule used by the workers;
+4. makes the selected member the sole checkpoint source;
+5. snapshots that selected member's current Tune config; and
+6. gives **every** next member, including the selected member, an independent mutation of
+   that same parent config.
+
+Mutation keys are Tune-config keys. They are not optimizer fields from CBT's perspective.
+The scheduler mutates values; the user's function decides what those values do.
+
+`ClanScheduler.wrap(train)` is required for the initial integration because separate Tune
+trials need hidden stable-member and DDP rendezvous context. The wrapped function still
+receives the original Ray config argument unchanged.
+
+## `ClanDDPStrategy`
+
+`ClanDDPStrategy` is a Lightning `DDPStrategy` for one externally launched Tune trial per
+Clan member.
+
+It supplies the rank, world size, and rendezvous facts Lightning cannot infer across
+independent Tune trials. It does not initialize a second process group or select a
+backend. With no explicit backend argument, normal Lightning/PyTorch backend selection is
+used. A user may still pass the ordinary Lightning option when deliberately required:
 
 ```python
-checkpoint = controller.save_genome(checkpoint)
+strategy = ClanDDPStrategy(process_group_backend="...")
 ```
 
-The accepted producer-provenance schema is:
+The strategy disables DDP's per-forward buffer broadcast so one member's later local
+state is not silently copied over another member after divergence.
 
-```python
-{
-    "clan_based_tuning": {
-        "schema_version": 1,
-        "member_id": member_id,
-        "genome": copied_genome,
-    }
-}
-```
+During a CBT round checkpoint, every member participates in Lightning checkpoint
+construction and the normal `Trainer.save_checkpoint()` barrier. Only the selected rank
+delegates the checkpoint to Lightning's `CheckpointIO`. Ordinary checkpoint calls outside
+that scoped CBT operation keep Lightning's normal behavior.
 
-The metadata contains only the schema version, stable member identity, and copied current
-genome. It does not contain:
+## `ClanTuneReportCallback`
 
-- Tune trial or generation state;
-- fitness or comparison mode;
-- child configurations;
-- mutation random state;
-- scheduler lineage; or
-- recovery state.
+`ClanTuneReportCallback` closes a round at Lightning validation end.
 
-The method does not construct the Lightning checkpoint or report it to Tune. Calling it
-before population resolution or on a losing member is an error.
+It:
 
-The checkpoint metadata mechanism may follow the qualified framework interface, but it
-must preserve this schema and must not deserialize or modify the Lightning payload. The
-CBT Tune scheduler verifies the recorded member and genome against the selected member's
-active controlled configuration before accepting the transition.
+1. reads one local Lightning fitness metric;
+2. gathers one scalar fitness from every member through the active Lightning strategy;
+3. applies the shared deterministic selection rule locally;
+4. has all members participate in Lightning checkpoint construction;
+5. permits only the selected member to persist the CBT continuation; and
+6. reports metrics from every trial while only the selected member reports a Ray
+   checkpoint.
+
+The callback has no genome argument and no genome-application behavior.
+
+By default, the Lightning metric name is the same `metric` supplied to `ClanScheduler`.
+`lightning_metric=` may select a different local Lightning metric. `extra_metrics=` can
+forward additional callback metrics to Tune.
+
+The fitness metric must remain member-local. In particular, user logging must not reduce
+that metric across the Clan before CBT compares members.
+
+## Checkpoint storage
+
+A completed Clan round has one persistent CBT continuation checkpoint, independent of
+population size. Losing members may transiently construct checkpoint dictionaries because
+Lightning's distributed checkpoint boundary is collective, but they do not write or
+report a CBT checkpoint.
+
+Ray's synchronous PBT lifecycle then transfers the selected continuation to the next
+members. The receiving user function gets that checkpoint from `tune.get_checkpoint()`.
+
+Additional user-configured Lightning checkpoints are separate and consume whatever
+storage the user deliberately configures.
 
 ## `MutationSpec`
 
-`MutationSpec` is implemented and publicly exported.
+`MutationSpec` is framework-independent:
 
 ```python
-from clan_based_tuning import MutationSpec
-
-lr_mutation = MutationSpec(
+mutation = MutationSpec(
     standard_deviation=0.25,
     geometry="log",
     minimum=1e-5,
@@ -134,17 +250,36 @@ lr_mutation = MutationSpec(
 )
 ```
 
-- `standard_deviation` is the Gaussian displacement scale.
-- `geometry="linear"` adds the displacement.
-- `geometry="log"` multiplies by the exponential of the displacement.
-- `minimum` and `maximum` are inclusive bounds applied after mutation.
+`geometry="linear"` adds a Gaussian displacement. `geometry="log"` multiplies by the
+exponential of the displacement. `minimum` and `maximum` clamp the resulting value. The
+Clan scheduler owns the mutation random stream.
 
-`mutation.mutate(value, random_stream)` returns one bounded mutation. The CBT Tune
-scheduler owns the random stream and mutation lifecycle. Worker controllers do not use
-or retain mutation state.
+## `ClanController`
 
-## Internal policy functions
+`ClanController` is the small framework-independent decision primitive used by the
+Lightning reporting integration. It stores one local fitness, performs one injected
+complete-population exchange, caches the checkpoint-source decision, and exposes the
+resolved winner identity.
 
-Worker and scheduler selection use one shared deterministic implementation so comparison
-direction and ties cannot diverge. Its helper name, signature, module, and container types
-are internal rather than public API.
+Ordinary Tune/Lightning users do not need to construct it. Direct construction remains
+useful for framework-independent tests and advanced composition.
+
+## Current support boundary
+
+The complete function path is directly qualified on a single node with two concurrent CPU
+members using Ray 2.56.1, Lightning 2.6.5, PyTorch 2.10.0, and Python 3.11. The package's
+non-Ray tests also run on Python 3.13.
+
+The following are not yet support claims for the complete path:
+
+- CUDA/NCCL;
+- multi-node execution;
+- actor reuse across generations;
+- failure recovery after a member or distributed-collective failure;
+- model-sharded Clan execution; or
+- arbitrary validation-sampler arrangements.
+
+Lightning normally inserts distributed samplers for validation under DDP. The current
+integration requires the user to ensure that the chosen fitness metric is based on
+comparable held-out evaluation across members. Automatic replication of an identical
+validation set for every member is not yet provided by CBT.
