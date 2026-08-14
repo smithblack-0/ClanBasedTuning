@@ -68,9 +68,7 @@ class TinyRegressionModel(lightning.LightningModule):
             torch_distributed.is_initialized()
             and str(torch_distributed.get_backend()).lower() == "nccl"
         )
-        self.node_fingerprint = float(
-            zlib.crc32(ray.util.get_node_ip_address().encode("utf-8"))
-        )
+        self.node_fingerprint = float(zlib.crc32(ray.util.get_node_ip_address().encode("utf-8")))
         self.world_size_seen = float(self.trainer.strategy.world_size)
 
     def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
@@ -147,9 +145,7 @@ def train_tiny_mlp_member(genome: dict[str, Any]) -> None:
         trainer = lightning.Trainer(
             accelerator=str(genome["accelerator"]),
             devices=1,
-            strategy=ClanDDPStrategy(
-                timeout=timedelta(seconds=float(genome["ddp_timeout_s"]))
-            ),
+            strategy=ClanDDPStrategy(timeout=timedelta(seconds=float(genome["ddp_timeout_s"]))),
             callbacks=[ClanTuneReportCallback(extra_metrics=_EXTRA_METRICS)],
             max_epochs=100,
             logger=False,
