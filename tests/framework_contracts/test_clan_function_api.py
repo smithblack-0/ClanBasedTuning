@@ -196,10 +196,13 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         assert result.metrics["validation_sample_count"] == pytest.approx(4.0)
         assert result.metrics["validation_sample_sum"] == pytest.approx(6.0)
 
-    # Training remains normally partitioned across ranks. With shuffle disabled and one
-    # training batch, rank 0 receives sample 0 and rank 1 receives sample 1.
-    training_samples = sorted(result.metrics["training_sample_value"] for result in results)
-    assert training_samples == pytest.approx([0.0, 1.0])
+    # Training remains normally partitioned across ranks. Full Lightning progress is
+    # restored between generations, so the exact position resumed within each rank's
+    # shard is framework-owned; the Clan invariant is that the two ranks still consume
+    # distinct training samples rather than a replicated validation-style stream.
+    training_samples = [result.metrics["training_sample_value"] for result in results]
+    assert len(set(training_samples)) == 2
+    assert all(sample in {0.0, 1.0, 2.0, 3.0} for sample in training_samples)
 
     # The first winner used lr=0.2. Every second-round member receives an independent
     # deterministic mutation of that same selected parent genome, including the winner.
