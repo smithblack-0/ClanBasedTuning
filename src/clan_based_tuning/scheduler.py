@@ -10,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from ray.air.constants import TRAINING_ITERATION
+from ray.train._internal.session import _FutureTrainingResult
 from ray.tune.schedulers import PopulationBasedTraining
 
 from clan_based_tuning.evolution import MutationSpec, select_winner_id
@@ -17,6 +18,8 @@ from clan_based_tuning.protocol import (
     CLAN_CHECKPOINT_SOURCE,
     CLAN_GENOME_JSON,
     CLAN_MEMBER_ID,
+    CLAN_METADATA_KEY,
+    CLAN_SCHEMA_VERSION,
     CLAN_WINNER_ID,
 )
 from clan_based_tuning.runtime import (
@@ -110,7 +113,9 @@ class ClanScheduler(PopulationBasedTraining):
 
         if len(self._trial_ids) == self.population_size:
             ordered = sorted(self._trial_ids)
-            self._member_ids = {trial_id: member_id for member_id, trial_id in enumerate(ordered)}
+            self._member_ids = {
+                trial_id: member_id for member_id, trial_id in enumerate(ordered)
+            }
             import ray
 
             ray.get(self._coordinator_handle.register_trials.remote(ordered))
@@ -170,8 +175,57 @@ class ClanScheduler(PopulationBasedTraining):
                 raise RuntimeError("reported producer genome disagrees with the active Tune config")
 
         winner_trial = by_member[winner_id][0]
-        losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
+        losers = [
+            trial for member_id, (trial, _) in by_member.items() if member_id != winner_id
+        ]
         return losers, [winner_trial]
+
+    def _checkpoint_or_exploit(
+        self,
+        trial,
+        tune_controller,
+        upper_quantile,
+        lower_quantile,
+    ) -> None:
+        """Let native PBT save/transfer state, verifying the actual source checkpoint first."""
+
+        super()._checkpoint_or_exploit(
+            trial,
+            tune_controller,
+            upper_quantile,
+            lower_quantile,
+        )
+        if trial not in upper_quantile:
+            return
+
+        state = self._trial_state[trial]
+        checkpoint = state.last_checkpoint
+        if isinstance(checkpoint, _FutureTrainingResult):
+            training_result = checkpoint.resolve()
+            checkpoint = training_result.checkpoint
+            state.last_checkpoint = checkpoint
+        if checkpoint is None:
+            raise RuntimeError("selected Clan member did not produce a usable checkpoint")
+
+        self._verify_checkpoint_provenance(trial, checkpoint)
+
+    def _verify_checkpoint_provenance(self, trial, checkpoint) -> None:
+        """Reject a selected continuation whose metadata disagrees with scheduler state."""
+
+        metadata = checkpoint.get_metadata()
+        try:
+            provenance = metadata[CLAN_METADATA_KEY]
+        except KeyError as error:
+            raise RuntimeError("selected Clan checkpoint is missing producer provenance") from error
+
+        expected_member_id = self._member_ids[trial.trial_id]
+        expected_genome = self._controlled_genome(trial.config)
+        if provenance.get("schema_version") != CLAN_SCHEMA_VERSION:
+            raise RuntimeError("selected Clan checkpoint has an unsupported provenance schema")
+        if provenance.get("member_id") != expected_member_id:
+            raise RuntimeError("selected Clan checkpoint producer identity disagrees with scheduler state")
+        if provenance.get("genome") != expected_genome:
+            raise RuntimeError("selected Clan checkpoint producer genome disagrees with scheduler state")
 
     def _get_new_config(self, trial, trial_to_clone):
         """Clone the selected genome and mutate only the scheduler-controlled keys."""
