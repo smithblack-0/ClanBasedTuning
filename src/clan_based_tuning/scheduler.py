@@ -102,9 +102,7 @@ class ClanScheduler(PopulationBasedTraining):
 
         if len(self._trial_ids) == self.population_size:
             ordered = sorted(self._trial_ids)
-            self._member_ids = {
-                trial_id: member_id for member_id, trial_id in enumerate(ordered)
-            }
+            self._member_ids = {trial_id: member_id for member_id, trial_id in enumerate(ordered)}
         self._ensure_coordinator()
 
     def on_trial_result(self, tune_controller, trial, result: dict[str, Any]) -> str:
@@ -167,9 +165,7 @@ class ClanScheduler(PopulationBasedTraining):
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
 
         winner_trial = by_member[winner_id][0]
-        losers = [
-            trial for member_id, (trial, _) in by_member.items() if member_id != winner_id
-        ]
+        losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
         return losers, [winner_trial]
 
     def _get_new_config(self, trial, trial_to_clone):
@@ -192,9 +188,7 @@ class ClanScheduler(PopulationBasedTraining):
 
             ordered = [
                 trial_id
-                for trial_id, _ in sorted(
-                    self._member_ids.items(), key=lambda item: item[1]
-                )
+                for trial_id, _ in sorted(self._member_ids.items(), key=lambda item: item[1])
             ]
             ray.get(self._coordinator_handle.register_trials.remote(ordered))
 
