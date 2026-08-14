@@ -4,133 +4,119 @@ Status: current implementation sequence
 
 ## Authority
 
-This plan sequences the present work. It does not change the
-[roadmap](product_roadmap.md), the [integration design](design/integration.md), or
-the [behavioral](contracts/system_behavior.md) and
-[population-resolution](contracts/population_resolution_invariants.md) contracts.
-Implementation evidence may change the sequence or an internal choice without changing
-those authorities.
+This plan sequences present work. It does not change the governing
+[roadmap](product_roadmap.md), [system behavior](contracts/system_behavior.md),
+[population invariants](contracts/population_resolution_invariants.md), or
+[userspace API](api.md).
 
 ## Current baseline
 
-The package currently contains:
+The first complete Ray Tune function path is implemented and directly qualified on a
+single CPU node with two members over two generations.
 
-- a thin `ClanController` that stores one local fitness and resolves a cached
-  checkpoint-source decision through an injected `exchange_fitness` callback;
-- one deterministic selection function;
-- `MutationSpec` for bounded linear or logarithmic mutation;
-- plain type aliases for scheduler-owned optimizer configurations; and
-- an internal Lightning `ClusterEnvironment` that presents externally assigned Tune
-  member topology without owning process-group lifecycle.
+That path already includes:
 
-A real two-member single-node CPU contract establishes that two concurrent Tune function
-trials can use that environment as two externally launched Lightning processes and two
-ranks in one native PyTorch DDP world. Lightning/PyTorch reduce distinct local gradients
-to one common gradient. For the qualified external-launch path, the process group remains
-active after ordinary `Trainer.fit()` returns and is released when the Tune trial process
-ends.
+- production stable-member/rendezvous assignment for the initial one-trial/one-rank
+  topology;
+- Lightning/PyTorch shared-gradient DDP over the framework-managed process group;
+- member-local fitness exchange through the active Lightning strategy;
+- deterministic worker and scheduler winner agreement;
+- winner-only persistent CBT checkpointing while retaining Lightning's checkpoint barrier;
+- synchronous Ray PBT transfer of the selected continuation;
+- independent mutation of the selected parent genome for every next member, including the
+  preceding winner; and
+- a receiving function that restores the selected Lightning continuation and explicitly
+  applies the newly assigned genome in userspace.
 
-This baseline does not establish production cohort admission, repeated-round lifecycle,
-population exchange, checkpoint integration, the CBT Tune scheduler, CUDA/NCCL, or
-multi-node support. No custom Trainer or replacement training loop is part of the design;
-Clan-specific training behavior enters through callbacks and supported strategy or
-environment seams.
+The real contract verifies inherited model state, optimizer momentum, and Lightning
+training progress across the generation boundary. CBT owns none of the genome-application
+logic used to establish that result.
 
 ## Current objective
 
-Complete the first manually composable, directly qualified Clan Tuning integration while
-preserving the ordinary Ray Tune, Lightning, and PyTorch distributed lifecycles.
+Turn the initial qualified mechanics path into a robust and usable supported path without
+changing its userspace ownership boundary or replacing framework-native lifecycle
+machinery.
 
 ## Work sequence
 
-### 1. Complete Tune-member DDP cohort integration
+### 1. Finish synchronization and public mechanics example
 
-The externally launched Lightning topology handoff and shared-gradient path are directly
-qualified for an already available two-member CPU cohort.
+Keep the public API, design, behavioral contracts, qualification record, status, and
+examples aligned with the code that actually passed.
 
-The remaining cohort work must resolve the smallest framework-native seams for:
+Add a small reproducible mechanics example using the same public function API once its
+validation-data arrangement is explicit enough not to teach an accidental unsupported
+pattern. The example must show genome use as ordinary user code, not through a CBT helper.
 
-- admitting the complete Clan with its required resources;
-- assigning stable member and distributed-rank identity in production;
-- assigning world-size, rendezvous, and cohort identity without test-harness constants;
-- preventing independent trial lifecycle changes while the DDP cohort is active;
-- retaining the established group across the required round and population boundaries;
-  and
-- surfacing incomplete-cohort and member failures through framework lifecycle behavior.
+### 2. Make comparable evaluation convenient and explicit
 
-Do not add package-owned GLOO, NCCL, CUDA, Ray collective, or PyTorch process-group
-lifecycle. Complete the remaining evidence required by
-[`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md).
+Lightning normally injects distributed samplers into validation dataloaders under DDP.
+Clan selection instead needs member-local candidate fitness values that are valid to
+compare.
 
-A narrow scheduler or native Tune integration seam may coordinate admission and topology.
-It must not replace Tune's trial/resource ownership, subclass or replace Lightning's
-Trainer, or prematurely implement the full evolutionary transition.
+Resolve and qualify a framework-native ordinary path for equivalent held-out evaluation.
+Possible implementation work may use supported Lightning data/strategy seams, but it must
+not silently rewrite arbitrary user sampler semantics without a contracted behavior.
 
-### 2. Population resolution over the established context
+Acceptance requires a multi-example validation test that would detect accidental
+rank-specific evaluation and a documented rule against reducing the candidate fitness
+metric across the Clan.
 
-Replace the injected fitness callback with a narrow population exchange that uses the
-already-established framework-managed distributed context.
+### 3. Harden complete-cohort admission and failure behavior
 
-Preserve the controller's one-fitness, one-resolution, cached-answer lifecycle and the
-explicit association between stable members and gathered fitness. Qualify comparison
-semantics, identity mapping, generation isolation, and incomplete-member failure without
-creating another process group.
+The initial runtime waits for the complete assigned population and has a bounded pre-DDP
+rendezvous timeout, but all members must already fit concurrently on the cluster.
 
-### 3. Selected-checkpoint provenance
+Investigate the smallest Ray-native mechanism for stronger gang/cohort admission if one is
+needed. Qualify incomplete-resource behavior and member failure without creating a second
+training scheduler or taking process-group ownership from Lightning/PyTorch.
 
-Identify and qualify the narrow Ray Tune and Lightning seams through which only the
-selected member retains and reports the training continuation. Implement the accepted
-public producer-provenance behavior without introducing a second checkpoint payload or a
-second configuration authority.
+Separately qualify what happens when a participant disappears inside an active framework
+collective. Do not claim bounded recovery until the real failure path releases healthy
+participants or fails the experiment predictably.
 
-The stable member and exact controlled configuration are required provenance. The
-accepted metadata schema is firm; the framework metadata and storage seam are selected by
-direct evidence.
+### 4. Qualify GPU execution
 
-### 4. CBT Tune scheduler
+Run the same public path on the intended CUDA/NCCL configuration. Production code must
+continue to use the backend selected by Lightning/PyTorch rather than adding a CBT backend
+switch.
 
-Implement the accepted scheduler and its authoritative complete-population transition.
-Use direct Ray evidence to choose its exact superclass, delegated native scheduler
-machinery, persistence seam, cohort-admission integration, and hook path.
+Evidence must cover shared gradients, member-local divergence, fitness exchange,
+winner-only checkpoint persistence, full continuation restore, and repeated generation
+transition.
 
-The scheduler verifies the selected continuation, applies the shared policy, derives one
-target optimizer configuration per stable member, persists mutation and recovery state,
-assigns the common continuation, and releases the population together.
+### 5. Qualify multi-node execution
 
-Do not restore the rejected persistent evolutionary-controller architecture.
+Extend the same one-member/one-rank DDP path across nodes. Resolve only topology and
+rendezvous behavior actually required by the framework evidence. Do not replace the
+single-node integration with a separate multi-node training system.
 
-### 5. Complete Lightning/PyTorch training integration
+### 6. Expand scientific and operational evidence
 
-Complete the narrow callback- and strategy-based integration required for a
-Lightning-produced round boundary, native DDP common gradients, member-local optimizer
-application, selected-member checkpoint persistence, and restoration followed by
-target-configuration application.
+Once the mechanics path is stable on the intended hardware, add realistic optimizer
+studies using the public package. Establish useful round frequencies, overhead, checkpoint
+cost, and optimizer-policy behavior empirically rather than inferring scientific value
+from the mechanics test.
 
-Do not subclass or replace Lightning's Trainer or create a package-owned training loop.
-Qualify the first supported optimizer, precision, device, and launch path rather than
-claiming adjacent configurations by inference.
-
-### 6. Repeated manual workflow
-
-Complete a public manual composition through at least two generation transitions. The
-run must expose the observable system behaviors in
-[`contracts/system_behavior.md`](contracts/system_behavior.md), record its qualified
-support boundary, and provide a reproducible mechanics example using the public package.
+Add observability and diagnostics where real workloads expose missing information.
 
 ## Later ClanFSDP work
 
-Model-sharded Clan execution is not part of the initial DDP completion path. Near the end
-of the project, a separate ClanFSDP design and qualification effort may introduce a
-composed topology that represents both model shards and Clan members while retaining
-framework ownership of distributed groups.
+Model-sharded Clan execution remains a separate later design and qualification effort. It
+may require a composed topology representing both model shards and Clan members, while
+retaining framework ownership of the resulting process groups.
 
-The initial implementation must not pre-build that future topology or use it to justify a
-second population communication system.
+The current DDP implementation must not pre-build that topology or use it to justify a
+second population communication runtime.
 
-## Completion boundary
+## Current completion boundary
 
-This plan is complete when the first supported manual integration repeatedly performs
-Clan Tuning through the public path and its implementation, tests, qualification records,
-documentation, and example agree. Easier assembly, broader optimizer layouts, ClanFSDP,
-additional distributed modes, and operational extensions remain later work unless they
-are required for that first claimed path.
+The initial CPU mechanics path is complete when the synchronized documentation and
+qualification record agree with a green exact-head CI run. It is not equivalent to a
+broad production-support claim.
+
+The next practical milestone is a documented, reproducible public path with comparable
+evaluation and predictable cohort/failure behavior on the intended GPU environment. All
+later work must preserve the same fundamental contract: CBT supplies a genome; the user
+owns what happens with it.
