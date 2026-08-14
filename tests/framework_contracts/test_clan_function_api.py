@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -129,7 +130,8 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
     assert all(result.error is None for result in results)
     for result in results:
         assert result.metrics["training_iteration"] >= 2
-        assert result.metrics["lr_seen"] == pytest.approx(result.metrics["clan/genome"]["lr"])
+        genome = json.loads(result.metrics["clan/genome_json"])
+        assert result.metrics["lr_seen"] == pytest.approx(genome["lr"])
 
     # Both ranks materialize Lightning checkpoint dictionaries at the barrier, but only
     # the selected member writes a persistent checkpoint for each completed round.
