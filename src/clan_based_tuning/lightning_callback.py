@@ -54,9 +54,7 @@ class ClanTuneReportCallback(Callback):
             member_id=runtime.member_id,
             population_size=runtime.world_size,
             mode=runtime.spec.mode,
-            exchange_fitness=lambda local_fitness: self._exchange_fitness(
-                trainer, local_fitness
-            ),
+            exchange_fitness=lambda local_fitness: self._exchange_fitness(trainer, local_fitness),
         )
         controller.set_fitness(fitness)
         is_winner = controller.should_save_checkpoint()
@@ -78,9 +76,7 @@ class ClanTuneReportCallback(Callback):
             finally:
                 trainer.strategy.end_round_checkpoint()
 
-            checkpoint = (
-                tune.Checkpoint.from_directory(checkpoint_dir) if is_winner else None
-            )
+            checkpoint = tune.Checkpoint.from_directory(checkpoint_dir) if is_winner else None
             tune.report(report, checkpoint=checkpoint)
 
     @staticmethod
