@@ -88,7 +88,7 @@ CBT does not add package-owned teardown to compensate.
 Consequently, actor/process reuse across Clan generations is not currently supported by
 the complete function path.
 
-## Shared training behavior
+## Shared training and evaluation behavior
 
 The retained two-member CPU contract gives the ranks distinct local gradients and verifies
 that Lightning/PyTorch reduce them to one common gradient before the local optimizer
@@ -98,8 +98,25 @@ updates.
 buffer changes are not copied from one rank onto the others after setup. Gradient
 communication remains ordinary DDP.
 
-Training data follows Lightning's ordinary distributed-sampler behavior unless user code
-configures another supported loader arrangement.
+For Lightning-managed dataloaders, training keeps Lightning's ordinary distributed
+sampler kwargs: the Clan world size and each member's global rank. The complete contract
+observes distinct training samples across the two ranks after full Lightning progress
+restore, confirming that validation replication does not accidentally replicate training.
+
+Validation uses the same strategy extension point differently. Lightning asks the active
+strategy for distributed-sampler kwargs before automatically injecting a sampler. While
+the Trainer is validating or sanity checking, `ClanDDPStrategy` reports a one-replica
+sampler (`num_replicas=1`, `rank=0`) on every member. The automatically managed validation
+loader therefore covers the complete held-out dataset independently in each candidate
+process.
+
+The real contract uses four validation examples and requires every member to observe count
+`4` and sum `6`, including when Lightning first prepares the loader for its default sanity
+validation. This directly qualifies the ordinary Lightning-managed evaluation path.
+
+Lightning does not auto-replace an explicitly user-supplied `DistributedSampler`; CBT
+likewise leaves such a sampler alone. Explicit distributed validation-sampler semantics
+remain userspace and require separate qualification if claimed.
 
 ## Population resolution on the same context
 
@@ -145,7 +162,7 @@ single-node CPU path. It does not establish:
 - multi-node rendezvous;
 - actor reuse;
 - bounded recovery after a member disappears inside an active framework collective;
-- automatic identical validation-set replication;
+- semantics of explicitly user-supplied distributed validation samplers;
 - arbitrary Lightning strategies or third-party distributed backends; or
 - model-sharded ClanFSDP execution.
 
