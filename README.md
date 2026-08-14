@@ -68,7 +68,9 @@ optimizer schema, or hidden post-load application hook.
 
 [`docs/api.md`](docs/api.md) contains the complete Lightning checkpoint-restore pattern,
 including an explicit userspace example that preserves inherited optimizer history and
-Lightning training progress while applying a newly assigned genome.
+Lightning training progress while applying a newly assigned genome. A runnable two-member
+CPU mechanics program using that same public path is in
+[`examples/function_api.py`](examples/function_api.py).
 
 ## What CBT owns
 
