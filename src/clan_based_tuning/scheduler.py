@@ -157,9 +157,15 @@ class ClanScheduler(FIFOScheduler):
         self._register_runtime()
 
     def choose_trial_to_run(self, tune_controller: Any) -> Trial | None:
-        """Launch members only after Tune has created the complete Clan population."""
+        """Launch only a complete Clan and never mix two generation boundaries."""
 
         if len(self._member_ids) != self.population_size:
+            return None
+        if self._reports:
+            # Once the first member reports a boundary, early reporters are paused. Resuming
+            # one before the remaining live members report would mix two generations in the
+            # runtime rendezvous. Keep every paused member gated until the complete transition
+            # clears `_reports`.
             return None
         self._register_runtime()
         return super().choose_trial_to_run(tune_controller)
