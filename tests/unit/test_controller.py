@@ -40,6 +40,7 @@ def test_population_resolves_one_checkpoint_source():
         True,
         False,
     ]
+    assert [controller.winner_id for controller, _ in controllers_and_exchanges] == [1, 1, 1]
     assert [exchange.calls for _, exchange in controllers_and_exchanges] == [
         [4.0],
         [1.0],
@@ -69,7 +70,15 @@ def test_should_save_checkpoint_is_one_collective_decision():
 
     assert controller.should_save_checkpoint() is True
     assert controller.should_save_checkpoint() is True
+    assert controller.winner_id == 1
     assert exchange.calls == [1.0]
+
+
+def test_winner_id_requires_population_resolution():
+    controller, _ = _controller(0, [1.0, 2.0])
+
+    with pytest.raises(RuntimeError, match="population decision"):
+        _ = controller.winner_id
 
 
 def test_fitness_must_be_set_before_collective_resolution():
