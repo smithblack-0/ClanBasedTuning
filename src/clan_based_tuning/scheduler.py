@@ -113,9 +113,7 @@ class ClanScheduler(PopulationBasedTraining):
 
         if len(self._trial_ids) == self.population_size:
             ordered = sorted(self._trial_ids)
-            self._member_ids = {
-                trial_id: member_id for member_id, trial_id in enumerate(ordered)
-            }
+            self._member_ids = {trial_id: member_id for member_id, trial_id in enumerate(ordered)}
             import ray
 
             ray.get(self._coordinator_handle.register_trials.remote(ordered))
@@ -175,9 +173,7 @@ class ClanScheduler(PopulationBasedTraining):
                 raise RuntimeError("reported producer genome disagrees with the active Tune config")
 
         winner_trial = by_member[winner_id][0]
-        losers = [
-            trial for member_id, (trial, _) in by_member.items() if member_id != winner_id
-        ]
+        losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
         return losers, [winner_trial]
 
     def _checkpoint_or_exploit(
