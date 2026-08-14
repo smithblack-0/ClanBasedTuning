@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 import tempfile
 from collections.abc import Mapping
-from typing import Any
 
 import torch
 from lightning.pytorch import LightningModule, Trainer
@@ -27,9 +26,9 @@ from clan_based_tuning.runtime import current_runtime
 class ClanTuneReportCallback(Callback):
     """Compare local fitness, persist one winner, and report the round to Tune.
 
-    The callback does not interpret or apply the genome. It observes the local Lightning
-    metric at validation end, exchanges only that scalar through the already-established
-    DDP process group, and asks ``ClanController`` which member is the checkpoint source.
+    Genome use is outside this callback. It observes the local Lightning metric at
+    validation end, exchanges only that scalar through the already-established DDP
+    process group, and asks ``ClanController`` which member is the checkpoint source.
 
     Every rank then enters Lightning's ordinary checkpoint construction and barrier. The
     accompanying ``ClanDDPStrategy`` writes the checkpoint only on the selected rank, so
@@ -107,7 +106,9 @@ class ClanTuneReportCallback(Callback):
         try:
             value = trainer.callback_metrics[metric]
         except KeyError as error:
-            raise RuntimeError(f"Lightning did not report required Clan metric {metric!r}") from error
+            raise RuntimeError(
+                f"Lightning did not report required Clan metric {metric!r}"
+            ) from error
         if hasattr(value, "item"):
             value = value.item()
         return float(value)
