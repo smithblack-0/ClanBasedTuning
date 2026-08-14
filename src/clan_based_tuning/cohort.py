@@ -10,13 +10,39 @@ No object here creates actors, touches sockets, or initializes distributed proce
 from dataclasses import dataclass
 
 
+# Helpers
+
+
+@dataclass(frozen=True, slots=True)
+class _PendingMember:
+    """One member announcement waiting for the complete invocation cohort."""
+
+    token: str
+    host: str
+    port: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class _Session:
+    """One complete invocation cohort sharing a single DDP rendezvous endpoint."""
+
+    session_id: int
+    tokens: dict[str, str]
+    main_address: str
+    main_port: int
+
+
+# Main
+
+
 @dataclass(frozen=True, slots=True)
 class ClanRuntimeSpec:
     """Scheduler-owned configuration needed for one Clan cohort.
 
     ``coordinator_name`` uniquely identifies this scheduler instance. ``experiment_name`` is
     paired with Tune trial IDs so concurrently running experiments cannot collide in the
-    process-wide registry.
+    process-wide registry. The remaining values are immutable facts consumed by every member
+    while it discovers and joins the cohort.
     """
 
     coordinator_name: str
@@ -46,27 +72,13 @@ class ClanRuntime:
         return self.spec.population_size
 
 
-@dataclass(frozen=True, slots=True)
-class _PendingMember:
-    """One member announcement waiting for the complete invocation cohort."""
-
-    token: str
-    host: str
-    port: int | None
-
-
-@dataclass(frozen=True, slots=True)
-class _Session:
-    """One complete invocation cohort sharing a single DDP rendezvous endpoint."""
-
-    session_id: int
-    tokens: dict[str, str]
-    main_address: str
-    main_port: int
-
-
 class RuntimeRegistry:
-    """Map experiment-scoped Tune trial identities to Clan runtime specifications."""
+    """Keep experiment-scoped trial assignments discoverable by Tune member processes.
+
+    One cluster-local Ray actor wraps this pure state. Schedulers add assignments before
+    members launch and remove them after the complete successful population finishes. Lookup
+    keys include both experiment and trial identity so unrelated Tune runs cannot collide.
+    """
 
     def __init__(self) -> None:
         self._runtime_specs: dict[tuple[str, str], ClanRuntimeSpec] = {}
@@ -92,6 +104,12 @@ class RuntimeRegistry:
                 )
         for trial_id in trial_ids:
             self._runtime_specs[(experiment_name, trial_id)] = runtime_spec
+
+    def unregister_trials(self, experiment_name: str, trial_ids: list[str]) -> None:
+        """Remove completed assignments without affecting other experiments or trials."""
+
+        for trial_id in trial_ids:
+            self._runtime_specs.pop((experiment_name, trial_id), None)
 
     def get_runtime_spec(self, experiment_name: str, trial_id: str) -> ClanRuntimeSpec | None:
         """Return the assignment for one experiment-scoped trial, if registered."""
