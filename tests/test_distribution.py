@@ -1,8 +1,8 @@
 """Distribution-artifact contracts for the installable ClanBasedTuning package.
 
-The test builds wheel/sdist artifacts, verifies runtime dependency and typing metadata,
-installs the wheel non-editably into an isolated target directory, and imports the actual
-public integration objects from that artifact rather than from the repository source tree.
+The test builds wheel/sdist artifacts, verifies runtime dependency and typing metadata, checks
+release rendering, installs the wheel non-editably into an isolated target directory, and
+imports the actual public integration objects rather than repository source.
 """
 
 import json
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path: Path) -> None:
-    """The built wheel is clean, typed, self-describing, and exposes the public surface."""
+    """The built release artifacts are clean, typed, renderable, and expose the public API."""
 
     repository_root = Path(__file__).resolve().parents[1]
     dist_dir = tmp_path / "dist"
@@ -32,6 +32,14 @@ def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path
     sdists = list(dist_dir.glob("*.tar.gz"))
     assert len(wheels) == 1
     assert len(sdists) == 1
+
+    subprocess.run(
+        [sys.executable, "-m", "twine", "check", str(wheels[0]), str(sdists[0])],
+        cwd=repository_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
 
     with zipfile.ZipFile(wheels[0]) as wheel:
         packaged_paths = set(wheel.namelist())

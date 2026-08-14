@@ -6,10 +6,11 @@ DDP world while retaining member-local optimizer state. At a validation boundary
 is selected as the sole training continuation, and every next member receives an independent
 mutation of that selected parent's Tune config.
 
-The project is pre-release. The corrected initial complete path is directly qualified for two
-concurrent CPU members on one node; GPU/NCCL, multi-node execution, active-collective failure
-recovery, and model-sharded execution remain separate qualification work. See [`STATUS.md`](STATUS.md)
-for the exact current evidence boundary.
+The project is pre-release. The corrected complete path is directly qualified for two
+concurrent CPU members on one node. The repository also contains small, no-download local
+qualification tests for CUDA/NCCL, physical multi-node execution, and destructive peer
+failure; those become support evidence only after they pass on the corresponding hardware.
+See [`STATUS.md`](STATUS.md) for the exact evidence boundary.
 
 ## Install
 
@@ -21,13 +22,13 @@ cd ClanBasedTuning
 python -m pip install -e .
 ```
 
-For development:
+For development and qualification tooling:
 
 ```bash
 python -m pip install -e '.[dev]'
-python -m pytest
 python -m ruff check .
 python -m ruff format --check .
+python -m pytest
 ```
 
 Ray, Lightning, and PyTorch are core runtime dependencies because the package's public
@@ -128,7 +129,7 @@ scheduler = ClanScheduler(
 )
 
 results = tune.Tuner(
-    tune.with_resources(train, {"gpu": 1}),
+    tune.with_resources(train, {"cpu": 1}),
     param_space={
         "lr": tune.loguniform(1e-4, 1e-3),
         "weight_decay": tune.loguniform(1e-5, 1e-2),
@@ -143,9 +144,9 @@ results = tune.Tuner(
 ```
 
 One Ray trial is one Clan member and one Lightning process/device. Ray owns per-trial
-resources; ordinary users should not duplicate that topology with `Trainer(devices=...)`.
-The complete Clan must fit concurrently because all members participate in one live DDP
-world.
+resources; ordinary users should not duplicate that topology with a multi-device Lightning
+Trainer. The complete Clan must fit concurrently because all members participate in one live
+DDP world.
 
 ## Genome validity
 
@@ -165,7 +166,7 @@ ClanBasedTuning uses Ray's ordinary experiment restoration path:
 ```python
 restored = tune.Tuner.restore(
     experiment_path,
-    trainable=tune.with_resources(train, {"gpu": 1}),
+    trainable=tune.with_resources(train, {"cpu": 1}),
     resume_unfinished=True,
     resume_errored=True,
 )
@@ -174,6 +175,40 @@ results = restored.fit()
 
 The runtime registry/coordinator is reconstructed from scheduler state when the Tune
 experiment resumes; no CBT-specific restore API or trainable wrapper is required.
+
+## Local qualification
+
+The hardware contracts use a two-layer synthetic regression model and AdamW. They do not
+download a model or dataset and are intended to finish as smoke/qualification tests rather
+than training workloads.
+
+On a machine with at least two visible CUDA GPUs:
+
+```bash
+python -m pytest tests/hardware/test_cuda_function_path.py -vv
+```
+
+The test requests one GPU per Tune member and requires a two-rank CUDA/NCCL world, an actual
+training step, selected-state restoration, and another Clan generation. Fewer than two visible
+GPUs causes a skip rather than a false failure.
+
+Physical multi-node qualification is opt-in because Tune checkpoint storage must be shared
+between nodes and the test must genuinely place the two members on distinct machines. See
+[`docs/qualification/hardware.md`](docs/qualification/hardware.md) for the cluster/storage
+requirements and command.
+
+The active-collective peer-exit test is destructive and separately opt-in. It intentionally
+kills one live member and checks bounded experiment termination; the hardware qualification
+document gives the exact command and current interpretation.
+
+For representative overhead data rather than a pass/fail smoke test:
+
+```bash
+python benchmarks/tiny_function_path.py --generations 3
+```
+
+The benchmark prints measurement data only. It does not manufacture a production threshold
+from CI hardware.
 
 ## Public components
 
@@ -186,5 +221,6 @@ experiment resumes; no CBT-specific restore API or trainable wrapper is required
   the selected continuation through Tune.
 
 A runnable CPU mechanics example is [`examples/function_api.py`](examples/function_api.py).
-Detailed behavior and compatibility boundaries are in [`docs/api.md`](docs/api.md); current
-qualification and repository readiness are in [`STATUS.md`](STATUS.md).
+Detailed behavior and compatibility boundaries are in [`docs/api.md`](docs/api.md); hardware
+qualification is in [`docs/qualification/hardware.md`](docs/qualification/hardware.md); and
+current repository readiness is in [`STATUS.md`](STATUS.md).
