@@ -32,11 +32,7 @@ def test_two_members_train_on_distinct_physical_nodes(tmp_path: Path) -> None:
     if "CLAN_RUN_MULTI_NODE" not in os.environ or os.environ["CLAN_RUN_MULTI_NODE"] != "1":
         pytest.skip("set CLAN_RUN_MULTI_NODE=1 after starting the qualification Ray cluster")
 
-    address = (
-        os.environ["CLAN_TEST_RAY_ADDRESS"]
-        if "CLAN_TEST_RAY_ADDRESS" in os.environ
-        else "auto"
-    )
+    address = os.environ.get("CLAN_TEST_RAY_ADDRESS", "auto")
     ray.shutdown()
     ray.init(address=address, log_to_driver=False)
     try:
