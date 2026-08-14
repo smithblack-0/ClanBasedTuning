@@ -5,8 +5,8 @@ def test_package_root_names_the_actual_user_integration_surface():
     import clan_based_tuning
 
     assert clan_based_tuning.__all__ == [
-        "ClanScheduler",
         "ClanDDPStrategy",
+        "ClanScheduler",
         "ClanTuneReportCallback",
     ]
 
