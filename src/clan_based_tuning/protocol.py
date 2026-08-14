@@ -2,7 +2,7 @@
 
 CLAN_MEMBER_ID = "clan/member_id"
 CLAN_WINNER_ID = "clan/winner_id"
-CLAN_GENOME = "clan/genome"
+CLAN_GENOME_JSON = "clan/genome_json"
 CLAN_CHECKPOINT_SOURCE = "clan/checkpoint_source"
 CLAN_METADATA_KEY = "clan_based_tuning"
 CLAN_SCHEMA_VERSION = 1
