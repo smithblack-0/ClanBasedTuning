@@ -44,6 +44,8 @@ proves that:
 - only the selected rank delegates the CBT round checkpoint to Lightning `CheckpointIO`;
 - instrumented `CheckpointIO` observes exactly one physical Lightning checkpoint write
   per Clan round, not one per member;
+- the scheduler reads the actual selected Ray checkpoint metadata and verifies its
+  producer member and controlled genome before PBT redistributes it;
 - Ray's synchronous PBT lifecycle transfers the selected continuation and target genome;
 - a resumed user function restores inherited optimizer history and explicitly reapplies
   the newly assigned genome; and
@@ -142,9 +144,12 @@ open before a wider production support claim.
 Draft PR #51, `Build the Clan Tune function API`, is the active review unit. It is stacked
 on draft PR #50's qualified `TuneMemberEnvironment` seam and remains unmerged.
 
-The next work is final source-order/adversarial review of the function path and its public
-example, followed by exact-head CI and documentation/evidence cleanup. No CI workflow
-changes are planned.
+The complete function path, public example, implementation records, and direct framework
+contracts are now assembled for human review. All three repository CI lanes pass on the
+completed implementation before this status-only update. Further capability work should
+follow review rather than expanding the draft automatically.
+
+No CI workflow files were changed.
 
 The governing product direction remains [`docs/product_roadmap.md`](docs/product_roadmap.md).
 Current design and contracts are indexed by [`docs/README.md`](docs/README.md).
