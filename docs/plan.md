@@ -41,87 +41,74 @@ backend; production CBT code does not choose GLOO, NCCL, CPU, or CUDA.
 
 ## Current objective
 
-Finish and review the first public repeated function-API workflow, then qualify only the
-support boundary established by direct evidence.
+Human review of the completed function-API build is now the synchronization point. Do not
+expand the implementation into broader support work until that userspace/API and ownership
+review is complete.
 
-## Work sequence
+## Completed build evidence
 
-### 1. Finish the repeated function-API contract
+The current branch directly demonstrates:
 
-The live contract must continue to prove, together rather than as isolated seams:
+- the complete configured two-member Clan becoming one DDP cohort;
+- distinct member-local work participating in native shared-gradient training;
+- member-local fitness remaining distinct for selection;
+- exactly one physical Lightning `CheckpointIO` write per Clan round;
+- worker and scheduler agreement on the selected member;
+- scheduler verification of the actual selected Ray checkpoint producer metadata before
+  redistribution;
+- Ray's synchronous PBT checkpoint/configuration handoff;
+- explicit userspace genome application after inherited optimizer-state restore; and
+- repeated operation through the same public function path.
 
-- the complete configured Clan becomes one DDP cohort;
-- distinct member-local work produces a common reduced gradient;
-- member-local fitness remains distinct for selection;
-- exactly one member persists the round continuation;
-- persistent CBT checkpoint writes remain one per round rather than one per member;
-- Ray assigns the selected checkpoint and new genomes through the synchronous PBT
-  lifecycle;
-- resumed user code restores inherited optimizer history and explicitly applies the new
-  genome; and
-- the same public path reaches a later generation successfully.
+The public mechanics example uses that same path rather than a separate demonstration
+implementation.
 
-Any framework failure discovered here is repaired at the narrowest native seam. Do not
-add a package-owned optimizer applier, Trainer, Trainable lifecycle, training loop,
-process-group lifecycle, or backend choice.
+## Review focus
 
-### 2. Publish the mechanics example
+The human review should judge the system from the public behavior inward:
 
-Once the repeated contract passes, add one small public example using the same public
-objects and the same explicit userspace genome application pattern as the contract.
+1. `train(genome)` remains an ordinary Ray Tune function and the genome contains no
+   private Clan topology.
+2. User code owns genome interpretation and application; CBT contains no optimizer
+   applier or post-restore application callback.
+3. `ClanScheduler` owns only the Clan population policy and delegates native
+   checkpoint/configuration transfer to synchronous PBT.
+4. `ClanDDPStrategy` preserves Lightning/PyTorch ownership of distributed initialization
+   and backend selection.
+5. Population fitness uses the already-established DDP world rather than a second
+   communication backend.
+6. Persistent CBT checkpoint storage is one selected continuation per round, independent
+   of population size.
+7. The selected checkpoint artifact itself is verified against scheduler producer state
+   before it is redistributed.
 
-The example must show the application body rather than hiding it behind an unexplained
-placeholder. It should make these handoffs visible:
+If that public contract is accepted, the next implementation work should be chosen from
+observed usability/support needs rather than from the previous internal milestone order.
 
-```text
-Tune genome
-→ user constructs or restores training state
-→ user applies current genome
-→ ordinary Lightning fit
-→ Clan validation/report boundary
-→ selected checkpoint + mutated genomes through Tune
-→ next function invocation
-```
+## Qualified support boundary
 
-The example is mechanics evidence, not a scientific superiority claim.
+The directly exercised path is intentionally narrow: Ray 2.56.1, Lightning 2.6.5,
+PyTorch 2.10.0, Python 3.11 for the Ray-native contract, one machine, CPU execution, two
+concurrently resident members, and repeated generation boundaries.
 
-### 3. Align active documentation and qualification
+The implementation is backend-neutral but that does not qualify untested backends or
+devices by inference.
 
-Bring README, status, integration design, API documentation, and qualification records
-into agreement with the executed function path.
+## Later qualification and operational work
 
-In particular, remove stale statements that CBT owns member-local optimizer application,
-that the Tune scheduler remains unimplemented, or that the production path selects a
-specific distributed backend.
+After review, likely support-expansion candidates include:
 
-Document the first directly qualified support boundary precisely. Adjacent accelerators,
-backends, topologies, optimizer layouts, recovery modes, and storage systems are not
-claimed merely because the implementation is backend-neutral.
+- complete-cohort/gang admission when the cluster cannot already schedule every member;
+- incomplete-member and distributed failure release;
+- CUDA/NCCL and other accelerator paths;
+- multi-node execution;
+- actor reuse and explicit distributed-context reformation;
+- remote checkpoint-storage qualification;
+- broader recovery behavior; and
+- larger populations and realistic workloads.
 
-### 4. Adversarial usability and framework review
-
-Review the public workflow from a user who already knows Ray Tune and Lightning:
-
-- the Tune function should receive an ordinary genome dictionary;
-- private Clan topology must not appear as user genome fields;
-- no backend or rendezvous setup should be required in ordinary use;
-- no CBT optimizer schema or optimizer application callback should exist;
-- population size must not multiply persistent round-checkpoint storage; and
-- unusual user optimizer/application code must remain possible because CBT never
-  interprets the genome.
-
-Separately review every custom Ray and Lightning seam against the pinned framework source
-and the standing framework-native review. Remove custom machinery when native behavior
-already supplies the required contract.
-
-### 5. Expand evidence only when needed
-
-After the initial public path is accepted, qualify additional devices, backends, storage,
-recovery, and optimizer arrangements through focused evidence rather than inference.
-
-Complete-cohort resource admission beyond the current fixed concurrently resident path is
-also a later operational improvement unless the initial usability review shows it blocks
-the supported workflow.
+These are support/operational qualifications, not reasons to move genome application into
+CBT or introduce a second process-group subsystem.
 
 ## Later ClanFSDP work
 
@@ -135,11 +122,8 @@ second population communication system.
 
 ## Completion boundary
 
-This plan is complete when the first supported function-API integration repeatedly
-performs Clan Tuning through the public path and its implementation, tests, qualification
-records, documentation, and example agree.
+The current build unit is ready for review when its implementation, tests, qualification
+records, documentation, and example all describe the same function-API lifecycle and the
+repository validation passes.
 
-Broader device/backend support, flexible cohort admission, ClanFSDP, additional optimizer
-layouts, operational recovery, and scientific workloads remain later work unless direct
-usability or correctness evidence makes one of them necessary for that first supported
-path.
+Broader support and ClanFSDP remain subsequent work after the human review boundary.
