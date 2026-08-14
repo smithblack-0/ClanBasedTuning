@@ -60,11 +60,19 @@ def test_production_package_does_not_own_genome_application():
     assert "load_optimizer_state_dict" not in source
 
 
-def test_no_active_training_example_precedes_the_new_integration():
-    """Examples remain separate until the function API contract is qualified."""
+def test_public_example_keeps_genome_application_in_userspace():
+    """The qualified mechanics example shows application without transferring ownership."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"
-    example_files = list(examples_root.rglob("*.py")) if examples_root.exists() else []
+    example_files = {
+        path.relative_to(repository_root).as_posix() for path in examples_root.rglob("*.py")
+    }
 
-    assert example_files == []
+    assert example_files == {"examples/function_api.py"}
+
+    example = (examples_root / "function_api.py").read_text()
+    assert "def apply_genome(" in example
+    assert "apply_genome(model.optimizer, genome)" in example
+    assert "checkpoint = tune.get_checkpoint()" in example
+    assert "scheduler.wrap(train)" in example
