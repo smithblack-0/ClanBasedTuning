@@ -17,7 +17,6 @@ from ray.train._internal.session import _FutureTrainingResult, _TrainingResult
 from ray.tune import Checkpoint
 from ray.tune.experiment import Trial
 
-
 # Helpers
 
 
