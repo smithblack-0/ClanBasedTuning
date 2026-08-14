@@ -70,9 +70,7 @@ def test_active_collective_peer_exit_is_bounded(tmp_path: Path) -> None:
         "CLAN_RUN_DESTRUCTIVE_FAILURE" not in os.environ
         or os.environ["CLAN_RUN_DESTRUCTIVE_FAILURE"] != "1"
     ):
-        pytest.skip(
-            "set CLAN_RUN_DESTRUCTIVE_FAILURE=1 to run destructive peer-exit qualification"
-        )
+        pytest.skip("set CLAN_RUN_DESTRUCTIVE_FAILURE=1 to run destructive peer-exit qualification")
 
     param_space = tiny_param_space(accelerator="cpu", ddp_timeout_s=5.0)
     param_space["crash_member_id"] = 0
