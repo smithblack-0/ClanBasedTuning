@@ -19,6 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
 dependencies = [
     "lightning>=2.6,<3",
@@ -31,8 +32,10 @@ dependencies = [
 ray = []
 dev = [
     "build>=1.2",
+    "mypy>=1.15,<2",
     "pytest>=8.3",
     "ruff>=0.9",
+    "twine>=6,<7",
 ]
 
 [project.urls]
@@ -42,12 +45,19 @@ Issues = "https://github.com/smithblack-0/ClanBasedTuning/issues"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+clan_based_tuning = ["py.typed"]
+
 [tool.pytest.ini_options]
 addopts = ["-ra", "--strict-config", "--strict-markers"]
 testpaths = ["tests"]
 markers = [
     "framework_contract: executable contract with an upstream framework",
+    "failure_contract: executable contract for bounded failure behavior",
     "requires_ray: requires a local Ray installation",
+    "requires_gpu: requires at least two local CUDA devices",
+    "requires_multi_node: requires an explicitly configured physical multi-node Ray cluster",
+    "requires_failure_injection: destructive participant-failure qualification; opt in explicitly",
 ]
 
 [tool.ruff]
@@ -59,3 +69,17 @@ select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.format]
 docstring-code-format = true
+
+[tool.mypy]
+python_version = "3.11"
+files = ["src/clan_based_tuning"]
+exclude = ["^tests/", "^examples/", "^benchmarks/"]
+follow_imports = "skip"
+ignore_missing_imports = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+strict_equality = true

@@ -7,6 +7,7 @@ construction/barriers while only the selected member persists and reports the co
 Genome interpretation and application remain entirely in user code.
 """
 
+import logging
 import os
 import tempfile
 from collections.abc import Mapping
@@ -23,6 +24,8 @@ from clan_based_tuning.protocol import (
     CLAN_MEMBER_ID,
     CLAN_WINNER_ID,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ClanTuneReportCallback(Callback):
@@ -77,6 +80,13 @@ class ClanTuneReportCallback(Callback):
         report[CLAN_WINNER_ID] = winner_id
         report[CLAN_CHECKPOINT_SOURCE] = is_winner
 
+        _LOGGER.debug(
+            "Clan member resolved boundary member=%d winner=%d fitness=%s population=%s",
+            runtime.member_id,
+            winner_id,
+            fitness,
+            population,
+        )
         with tempfile.TemporaryDirectory() as checkpoint_dir:
             checkpoint_path = os.path.join(checkpoint_dir, self._filename)
             trainer.strategy.begin_round_checkpoint(winner_id)
@@ -86,6 +96,12 @@ class ClanTuneReportCallback(Callback):
                 trainer.strategy.end_round_checkpoint()
 
             checkpoint = tune.Checkpoint.from_directory(checkpoint_dir) if is_winner else None
+            if is_winner:
+                _LOGGER.info(
+                    "Clan checkpoint source selected member=%d fitness=%s",
+                    runtime.member_id,
+                    fitness,
+                )
             tune.report(report, checkpoint=checkpoint)
 
     @staticmethod

@@ -7,9 +7,10 @@ world. Pure identity/session behavior lives in ``cohort``; this module owns only
 Tune-context, socket, timeout, and process-state effects.
 """
 
+import logging
 import socket
 import time
-from typing import Any
+from typing import Any, NoReturn
 from uuid import uuid4
 
 import ray
@@ -20,6 +21,7 @@ from clan_based_tuning.cohort import ClanCoordinator, ClanRuntime, ClanRuntimeSp
 
 _RUNTIME_REGISTRY_NAME = "clan-based-tuning-runtime-registry"
 _RUNTIME_NAMESPACE = "clan-based-tuning"
+_LOGGER = logging.getLogger(__name__)
 
 
 # Helpers
@@ -45,6 +47,11 @@ def _wait_for_actor(
         except ValueError:
             time.sleep(poll_interval_s)
     return None
+
+
+def _raise_timeout(message: str) -> NoReturn:
+    _LOGGER.error("Clan runtime timeout: %s", message)
+    raise TimeoutError(message)
 
 
 # Main
@@ -90,7 +97,7 @@ def join_runtime(
         bootstrap_poll_interval_s,
     )
     if registry is None:
-        raise TimeoutError("ClanScheduler did not create the runtime registry")
+        _raise_timeout("ClanScheduler did not create the runtime registry")
 
     deadline = time.monotonic() + bootstrap_timeout_s
     runtime_spec = None
@@ -99,7 +106,7 @@ def join_runtime(
         if runtime_spec is None:
             time.sleep(bootstrap_poll_interval_s)
     if runtime_spec is None:
-        raise TimeoutError(
+        _raise_timeout(
             "this Tune trial was not assigned to a complete Clan before its bootstrap timeout"
         )
 
@@ -110,7 +117,7 @@ def join_runtime(
         runtime_spec.poll_interval_s,
     )
     if coordinator is None:
-        raise TimeoutError("Clan coordinator was not created by the Tune scheduler")
+        _raise_timeout("Clan coordinator was not created by the Tune scheduler")
 
     deadline = time.monotonic() + runtime_spec.join_timeout_s
     member_id = None
@@ -119,7 +126,7 @@ def join_runtime(
         if member_id is None:
             time.sleep(runtime_spec.poll_interval_s)
     if member_id is None:
-        raise TimeoutError("the complete Clan was not registered before this trial started")
+        _raise_timeout("the complete Clan was not registered before this trial started")
 
     token = uuid4().hex
     host = ray.util.get_node_ip_address()
@@ -132,18 +139,28 @@ def join_runtime(
         if session is None:
             time.sleep(runtime_spec.poll_interval_s)
     if session is None:
-        raise TimeoutError(
+        _raise_timeout(
             "the complete Clan did not become resident before the rendezvous timeout; "
             "provision enough Ray resources to run every member concurrently"
         )
 
-    return ClanRuntime(
+    runtime = ClanRuntime(
         spec=runtime_spec,
         trial_id=trial_id,
         member_id=int(session["member_id"]),
         main_address=str(session["main_address"]),
         main_port=int(session["main_port"]),
     )
+    _LOGGER.info(
+        "Clan member joined experiment=%s member=%d/%d trial=%s rendezvous=%s:%d",
+        runtime.spec.experiment_name,
+        runtime.member_id,
+        runtime.spec.population_size,
+        runtime.trial_id,
+        runtime.main_address,
+        runtime.main_port,
+    )
+    return runtime
 
 
 # Construction

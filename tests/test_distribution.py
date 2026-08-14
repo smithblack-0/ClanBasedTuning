@@ -1,8 +1,8 @@
 """Distribution-artifact contracts for the installable ClanBasedTuning package.
 
-The test builds wheel/sdist artifacts, verifies runtime dependency metadata, installs the wheel
-non-editably into an isolated target directory, and imports the actual public integration
-objects from that artifact rather than from the repository source tree.
+The test builds wheel/sdist artifacts, verifies runtime dependency and typing metadata,
+installs the wheel non-editably into an isolated target directory, and imports the actual
+public integration objects from that artifact rather than from the repository source tree.
 """
 
 import json
@@ -14,7 +14,7 @@ from pathlib import Path
 
 
 def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path: Path) -> None:
-    """The built wheel is clean, self-describing, and exposes the advertised package surface."""
+    """The built wheel is clean, typed, self-describing, and exposes the public surface."""
 
     repository_root = Path(__file__).resolve().parents[1]
     dist_dir = tmp_path / "dist"
@@ -41,9 +41,11 @@ def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path
         metadata = wheel.read(metadata_path).decode("utf-8")
 
     assert "clan_based_tuning/__init__.py" in packaged_paths
+    assert "clan_based_tuning/py.typed" in packaged_paths
     assert not any(path.startswith("tests/") for path in packaged_paths)
     assert not any(path.startswith("examples/") for path in packaged_paths)
     assert not any(path.startswith("docs/") for path in packaged_paths)
+    assert "Classifier: Typing :: Typed" in metadata
     assert "Requires-Dist: lightning<3,>=2.6" in metadata
     assert "Requires-Dist: ray[tune]<3,>=2.56" in metadata
     assert "Requires-Dist: torch<3,>=2.10" in metadata

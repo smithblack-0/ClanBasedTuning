@@ -12,6 +12,7 @@ member's continuation, then allow FIFO scheduling to resume them. Unlike general
 module has no asynchronous mode, quantiles, resampling policy, or independent parent choice.
 """
 
+import logging
 import random
 from collections.abc import Mapping
 from typing import Any
@@ -39,6 +40,8 @@ from clan_based_tuning.runtime import (
     get_or_create_coordinator,
     get_or_create_registry,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class ClanScheduler(FIFOScheduler):
@@ -145,9 +148,10 @@ class ClanScheduler(FIFOScheduler):
         if len(experiment_names) != 1:
             raise RuntimeError("one Clan population must belong to exactly one Tune experiment")
 
+        experiment_name = experiment_names.pop()
         self._runtime_spec = build_runtime_spec(
             coordinator_name=self._coordinator_name,
-            experiment_name=experiment_names.pop(),
+            experiment_name=experiment_name,
             population_size=self.population_size,
             metric=self.metric,
             mode=self._mode,
@@ -155,6 +159,12 @@ class ClanScheduler(FIFOScheduler):
             poll_interval_s=self._poll_interval_s,
         )
         self._register_runtime()
+        _LOGGER.info(
+            "Clan cohort registered experiment=%s population=%d members=%s",
+            experiment_name,
+            self.population_size,
+            ordered,
+        )
 
     def choose_trial_to_run(self, tune_controller: Any) -> Trial | None:
         """Launch only a complete Clan and never mix two generation boundaries."""
@@ -196,6 +206,13 @@ class ClanScheduler(FIFOScheduler):
             raise RuntimeError("Clan boundary contains a duplicated member report")
 
         self._reports[trial.trial_id] = result
+        _LOGGER.debug(
+            "Clan boundary report boundary=%d member=%d reports=%d/%d",
+            boundary,
+            self._member_ids[trial.trial_id],
+            len(self._reports),
+            self.population_size,
+        )
         if len(self._reports) < self.population_size:
             return TrialScheduler.PAUSE
 
@@ -231,6 +248,19 @@ class ClanScheduler(FIFOScheduler):
                 checkpoint,
                 winner_report,
             )
+
+        mutation_keys = tuple(self._mutations)
+        parent_genome = {key: decision.parent_config[key] for key in mutation_keys}
+        child_genomes = [
+            {key: child[key] for key in mutation_keys} for child in decision.child_configs
+        ]
+        _LOGGER.info(
+            "Clan generation resolved boundary=%d winner=%d parent=%s children=%s",
+            completed_boundary,
+            decision.winner_id,
+            parent_genome,
+            child_genomes,
+        )
 
         self._completed_boundary = completed_boundary
         self._reports = {}

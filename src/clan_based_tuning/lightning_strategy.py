@@ -52,7 +52,7 @@ class ClanDDPStrategy(DDPStrategy):
     ) -> None:
         if "cluster_environment" in ddp_kwargs:
             raise TypeError("ClanDDPStrategy supplies its Tune-member cluster environment")
-        if ddp_kwargs.get("broadcast_buffers") is True:
+        if "broadcast_buffers" in ddp_kwargs and ddp_kwargs["broadcast_buffers"] is True:
             raise ValueError("Clan members require broadcast_buffers=False after DDP setup")
 
         # DDPStrategy requires its ClusterEnvironment during construction, so runtime discovery
