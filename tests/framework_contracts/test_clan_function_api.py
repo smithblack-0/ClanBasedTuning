@@ -57,16 +57,12 @@ def _train_member(genome: dict[str, Any]) -> None:
             self.round_start_weight = float(self.weight.detach().item())
             self.round_start_global_step = float(self.trainer.global_step)
 
-            failure_marker = self.genome.get("fail_on_restore_marker")
-            observed_marker = self.genome.get("failure_observed_marker")
-            if (
-                failure_marker
-                and self.trainer.global_step > 0
-                and Path(str(failure_marker)).exists()
-            ):
-                if observed_marker:
-                    Path(str(observed_marker)).write_text("failure reached after restore")
-                raise RuntimeError("intentional interrupted-run qualification failure")
+            if "fail_on_restore_marker" in self.genome:
+                failure_marker = Path(str(self.genome["fail_on_restore_marker"]))
+                observed_marker = Path(str(self.genome["failure_observed_marker"]))
+                if self.trainer.global_step > 0 and failure_marker.exists():
+                    observed_marker.write_text("failure reached after restore")
+                    raise RuntimeError("intentional interrupted-run qualification failure")
 
         def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
             """Expose the DDP-partitioned sample and produce a simple common gradient."""
