@@ -19,6 +19,7 @@ class ClanRuntimeSpec:
     population_size: int
     metric: str
     mode: str
+    controlled_keys: tuple[str, ...]
     join_timeout_s: float
     poll_interval_s: float
     namespace: str = "clan-based-tuning"
@@ -38,6 +39,12 @@ class ClanRuntime:
     @property
     def world_size(self) -> int:
         return self.spec.population_size
+
+    @property
+    def controlled_genome(self) -> dict[str, Any]:
+        """Return only the scheduler-controlled values used as producer provenance."""
+
+        return {key: self.genome[key] for key in self.spec.controlled_keys}
 
 
 @dataclass(frozen=True, slots=True)
