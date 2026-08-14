@@ -2,7 +2,7 @@
 
 Status: governing project roadmap
 Date: 2026-07-25  
-Revised: 2026-07-31 — milestone and document-system assumptions removed; product meaning retained.
+Revised: 2026-08-14 — userspace genome ownership made explicit.
 
 Clan Tuning is a distributed training method that combines shared-gradient
 training with online adaptation of optimizer hyperparameters. ClanBasedTuning
@@ -83,6 +83,12 @@ ends in competition and selection. In precise terms:
 6. The fittest member's model parameters, optimizer state, and optimizer
    configuration become the sole basis for the clan's next generation.
 
+These steps describe the Clan Tuning method, not a library-owned application API. In the
+software integration, the scheduler supplies each member's current genome through Ray
+Tune's ordinary function configuration. User code alone decides how that genome affects
+its optimizer or any other state. ClanBasedTuning does not interpret or apply genome
+entries.
+
 #### Consequences and tradeoffs
 
 This construction makes Clan Tuning a greedy, online optimizer scheduler. It
@@ -147,9 +153,12 @@ Good ClanBasedTuning development advances the following qualities together:
 * **Practical usability.** The ordinary path eventually removes distributed
   setup work that a user should not have to reconstruct, without taking the
   user's model or training decisions away from the frameworks that own them.
-* **Optimizer utility.** Configuration application grows beyond a toy
-  one-optimizer case into an explicit, predictable system for realistic
-  optimizers and parameter groups.
+* **Userspace genome ownership.** The CBT scheduler may select and mutate genome
+  values, but the library does not own their meaning or application. The current
+  genome is handed to the user's ordinary Tune function; user code alone decides
+  what to do with it. Convenience APIs must not introduce a CBT optimizer schema,
+  genome-application callback, post-load application hook, or inferred mapping
+  from genome keys to user state.
 * **Industry relevance.** The mature system is observable, diagnosable,
   documented, and qualified for serious distributed workloads, including
   model-sharded training.

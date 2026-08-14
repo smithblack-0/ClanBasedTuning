@@ -2,111 +2,69 @@
 
 Status: accepted architectural contract
 
-## Purpose
-
-This document defines the behavior that must remain true when the live Clan decides
-which member may retain and report the generation checkpoint.
-
-These invariants constrain every implementation. They do not prescribe a distributed
-backend, tensor device, dtype, container type, helper name, timeout value, or exact
-collective primitive unless that choice changes the behavior below.
-
 ## Population boundary
 
 1. One live Tune trial represents one stable Clan member.
-2. The complete configured Clan participates in one population-resolution boundary for
-   each qualifying generation boundary.
-3. Every required member contributes exactly one local fitness produced at that same
-   logical training boundary.
-4. Each contributed fitness remains associated with the correct stable member.
-5. A successful boundary contains one valid contribution from every required member and
-   no contribution from another generation.
+2. A successful generation boundary contains exactly one report from every configured member.
+3. Every report belongs to the same Tune progress boundary.
+4. Every fitness remains associated with its stable member and is finite/comparable.
+5. Candidate fitness remains member-local until the Clan population exchange.
+6. A missing, duplicated, malformed, failed, or cross-generation member cannot be
+   reinterpreted as a smaller valid Clan.
 
-For the initial DDP path, population resolution uses the framework-managed distributed
-context already spanning the live Clan for shared training. Population-resolution logic
-does not establish, choose the backend for, or tear down another process group.
+The initial DDP path uses the already-established Lightning/PyTorch group to exchange fitness;
+population resolution creates no second process group or backend lifecycle.
 
-A later model-sharded Clan topology may contain more than one distributed group or process
-dimension. The invariant remains that framework integration owns those groups and the
-population operation uses the appropriate established Clan-wide context.
+## Selection
 
-## Selection result
+A successful boundary identifies exactly one selected member. Comparison direction and stable
+tie behavior belong to the shared framework-independent selection implementation. Worker-side
+selection and scheduler-side verification use the same rule.
 
-A successful boundary must provide enough complete member-associated fitness information
-for the shared framework-independent selection policy to identify one stable member.
+Exactly one member may report the persistent Clan continuation checkpoint. The scheduler
+independently verifies that the declared checkpoint source equals its selected member.
 
-The selection policy defines:
+## Next generation
 
-- minimizing or maximizing behavior;
-- rejection of fitness values that are invalid for comparison;
-- deterministic tie behavior; and
-- the selected stable member identity.
+Every next member receives:
 
-Every successful worker must reach the same selected-member conclusion before any worker
-reports its result to Tune.
+- the same selected training continuation; and
+- its own independently mutated genome derived from one snapshot of the selected parent's
+  current Tune config.
 
-Exactly one worker may retain and report the generation checkpoint. Every other worker
-reports metrics without a checkpoint.
+The prior winner is also a target and receives a mutation. No child mutation may use another
+already-mutated child as its parent. Seeded mutation assignment is stable with respect to
+member identity rather than incidental framework iteration order.
 
-## Local decision lifecycle
+Genome application remains userspace. These invariants determine which config CBT supplies,
+not what user code does with it.
 
-The worker-side controller stores one local fitness and resolves one local answer to:
+## Runtime isolation
 
-> Is this stable member the selected checkpoint source?
+Stable member assignment is scheduler-owned. Internal runtime discovery may choose any
+representation that preserves experiment/trial identity unambiguously. Concurrent Tune
+experiments with equal trial IDs must not collide.
 
-The first save-decision query may enter the framework-managed population-resolution
-boundary. Once the answer is known, the controller caches it. Repeated queries and later
-producer-provenance checks read the cache and do not perform population communication
-again.
+Each independently launched function invocation joins one complete rendezvous session using
+fresh invocation identity. Mixed old/new invocation members may not form a valid DDP cohort.
 
-## Failure and generation isolation
+## Failure
 
-The boundary is invalid if any required member is missing, fails, contributes more than
-once, contributes malformed fitness, or participates under the wrong generation.
+An invalid boundary must not intentionally:
 
-An invalid boundary must not:
-
-- select from a partial population;
+- choose from a partial population;
 - silently shrink the Clan;
-- let any worker report a continuation checkpoint;
-- release a next-generation member; or
-- leave healthy participants waiting forever without a surfaced failure.
+- accept a losing checkpoint as continuation; or
+- release a deliberately mixed next generation.
 
-The concrete timeout, cancellation, exception, and generation-token mechanisms belong to
-implementation and qualification work. Their observable result must satisfy this failure
-invariant without transferring process-group lifecycle to the controller or population
-operation.
-
-## Scheduler verification
-
-The CBT Tune scheduler independently receives one result from every required trial,
-applies the same selection policy, and verifies all of the following:
-
-- exactly the selected member supplied a checkpoint;
-- no losing member supplied a checkpoint;
-- the checkpoint producer provenance matches the selected member and its active
-  controlled optimizer configuration; and
-- the complete next-population transition is durably accepted before any target is
-  released.
-
-Worker agreement is therefore necessary but not authoritative. The CBT Tune scheduler
-remains the evolutionary authority over winner verification, mutation, child
-configurations, mutation random state, lineage, recovery, target configuration, and
-checkpoint redistribution.
+Unsupported failure modes may fail the experiment rather than recover. Bounded recovery after
+a participant disappears inside an active framework collective is not implied by the
+pre-DDP rendezvous timeout.
 
 ## Representation freedom
 
-The implementation may choose any internal representation that preserves the invariants
-above. In particular, architecture does not require:
-
-- stable member identity to equal distributed rank, only an unambiguous proven mapping;
-- a tuple, list, dictionary, tensor, or object as the population-fitness container;
-- CPU or accelerator storage for the fitness payload;
-- a particular floating-point dtype;
-- one specific collective operation over the established framework-owned context;
-- a specific internal collaborator, class, method, or module name; or
-- one fixed timeout duration.
-
-Those choices are safe to leave to implementation only when direct evidence shows that
-they preserve complete membership, identity association, deterministic selection,
-failure release, and generation isolation.
+The implementation may change internal container types, helper names, actor layout, timeout
+mechanisms, or exact framework hooks while these invariants remain mechanically established.
+Stable member ID currently equals DDP global rank by deliberate initial-topology design; a
+future model-sharded/multi-node topology may introduce additional dimensions without changing
+the population semantics above.

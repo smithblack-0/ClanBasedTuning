@@ -1,17 +1,23 @@
-"""Lightning cluster environment for one externally launched Tune member."""
+"""Lightning cluster environment for one externally launched Tune member process.
+
+Ray launches one process and exposes one device per Clan member. Lightning still expects a
+``ClusterEnvironment`` describing ranks and rendezvous facts before it initializes PyTorch
+DDP. ``TuneMemberEnvironment`` supplies those immutable facts without owning process launch,
+backend selection, process-group creation, collectives, or teardown.
+
+Each Tune member is represented as one logical one-process Lightning node: ``local_rank`` is
+zero while ``node_rank`` and ``global_rank`` both identify the stable Clan member. This is a
+framework adapter representation, not a claim that every member runs on a distinct physical
+machine.
+"""
 
 from lightning.pytorch.plugins.environments import ClusterEnvironment
 
+from clan_based_tuning.cohort import ClanRuntime
+
 
 class TuneMemberEnvironment(ClusterEnvironment):
-    """Expose scheduler-assigned topology without owning distributed lifecycle.
-
-    Ray Tune launches and resources the current process. This environment reports the
-    immutable rank, world-size, and rendezvous facts assigned to that process so
-    Lightning and PyTorch can establish and use their native distributed context. The
-    surrounding framework process lifecycle remains responsible for releasing it. This
-    environment never initializes, destroys, or selects a process-group backend.
-    """
+    """Expose scheduler-assigned one-process-per-member topology to Lightning."""
 
     def __init__(
         self,
@@ -22,7 +28,7 @@ class TuneMemberEnvironment(ClusterEnvironment):
         node_rank: int,
         main_address: str,
         main_port: int,
-    ):
+    ) -> None:
         if world_size < 2:
             raise ValueError("world_size must contain at least two Clan members")
         if not 0 <= global_rank < world_size:
@@ -82,11 +88,27 @@ class TuneMemberEnvironment(ClusterEnvironment):
             raise RuntimeError("Lightning global rank conflicts with the assigned Clan topology")
 
     def local_rank(self) -> int:
-        """Return the process-local rank for the framework-assigned visible device."""
+        """Return zero for the single process/device visible inside this Tune trial."""
 
         return self._local_rank
 
     def node_rank(self) -> int:
-        """Return the logical Lightning node rank assigned to this external process."""
+        """Return the logical one-process-node index used to preserve the external rank."""
 
         return self._node_rank
+
+
+def build_tune_member_environment(
+    runtime: ClanRuntime,
+    _cls: type[TuneMemberEnvironment] = TuneMemberEnvironment,
+) -> TuneMemberEnvironment:
+    """Construct Lightning's topology adapter from one resolved Clan runtime."""
+
+    return _cls(
+        global_rank=runtime.member_id,
+        world_size=runtime.world_size,
+        local_rank=0,
+        node_rank=runtime.member_id,
+        main_address=runtime.main_address,
+        main_port=runtime.main_port,
+    )

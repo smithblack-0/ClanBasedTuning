@@ -1,95 +1,94 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-08-01
+Last updated: 2026-08-14
 
-## Current implementation
+## Current corrective branch
 
-The active package contains:
+The function-API branch now contains the corrected architecture intended for continued
+maintenance. The public user shape remains:
 
-- `ClanController`, with one local fitness, one injected population exchange, and one
-  cached checkpoint-source decision;
-- the shared deterministic winner-selection function;
-- `MutationSpec`;
-- scheduler-owned configuration type aliases; and
-- an internal Lightning `ClusterEnvironment` that presents externally assigned Tune
-  member topology without owning distributed initialization, backend choice, collective
-  execution, or process-group release.
+- an ordinary Ray Tune function receiving the current genome/config;
+- `ClanScheduler` through `TuneConfig(scheduler=...)`;
+- `ClanDDPStrategy` through Lightning's strategy interface;
+- `ClanTuneReportCallback` through Lightning callbacks; and
+- one Ray trial/resource allocation per Clan member.
 
-The current tests establish the framework-independent controller lifecycle, stable tie
-behavior, finite-fitness requirements, mutation behavior, and the intentionally small
-public package surface.
+Genome application remains entirely userspace.
 
-A real framework contract additionally establishes one narrow distributed seam on Ray
-2.56.1, Lightning 2.6.5, PyTorch 2.10.0, Python 3.11, and single-node CPU:
+## Architecture correction
 
-- two concurrent Tune function trials act as two stable Clan members;
-- each trial is one externally launched Lightning process and one DDP rank;
-- Lightning/PyTorch initialize one GLOO DDP world from the supplied topology;
-- distinct local gradients reduce to one common gradient; and
-- the externally launched Tune trial process owns final release after `Trainer.fit()`
-  returns with the process group still active.
+The corrective implementation removes inheritance from Ray's stock PBT internals. The
+scheduler owns the small synchronous Clan transition and isolates the unavoidable Tune
+checkpoint/config transfer details in `ray_compat.py`. Package users are therefore not tied
+to one Ray minor release merely to preserve PBT subclass internals.
 
-The GLOO choice belongs to the CPU qualification harness. Production code does not choose
-GLOO or call process-group initialization or release APIs.
+The same wave:
 
-## Accepted design
+- removes the one-use stateful `ClanController`;
+- makes generation selection/mutation one pure deterministic operation in stable member
+  order;
+- prevents paused early reporters from re-entering before the complete generation transition;
+- separates pure cohort/session state from Ray runtime effects;
+- scopes runtime registry identity by Tune experiment and trial;
+- documents the one-process-per-member Lightning topology as logical rather than physical;
+- replaces serialized Lightning checkpoint editing with explicit userspace genome
+  application in `on_train_start()` after optimizer restore; and
+- makes Ray/Lightning/PyTorch ordinary runtime dependencies of the usable package.
 
-The current integration design assigns:
+## Current qualification
 
-- trial execution and native resource and scheduler lifecycle to Ray Tune;
-- complete-Clan coordination, stable member assignment, evolution, and atomic generation
-  transition to a CBT Tune scheduler;
-- externally launched distributed setup, training cadence, validation, restoration, and
-  checkpoint construction to Lightning;
-- process-group lifecycle, collectives, model synchronization, and shared gradients to
-  the qualified Lightning/PyTorch and external trial-process lifecycle for the initial
-  path;
-- population fitness exchange to a narrow collaborator using that already-established
-  framework-managed distributed context;
-- deterministic selection and mutation behavior to framework-independent policy
-  functions; and
-- one local fitness, cached save decision, and winner provenance to `ClanController`.
+The corrected CPU path is directly qualified by GitHub Actions run `31849703451`.
 
-One live Tune trial represents one stable Clan member and one DDP rank in the initial
-path. ClanBasedTuning supplies the missing cohort identity and topology facts but does not
-create or release a separate population process group.
+The real Ray contract ran with:
 
-The scheduler's existence and evolutionary authority are accepted. Its exact Ray
-superclass, cohort-admission mechanism, delegated native machinery, and hook path remain
-open to direct framework evidence. No persistent evolutionary controller exists beside
-it.
+- Python 3.11.15;
+- Ray 2.57.0;
+- Lightning 2.6.5;
+- PyTorch 2.10.0+cpu;
+- Linux;
+- one CPU node; and
+- two concurrently live Clan members.
 
-## Not yet implemented
+All four real framework contracts passed: repeated single-parent generation transition,
+fresh-runtime `Tuner.restore` after a deliberate post-restore failure, logical external
+Lightning topology, and a real two-rank framework-managed DDP world. The repeated-transition
+contract also preserves the accepted seed-7 sibling learning rates.
 
-The repository does not yet contain:
+The non-Ray validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
+wheel/sdist installation metadata and import checks, package surface checks, pure cohort
+contracts, and pure evolution contracts.
 
-- complete-cohort admission and production assignment of rank, world-size, rendezvous,
-  member, and cohort identity;
-- coherent repeated-round lifecycle over one live Tune-member DDP cohort;
-- the framework-managed population exchange;
-- selected-worker checkpoint provenance;
-- the CBT Tune scheduler;
-- member-local optimizer application for a qualified live path;
-- a repeated real multi-member Clan workflow; or
-- the later ClanFSDP topology.
+The package dependency range is intentionally broader than this evidence: currently
+`ray[tune]>=2.56,<3`, `lightning>=2.6,<3`, and `torch>=2.10,<3`. That range avoids needless
+minor-version installation breakage; it is not a claim that every admitted version has been
+qualified. Ray 2.57.0 is the current directly established scheduler compatibility point.
 
-The current two-member contract assumes that the complete cohort is already schedulable
-and supplies its rendezvous facts from the test harness. It does not qualify incomplete
-cohort behavior, failures, CUDA/NCCL, or multi-node execution.
+## Deliberate support limits
 
-## Current work
+The complete Clan must fit concurrently. The current path does not yet claim:
 
-[`docs/plan.md`](docs/plan.md) next resolves complete-cohort admission and production
-assignment of the topology facts consumed by the qualified Lightning environment.
-Population resolution then uses that established context rather than creating a second
-Ray collective group.
+- CUDA/NCCL;
+- physical multi-node execution;
+- bounded recovery after a participant disappears inside an active collective;
+- custom/sharded checkpoint plugins;
+- arbitrary user-supplied distributed validation samplers;
+- model-sharded Clan execution; or
+- realistic scientific/performance overhead.
 
-The rejected standalone Ray/GLOO population-runtime branch was closed without merge. Its
-process-group ownership model is not active implementation or accepted evidence.
+Function-trainable actor reuse is not a current target. Restart cost should be measured
+before reopening the accepted function API.
 
-Later steps connect population selection, selected checkpointing, the scheduler-owned
-generation transition, complete Lightning/PyTorch training behavior, and a repeated manual
-workflow. ClanFSDP remains a later separate extension.
+## Remaining production/adoption gates
 
-The governing product direction remains [`docs/product_roadmap.md`](docs/product_roadmap.md).
-Current design and contracts are indexed by [`docs/README.md`](docs/README.md).
+The corrected CPU mechanics/lifecycle path is qualified, but that is not a production-ready
+claim. Remaining work includes:
+
+- GPU/multi-node/failure evidence for any corresponding support claim;
+- realistic generation-boundary, checkpoint, restart, throughput, and scaling measurements;
+- Clan-specific diagnostics for cohort/round/parent/mutation/checkpoint/failure events;
+- a maintained static typing/PEP 561 policy if typing is claimed as supported API;
+- a project-owner license decision;
+- security reporting and release/version policy; and
+- a real release/distribution process.
+
+CI workflow expansion remains separately approved work and was not modified by this branch.

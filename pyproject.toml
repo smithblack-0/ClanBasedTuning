@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "clan-based-tuning"
 version = "0.0.1"
-description = "Evolutionary controller and research foundation for Clan Tuning."
+description = "Clan Tuning integration for Ray Tune, Lightning, and PyTorch."
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 authors = [
@@ -20,14 +20,17 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
-dependencies = []
+dependencies = [
+    "lightning>=2.6,<3",
+    "ray[tune]>=2.56,<3",
+    "torch>=2.10,<3",
+]
 
 [project.optional-dependencies]
-ray = [
-    "lightning>=2.6,<2.7",
-    "ray[tune]>=2.56,<2.57",
-]
+# Compatibility alias for existing development commands; Ray is now a core runtime dependency.
+ray = []
 dev = [
+    "build>=1.2",
     "pytest>=8.3",
     "ruff>=0.9",
 ]
