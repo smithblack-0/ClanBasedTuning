@@ -58,15 +58,17 @@ def _train_member(genome):
             values = batch[0]
             self.validation_sample_sum += float(values.sum().item())
             self.validation_sample_count += int(values.numel())
-            self.log("val_loss", self.weight.square())
-            self.log("lr_seen", self.optimizer.param_groups[0]["lr"])
-            self.log("round_start_weight", self.round_start_weight)
-            self.log("round_start_global_step", self.round_start_global_step)
-            self.log("momentum_before_step", self.momentum_before_step)
+            if not self.trainer.sanity_checking:
+                self.log("val_loss", self.weight.square())
+                self.log("lr_seen", self.optimizer.param_groups[0]["lr"])
+                self.log("round_start_weight", self.round_start_weight)
+                self.log("round_start_global_step", self.round_start_global_step)
+                self.log("momentum_before_step", self.momentum_before_step)
 
         def on_validation_epoch_end(self):
-            self.log("validation_sample_sum", self.validation_sample_sum)
-            self.log("validation_sample_count", float(self.validation_sample_count))
+            if not self.trainer.sanity_checking:
+                self.log("validation_sample_sum", self.validation_sample_sum)
+                self.log("validation_sample_count", float(self.validation_sample_count))
 
         def configure_optimizers(self):
             return self.optimizer
@@ -116,7 +118,6 @@ def _train_member(genome):
             )
         ],
         max_epochs=100,
-        num_sanity_val_steps=0,
         logger=False,
         enable_checkpointing=False,
         enable_model_summary=False,
@@ -197,7 +198,7 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
     assert len({result.metrics["round_start_global_step"] for result in results}) == 1
 
     # Lightning's automatically injected validation sampler is replicated rather than
-    # rank-sharded, so both diverged candidates are scored on the same held-out samples.
+    # rank-sharded, including when the loader is first prepared for sanity validation.
     assert len({result.metrics["validation_sample_sum"] for result in results}) == 1
     assert len({result.metrics["validation_sample_count"] for result in results}) == 1
 
