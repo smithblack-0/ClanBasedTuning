@@ -26,7 +26,7 @@ def _controller(member_id, population, *, mode="min"):
     return controller, exchange
 
 
-def test_population_resolves_one_checkpoint_source():
+def test_population_resolves_one_checkpoint_source_and_winner_identity():
     population = [4.0, 1.0, 2.0]
     controllers_and_exchanges = [
         _controller(member_id, population) for member_id in range(len(population))
@@ -40,11 +40,19 @@ def test_population_resolves_one_checkpoint_source():
         True,
         False,
     ]
+    assert [controller.winner_id for controller, _ in controllers_and_exchanges] == [1, 1, 1]
     assert [exchange.calls for _, exchange in controllers_and_exchanges] == [
         [4.0],
         [1.0],
         [2.0],
     ]
+
+
+def test_winner_identity_requires_population_resolution():
+    controller, _ = _controller(0, [1.0, 2.0])
+
+    with pytest.raises(RuntimeError, match="resolved"):
+        _ = controller.winner_id
 
 
 def test_max_mode_breaks_ties_by_lower_member_id():

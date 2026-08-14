@@ -10,24 +10,28 @@ checkpoint metadata representation, or a support matrix.
 
 ## 1. One common inherited continuation
 
-At the beginning of a generation, every member restores the selected parent's
+At the beginning of a generation, every member receives the selected parent's
 model state, optimizer history, and training progress. No losing continuation is
 mixed into any member.
 
-Each member may then receive a different optimizer configuration. Applying that
-configuration must preserve the inherited optimizer history and must not alter
-unrelated model or training-progress state.
+Each member may also receive a different scheduler-assigned genome. The user's
+training function restores the inherited state and applies that member's genome
+before resumed training. Applying the genome must preserve inherited state that
+the user did not choose to replace.
 
-## 2. Shared training work with optimizer-side variation
+ClanBasedTuning assigns and evolves genomes. It does not infer what genome keys
+mean or apply them to the user's optimizer or training objects.
+
+## 2. Shared training work with member-local variation
 
 Every required member contributes its local training work to the common gradient
 for the supported distributed path. Corresponding trainable parameters receive
 the same reduced gradient before local optimizer application.
 
-Each member applies that gradient through its own optimizer state and assigned
-optimizer configuration. Differences between supported configurations therefore
-produce the expected member divergence without a later framework operation
-silently erasing it.
+Each member then applies that gradient through its own optimizer state after its
+current genome has been applied by user code. Differences in compatible genome
+values may therefore produce member divergence without a later framework
+operation silently erasing it.
 
 ## 3. Comparable member-local fitness
 
@@ -48,15 +52,19 @@ No losing state is averaged, merged, or loaded into the next generation. The
 reported continuation must carry enough producer provenance for the Tune-side
 transition to verify its source.
 
+Only that selected continuation is persistently checkpointed for the Clan round.
+Population size must not multiply CBT continuation-checkpoint storage.
+
 ## 5. Complete next-generation assignment
 
 Every next member receives the same selected training continuation and its own
-assigned optimizer configuration. No next member starts until the complete
-population assignment is ready.
+scheduler-assigned genome. The user's training function decides how to apply that
+genome after restoring the selected continuation. No next member starts until the
+complete population assignment is ready.
 
-The selection, mutation, checkpoint assignment, and target configurations must
-form one coherent transition. A crash or failure may restore the last completed
-transition or fail the experiment; it must not release a mixed generation.
+The selection, mutation, checkpoint assignment, and target genomes must form one
+coherent transition. A crash or failure may restore the last completed transition
+or fail the experiment; it must not release a mixed generation.
 
 ## 6. Complete population participation
 

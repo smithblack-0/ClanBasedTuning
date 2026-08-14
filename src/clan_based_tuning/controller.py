@@ -34,7 +34,16 @@ class ClanController:
         self._mode = mode
         self._exchange_fitness = exchange_fitness
         self._fitness = None
+        self._winner_id = None
         self._save_checkpoint = None
+
+    @property
+    def winner_id(self) -> int:
+        """Return the selected member after the population decision has completed."""
+
+        if self._winner_id is None:
+            raise RuntimeError("population decision has not been resolved")
+        return self._winner_id
 
     def set_fitness(self, fitness):
         """Store this worker's finite fitness for the collective decision."""
@@ -63,6 +72,6 @@ class ClanController:
         if any(not math.isfinite(fitness) for fitness in population):
             raise RuntimeError("fitness collective returned a non-finite value")
 
-        winner_id = select_winner_id(population, self._mode)
-        self._save_checkpoint = self.member_id == winner_id
+        self._winner_id = select_winner_id(population, self._mode)
+        self._save_checkpoint = self.member_id == self._winner_id
         return self._save_checkpoint

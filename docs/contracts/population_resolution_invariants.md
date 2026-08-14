@@ -4,8 +4,8 @@ Status: accepted architectural contract
 
 ## Purpose
 
-This document defines the behavior that must remain true when the live Clan decides
-which member may retain and report the generation checkpoint.
+This document defines the behavior that must remain true when the live Clan decides which
+member may retain and report the generation checkpoint.
 
 These invariants constrain every implementation. They do not prescribe a distributed
 backend, tensor device, dtype, container type, helper name, timeout value, or exact
@@ -55,9 +55,11 @@ The worker-side controller stores one local fitness and resolves one local answe
 > Is this stable member the selected checkpoint source?
 
 The first save-decision query may enter the framework-managed population-resolution
-boundary. Once the answer is known, the controller caches it. Repeated queries and later
-producer-provenance checks read the cache and do not perform population communication
-again.
+boundary. Once the answer and selected-member identity are known, the controller caches
+them. Repeated queries do not perform population communication again.
+
+Checkpoint provenance is attached by the reporting integration after this decision; it is
+not additional controller state.
 
 ## Failure and generation isolation
 
@@ -80,19 +82,23 @@ operation.
 ## Scheduler verification
 
 The CBT Tune scheduler independently receives one result from every required trial,
-applies the same selection policy, and verifies all of the following:
+applies the same selection policy, and verifies all of the following before the selected
+continuation is redistributed:
 
+- every worker identifies the same selected stable member;
 - exactly the selected member supplied a checkpoint;
 - no losing member supplied a checkpoint;
-- the checkpoint producer provenance matches the selected member and its active
-  controlled optimizer configuration; and
-- the complete next-population transition is durably accepted before any target is
-  released.
+- the selected checkpoint's producer metadata matches that stable member and the active
+  scheduler-controlled genome values; and
+- target configs are derived from the accepted selected genome rather than from a losing
+  continuation.
 
-Worker agreement is therefore necessary but not authoritative. The CBT Tune scheduler
-remains the evolutionary authority over winner verification, mutation, child
-configurations, mutation random state, lineage, recovery, target configuration, and
-checkpoint redistribution.
+Worker agreement is necessary but not authoritative. The CBT Tune scheduler remains the
+evolutionary authority over winner verification, mutation, mutation random state, target
+genomes, and checkpoint redistribution.
+
+Broader crash-consistent generation recovery is a separate qualification requirement and
+must not be inferred merely from successful scheduler verification.
 
 ## Representation freedom
 

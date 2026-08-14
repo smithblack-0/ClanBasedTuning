@@ -9,80 +9,75 @@ This document assigns ownership for satisfying the
 
 It fixes authority boundaries where ambiguity could duplicate policy or hide lifecycle
 state. It deliberately does not freeze internal fitness representation, collective
-operation, helper names, or framework hooks that do not affect those boundaries.
+operation, or helper names that do not affect those boundaries.
 
 ## Semantic boundary
 
-The population-resolution operation accepts one member's local fitness at one generation
-boundary and returns a complete association between stable Clan members and their fitness
-values.
+At one qualifying Lightning boundary, each member contributes one local fitness value.
+Population resolution produces the complete stable-member-associated fitness population
+needed to select one checkpoint source.
 
-That association is the contract. Its concrete Python type is not architectural.
+A successful result contains exactly one finite comparable fitness for every configured
+member. Stable member identity must remain mechanically associated with the distributed
+rank carrying its value.
 
-A successful result contains exactly one finite comparable fitness for every required
-stable member. The mapping between distributed participation and stable member identity
-is explicit or mechanically proven; incidental sequence position is insufficient unless
-its meaning is established by the integration contract.
-
-The population-resolution operation does not own the distributed context through which
-that association is produced.
+Population resolution does not own the distributed context through which those values are
+exchanged.
 
 ## Complete-Clan topology
 
-The CBT Tune scheduler owns the configured Clan as a cohort. It determines which live
-Tune trial represents each stable member and ensures the complete required cohort is
-available for shared distributed execution.
+`ClanScheduler` owns the configured Clan population and stable Tune-trial-to-member
+assignment. `ClanScheduler.wrap(train)` makes that hidden assignment and the cohort
+rendezvous available inside independently launched Tune function processes without
+modifying the user's `genome` mapping.
 
-The worker integration conveys the scheduler-assigned stable member identity and the
-cohort topology required by Lightning's externally launched process model. This includes
-the semantic facts needed to establish rank, world size, and rendezvous, but does not make
-ClanBasedTuning the owner of distributed initialization.
+The hidden runtime coordinator owns only stable member mapping and the rendezvous facts
+needed for the complete function-invocation cohort. It does not select a winner, mutate
+genomes, checkpoint training state, create a process group, or choose a backend.
 
-The exact Ray scheduling and placement mechanism and the exact Lightning environment seam
-remain implementation decisions requiring direct framework evidence.
+The initial path requires the complete Clan to be concurrently resident before DDP
+initialization. More sophisticated placement, gang admission, elastic membership, and
+failure recovery require separate evidence and do not change the ownership above.
 
 ## Framework-managed distributed context
 
-Lightning, PyTorch, and the external trial process lifecycle own:
+Lightning, PyTorch, and the external Tune process lifecycle own:
 
 - process-group initialization and lifetime;
 - backend and device behavior;
 - rank and world-size realization from the supplied topology;
 - training-gradient communication;
-- barriers and collective execution;
-- release through the qualified strategy or trial-process lifecycle; and
-- propagation of distributed failures through the supported framework lifecycle.
+- barriers and collective execution; and
+- distributed failure behavior and release through the qualified framework lifecycle.
 
-For the initial DDP path, the already-established training group also carries the
-population fitness exchange. Population-resolution code does not create, configure,
-rendezvous, time out, or release a second Ray, GLOO, NCCL, CUDA, or PyTorch process group.
+For the initial DDP path, the already-established training world also carries the fitness
+exchange. CBT production code does not construct, choose a backend for, or tear down a
+second Ray, GLOO, NCCL, CUDA, or PyTorch process group.
 
-A later ClanFSDP extension may require a composed topology with multiple framework-owned
-groups. That does not transfer group lifecycle into the controller or selection logic.
+`TuneMemberEnvironment` supplies externally assigned topology to Lightning.
+`ClanDDPStrategy` retains ordinary Lightning/PyTorch DDP ownership and does not select a
+backend unless the user explicitly supplies Lightning's normal `process_group_backend`
+argument.
 
 ## Population exchange
 
-The narrow population-exchange collaborator owns:
+`ClanTuneReportCallback` invokes the population exchange at the validation boundary. The
+current implementation gathers one local scalar from each member through the active
+PyTorch distributed world and returns the rank-ordered values to the framework-independent
+worker decision.
 
-- contributing one local fitness through the established Clan-wide distributed context;
-- returning complete fitness associated with stable member identity;
-- preventing values from different generation boundaries from being accepted together;
-  and
-- rejecting malformed, incomplete, or ambiguously associated results.
-
-It does not own:
+That exchange owns only the communication needed to recover the complete fitness
+population. It does not own:
 
 - process-group lifecycle or backend choice;
 - minimizing or maximizing policy;
 - tie-breaking policy;
-- winner selection;
-- mutation or child-configuration derivation;
-- scheduler lineage or recovery;
-- checkpoint construction; or
-- Tune result reporting.
+- genome mutation;
+- Tune checkpoint/configuration transfer; or
+- userspace genome application.
 
-Its exact collaborator interface, collective primitive, payload representation, and
-container type remain internal implementation choices.
+The exact scalar representation and collective primitive remain replaceable implementation
+details as long as the complete identity-associated population is preserved.
 
 ## Framework-independent selection policy
 
@@ -91,98 +86,115 @@ The shared selection policy owns:
 - comparison direction;
 - comparison-validity rules;
 - stable deterministic tie behavior; and
-- selection of one stable member from complete member-associated fitness.
+- selection of one stable member from a complete fitness population.
 
-The worker-side path and CBT Tune scheduler use the same implementation. The population
-exchange does not contain a second winner-selection rule.
+Workers and the Tune scheduler use the same implementation. The distributed exchange does
+not contain another winner-selection policy.
 
 ## Worker controller
 
-`ClanController` owns the worker-facing state and ordering:
+`ClanController` owns one ephemeral worker decision:
 
-- the stable identity of its local member;
+- stable local member identity;
 - comparison mode;
 - one local fitness value;
-- one invocation of the population exchange;
-- application of the shared selection policy to the complete result;
-- one cached local save decision; and
-- copied current-configuration provenance and winner-only provenance writing.
+- one invocation of the supplied population exchange;
+- application of the shared selection policy;
+- the resolved selected-member identity; and
+- one cached answer to whether the local member is the checkpoint source.
 
-The controller does not create or release distributed groups. It does not expose ranks,
-rendezvous details, or transport buffers to the user training function. It does not
-mutate configurations, derive child configurations, advance generations, or persist Tune
-transition state.
+It does not know the genome, mutate configurations, write checkpoints, report to Tune,
+construct distributed groups, or persist generation state.
 
-The accepted public methods and ordinary construction flow are defined in
-[`../api.md`](../api.md). This contract does not fix the controller's internal
-collaborator interface or concrete population-result type.
+Ordinary users do not need to construct `ClanController`; `ClanTuneReportCallback`
+supplies the established DDP exchange internally. Direct construction remains useful for
+framework-independent tests and advanced composition.
 
-## Worker integration
+## Round reporting and checkpoint source
 
-The worker integration implements the accepted `make_cbt_controller(genome=...)` flow.
-It obtains stable member identity, population membership, comparison configuration,
-generation context, and access to the established framework population exchange without
-requiring the user training function to assemble those details manually.
+`ClanTuneReportCallback` owns the process-local boundary between Lightning and Tune. It:
 
-The same integration supplies the scheduler-assigned distributed topology to Lightning
-through a supported externally launched process seam. It does not call distributed
-initialization, release the process group, or choose the backend itself.
+1. reads the local Lightning fitness metric;
+2. obtains the complete fitness population over the established DDP world;
+3. resolves the selected member through `ClanController`;
+4. asks every rank to enter Lightning's ordinary distributed checkpoint operation;
+5. reports metrics from every member; and
+6. reports a Ray checkpoint only from the selected member.
 
-Additional factory arguments, advanced construction paths, and internal wiring remain
-open. The ordinary path and its responsibility do not: hide framework wiring while
-preserving ordinary Tune, Lightning, and PyTorch lifecycles.
+The callback never interprets or applies the Tune genome.
+
+Every DDP rank must participate in `Trainer.save_checkpoint()` because Lightning's public
+checkpoint operation includes a distributed barrier. `ClanDDPStrategy` gates only the
+physical CBT round write: while that round checkpoint is active, only the selected rank
+delegates to `CheckpointIO`. Losing ranks may construct transient checkpoint dictionaries
+in memory but persist no CBT continuation.
+
+Outside that scoped operation, ordinary user-requested Lightning checkpoint behavior is
+unchanged.
+
+## Producer provenance
+
+The selected reported checkpoint carries producer metadata containing:
+
+- schema version;
+- stable member identity; and
+- the exact scheduler-controlled genome values that produced the continuation.
+
+`ClanTuneReportCallback` attaches this metadata to the selected Ray checkpoint before it
+is reported. The metadata records provenance only; it is not another genome or evolution
+authority.
+
+The scheduler also receives a scalar JSON representation of the producer genome in the
+ordinary Tune result because Tune flattens nested result mappings before scheduler hooks.
+That private representation is an implementation detail and never changes the user's
+`genome` argument.
 
 ## CBT Tune scheduler
 
-A CBT Tune scheduler exists and owns the authoritative generation transition. It:
+`ClanScheduler` is the authoritative evolutionary owner and is implemented as a
+synchronous Ray `PopulationBasedTraining` specialization. It:
 
-- coordinates one complete live Clan;
-- assigns stable member identity and target optimizer configuration;
-- waits for one result from every required trial;
-- associates each reported fitness with the correct stable member and active controlled
-  optimizer configuration;
-- applies the same shared selection policy independently;
-- verifies that exactly the selected member supplied the checkpoint;
-- verifies checkpoint producer provenance;
-- derives child configurations;
-- persists mutation random state, lineage, and recovery state;
-- installs target configurations and the common selected checkpoint; and
-- releases the next population only after the transition is durably accepted.
+- coordinates the configured live Clan and stable member assignment;
+- waits for one report from each required trial at the synchronous PBT boundary;
+- associates each result with the correct stable member and active controlled genome;
+- independently applies the shared winner-selection policy;
+- verifies worker agreement and the sole checkpoint source;
+- clones the selected genome for target members;
+- applies `MutationSpec` rules only to the declared controlled keys;
+- owns the mutation random stream; and
+- delegates checkpoint/configuration reassignment and function restart to Ray's native PBT
+  machinery.
 
-The scheduler does not trust the worker-side result as authority. Worker resolution makes
-one pre-report checkpoint possible; scheduler verification decides whether the generation
-transition is accepted.
+The winner retains the exact selected genome. Losing targets receive mutations of that
+selected genome. The scheduler does not interpret the semantic meaning of any genome key.
 
-The scheduler's exact Ray superclass, cohort-admission mechanism, delegated native
-scheduler machinery, persistence seam, and hook methods remain open to direct framework
-evidence.
+Broader crash-consistent generation recovery and flexible cohort admission are not
+qualified by the initial function path and must not be inferred from the scheduler's use
+of native PBT persistence.
 
-## Lightning and PyTorch
+## User training code
 
-Lightning owns training-loop cadence, the qualifying validation-and-checkpoint boundary,
-checkpoint construction, restoration, and the distributed strategy lifecycle. Native
-PyTorch DDP owns shared-gradient communication for the supported initial path. Ray Tune
-owns the externally launched trial process whose termination may release the process group
-for that qualified path.
+User code owns the meaning and application of the genome.
 
-Every required training process participates in the Lightning checkpoint boundary. Only
-the selected member retains the persistent continuation passed to Tune.
+On a resumed function invocation, Ray provides the selected checkpoint and the target
+member's current genome. The user's function restores inherited state and explicitly
+applies the new genome in whatever way its training system requires. CBT provides no
+optimizer applier, no post-restore optimizer callback, and no inferred optimizer schema.
 
-The established distributed training context also supports the population exchange; the
-exchange is a different semantic operation, not a separately owned communication system.
+For Lightning's `ckpt_path` restore path, the public example applies the genome to the
+restored optimizer state in a member-local checkpoint copy before `Trainer.fit()` performs
+its final full-state restore. Other user systems may apply their genome differently.
 
 ## Failure ownership
 
 Each layer fails the facts it owns:
 
-- the worker controller rejects invalid local lifecycle use;
-- the selection policy rejects invalid comparison input;
-- the population exchange rejects malformed, incomplete, or ambiguously associated
-  population results;
-- Lightning, PyTorch, and the trial process lifecycle surface distributed initialization,
-  communication, member failure, and cleanup;
-- Lightning surfaces checkpoint-construction failure; and
-- the CBT Tune scheduler rejects incomplete or inconsistent cohort and generation
-  transitions.
+- user code fails unsupported or invalid genome application;
+- `ClanController` rejects invalid local decision lifecycle and non-finite fitness;
+- population exchange fails if the established distributed operation cannot complete;
+- Lightning/PyTorch and the Tune process lifecycle surface distributed setup,
+  communication, and process failure;
+- Lightning/`CheckpointIO` surface checkpoint construction or write failures; and
+- `ClanScheduler` rejects incomplete or inconsistent reported population state.
 
-No layer may convert a failure into a valid partial-population winner.
+No layer may convert a failure into a valid smaller-population winner.

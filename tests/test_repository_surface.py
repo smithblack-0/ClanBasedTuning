@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 def test_active_package_contains_only_current_accepted_components():
-    """Superseded round and standalone collective code stay outside the source tree."""
+    """Superseded lifecycle and standalone collective code stay outside the source tree."""
 
     repository_root = Path(__file__).resolve().parents[1]
     package_root = repository_root / "src" / "clan_based_tuning"
@@ -16,7 +16,12 @@ def test_active_package_contains_only_current_accepted_components():
         "src/clan_based_tuning/__init__.py",
         "src/clan_based_tuning/controller.py",
         "src/clan_based_tuning/evolution.py",
+        "src/clan_based_tuning/lightning_callback.py",
         "src/clan_based_tuning/lightning_environment.py",
+        "src/clan_based_tuning/lightning_strategy.py",
+        "src/clan_based_tuning/protocol.py",
+        "src/clan_based_tuning/runtime.py",
+        "src/clan_based_tuning/scheduler.py",
         "src/clan_based_tuning/scheduler_types.py",
     }
 
@@ -33,6 +38,7 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
     assert test_files == {
+        "tests/framework_contracts/test_clan_function_api.py",
         "tests/framework_contracts/test_removed_integration_surface.py",
         "tests/framework_contracts/test_tune_member_lightning_environment.py",
         "tests/test_package.py",
@@ -42,11 +48,13 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
 
-def test_no_active_training_example_precedes_the_new_integration():
-    """Examples must be rebuilt only after the accepted Tune and Lightning seams."""
+def test_active_training_example_is_the_qualified_function_api_path():
+    """The public example must stay on the same path exercised by the native contract."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"
-    example_files = list(examples_root.rglob("*.py")) if examples_root.exists() else []
+    example_files = {
+        path.relative_to(repository_root).as_posix() for path in examples_root.rglob("*.py")
+    }
 
-    assert example_files == []
+    assert example_files == {"examples/simple_clan_tuning.py"}

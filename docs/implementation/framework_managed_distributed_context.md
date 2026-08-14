@@ -1,172 +1,197 @@
 # Initial framework-managed distributed context
 
-Status: accepted initial implementation direction  
+Status: current implementation choice  
 Framework basis: Ray Tune, Lightning, and native PyTorch DDP
 
 ## Authority
 
-This document chooses the first implementation direction for the accepted
-[integration design](../design/integration.md),
-[population-resolution invariants](../contracts/population_resolution_invariants.md), and
-[responsibility boundaries](../contracts/population_resolution_responsibilities.md).
+This document records the replaceable mechanisms currently used to satisfy the
+[integration design](../design/integration.md) and the
+[population-resolution responsibilities](../contracts/population_resolution_responsibilities.md).
 
-It is not architecture. Framework evidence may change the exact Ray and Lightning seams
-without reopening those authorities, provided the replacement preserves them and is
-qualified directly.
+The public behavior and ownership contracts are authoritative over these details.
 
-## Decision
+## Implemented topology
 
-The initial supported topology is:
+The initial path uses:
 
 ```text
 one live Ray Tune trial
     = one stable Clan member
     = one externally launched Lightning training process
-    = one rank in the native PyTorch DDP group spanning the Clan
+    = one rank in the native PyTorch DDP world spanning the Clan
 ```
 
-Ray Tune creates and resources the trial processes. ClanBasedTuning coordinates the
-complete cohort and supplies stable member and distributed-topology facts. Lightning and
-PyTorch establish and use the DDP process group. The qualified external-launch path keeps
-the group active after `Trainer.fit()` and releases it when the Tune trial process ends.
+`ClanScheduler.wrap(train)` carries a private `ClanRuntimeSpec` beside the serialized
+function. Inside each Tune process, the wrapper joins a named Ray coordinator and installs
+a process-local runtime context before calling the user's unchanged `train(genome)`.
 
-ClanBasedTuning does not create a separate Ray collective group for population
-resolution.
+The user genome contains only Tune configuration. Member identity, rank, world size, and
+rendezvous facts are not inserted into it.
 
-## Cohort admission
+## Stable member assignment and rendezvous
 
-The complete configured Clan must be concurrently admitted before any member blocks in
-distributed initialization. A partial Clan may not occupy resources indefinitely while
-waiting for members that Tune cannot schedule.
+`ClanScheduler` collects the configured Tune trial IDs. Once the complete population is
+known, sorted trial IDs receive stable integer member IDs `0..population_size-1`.
 
-The CBT Tune scheduler or its narrow integration must therefore coordinate the native Ray
-resource and trial lifecycle so the complete cohort can enter the same distributed run.
+A named Ray coordinator retains that assignment and forms one rendezvous session from one
+fresh invocation token per member. Member zero contributes the rendezvous host/port; each
+member receives its stable member/rank and the common endpoint.
 
-The exact mechanism is not selected here. Direct framework work must determine the
-smallest native seam that can provide cohort admission without replacing Tune's trial
-execution or resource ownership.
+The coordinator owns no training or evolution state. It does not:
 
-## Distributed topology handoff
+- create a PyTorch process group;
+- select a distributed backend;
+- exchange gradients or fitness;
+- select the winner;
+- mutate genomes; or
+- persist checkpoints.
 
-Each trial must receive the facts required by Lightning's externally launched process
-model, including:
+The current path assumes Tune can run the complete population concurrently. If the full
+cohort does not arrive before the configured timeout, the invocation fails rather than
+shrinking the Clan. Native gang placement for insufficient cluster capacity is not yet
+implemented or qualified.
 
-- stable Clan member identity;
-- distributed rank and world size;
-- local device assignment supplied by the framework;
-- rendezvous information for the one Clan DDP group; and
-- the generation or cohort identity needed to prevent cross-generation reuse.
+## Lightning topology seam
 
-The worker integration presents those facts through a supported Lightning environment or
-strategy seam. It does not call PyTorch distributed initialization directly.
+The process-local runtime feeds `TuneMemberEnvironment`, a Lightning
+`ClusterEnvironment` reporting:
 
-Stable member identity and distributed rank may use the same integer in the first path,
-but their association remains explicit so later topologies are not forced to equate them.
+- externally assigned global rank;
+- complete world size;
+- local and logical node rank; and
+- rendezvous address and port.
 
-## Framework ownership
+`ClanDDPStrategy` constructs that environment and otherwise remains a Lightning
+`DDPStrategy`.
 
-Lightning, PyTorch, and the external Tune trial process lifecycle own:
+Lightning's standard `DDPStrategy.set_world_ranks()` assumes world size can be reconstructed
+from Lightning's own `num_nodes * num_processes`. That is not true for one process inside
+each independent Tune trial, so `ClanDDPStrategy` preserves the externally assigned rank
+and world size instead.
 
-- backend selection appropriate to the qualified device path;
-- process-group initialization and lifetime;
-- gradient reduction and ordinary DDP synchronization;
-- barriers and collective execution;
-- distributed exceptions and cleanup through the qualified framework lifecycle; and
-- device-local behavior required by the selected strategy.
+The strategy also exposes the complete Clan rank/world to Lightning's distributed sampler
+and sets `broadcast_buffers=False` so per-forward buffer synchronization cannot erase
+member-local divergence.
 
-ClanBasedTuning supplies only the missing Clan facts and policy. It does not take over
-GLOO, NCCL, CUDA, rendezvous, process-group, or generic DDP lifecycle.
+## Backend ownership
 
-## Qualified topology seam
+Production CBT passes no default process-group backend.
 
-The initial seam is an explicitly supplied Lightning `ClusterEnvironment` for each Tune
-trial. It reports immutable scheduler-assigned rank, world size, local rank, logical node
-rank, and rendezvous address and port, and declares that the processes were created
-externally.
+When the user does not provide Lightning's normal `process_group_backend` argument,
+`DDPStrategy` chooses the backend from its root device. When a user explicitly provides
+that ordinary argument, CBT passes it through.
 
-The environment does not import Ray, choose the distributed backend, perform a collective,
-or call process-group initialization or destruction. Lightning's `DDPStrategy` consumes
-the supplied topology and initializes native PyTorch DDP.
+The implementation contains no production GLOO/NCCL selection and does not call
+`torch.distributed.init_process_group()` or `torch.distributed.destroy_process_group()`.
 
-Direct CPU evidence with Ray 2.56.1, Lightning 2.6.5, and PyTorch 2.10.0 shows that two
-real Tune function trials form one GLOO DDP world and receive the same reduced gradient.
-For this externally launched path, Lightning leaves the process group initialized when
-`Trainer.fit()` returns. The Tune trial process then exits normally, releasing that
-framework-owned context. The package does not add an explicit destroy call.
+The earlier topology contract explicitly requests GLOO only to qualify a deterministic CPU
+test. The repeated function-API contract leaves backend choice to Lightning/PyTorch.
 
-This establishes the topology handoff and shared-gradient mechanism for a fully available
-two-member single-node CPU cohort. It does not establish production cohort admission,
-repeated round lifecycle, failure recovery, population exchange, CUDA/NCCL, or multi-node
-support.
+## Population fitness exchange
 
-## Population resolution
+At validation end, `ClanTuneReportCallback` reads one local scalar fitness from each
+member. It constructs an ephemeral `ClanController` whose exchange function uses
+`torch.distributed.all_gather` on the already-established default PyTorch distributed
+world.
 
-At the qualifying round boundary, every member already belongs to the established DDP
-context. The population operation uses that context to exchange one finite local fitness
-per member and produce complete fitness associated with stable member identity.
+The local scalar tensor is created on `trainer.strategy.root_device`. The exchange
+therefore follows the active DDP device/backend rather than creating a CPU-only side
+channel.
 
-The first implementation must choose the narrowest supported Lightning or PyTorch
-collective surface that preserves:
+The rank order is the stable member order for the initial topology, so the complete
+fitness sequence can be passed directly to the shared deterministic selector. The Tune
+scheduler independently repeats the same selection from reported results.
 
-- one contribution per required member;
-- stable member association;
-- comparison semantics for supported fitness values;
-- one operation per controller boundary; and
-- surfaced failure rather than partial-population selection.
+## Winner-only persistent checkpoint
 
-The exact collective call, tensor or object representation, payload dtype, and internal
-collaborator interface remain open until direct evidence selects them.
+Lightning's public `Trainer.save_checkpoint()` performs three relevant operations on every
+rank:
 
-`ClanController` applies the shared deterministic selection policy after the complete
-association is available. Distributed communication does not own winner policy.
+```text
+construct checkpoint dictionary
+→ strategy.save_checkpoint(...)
+→ strategy barrier
+```
 
-## Lifecycle and failure
+The callback therefore asks every member to enter that same operation after winner
+selection. `ClanDDPStrategy` temporarily records the selected source rank for this CBT
+round checkpoint.
 
-The complete Clan must remain in one coherent distributed lifecycle across shared
-training and the population boundary. Tune may not independently advance, pause, restore,
-or replace one trial while its peers remain inside the active group.
+During that scope:
 
-A missing or failed member invalidates the boundary. Framework and scheduler integration
-must surface the failure, release or fail peers through supported lifecycle behavior, and
-prevent a checkpoint or next generation from being accepted from a reduced Clan.
+- the selected rank delegates to the configured `CheckpointIO.save_checkpoint()`;
+- losing ranks skip the physical write; and
+- every rank still reaches Lightning's ordinary checkpoint barrier.
 
-The exact timeout, cancellation, and recovery mechanisms depend on the qualified Ray,
-Lightning, and PyTorch path. They must not be implemented by creating a second custom
-communication system.
+The callback then creates and reports a Ray `Checkpoint` only on the selected member.
 
-## Public and internal surfaces
+This avoids the former private Lightning checkpoint-dump/barrier-bypass seam and preserves
+the storage invariant of one persistent CBT continuation per round.
 
-The implementation must support the accepted `make_cbt_controller(genome=...)` public
-flow without exposing ranks, rendezvous, process groups, or transport buffers to the user
-training function.
+Outside this scoped operation, `ClanDDPStrategy.save_checkpoint()` delegates to ordinary
+Lightning behavior so user-requested checkpoints are not globally winner-gated.
 
-This decision does not freeze:
+## Function restart and userspace genome application
 
-- the scheduler superclass or Ray cohort-admission hook;
-- the Lightning cluster-environment or strategy class;
-- internal topology value objects;
-- the population-exchange collaborator interface;
-- the collective operation or payload representation; or
-- additional advanced factory arguments.
+`ClanScheduler` subclasses synchronous Ray `PopulationBasedTraining`. Its custom policy
+marks every loser as a PBT target and the sole Clan winner as the source. The overridden
+config transition clones the winner's Tune config and applies `MutationSpec` rules only to
+the declared controlled keys.
 
-Those details may change when the same ownership and behavior are preserved.
+Ray remains responsible for assigning the selected reported checkpoint, replacing target
+configs, pausing/restarting function trials, and exposing the assigned checkpoint through
+`tune.get_checkpoint()`.
 
-## Later ClanFSDP extension
+The resumed user's function owns application. For the documented Lightning path it:
 
-The initial DDP topology has one training process per Clan member. A later ClanFSDP
-system may require both a model-shard dimension and a Clan-member dimension, with
-framework-owned groups or a process mesh that serves both.
+1. materializes the selected Ray checkpoint locally;
+2. loads inherited optimizer state;
+3. explicitly applies the current Tune genome to that optimizer;
+4. writes the updated optimizer state into the member-local checkpoint copy; and
+5. passes that copy to `Trainer.fit(..., ckpt_path=...)` for Lightning's complete restore.
 
-That extension is deliberately deferred. It requires its own implementation and
-qualification decision and must not be approximated now by introducing a second
-population process group into the DDP path.
+No CBT callback or strategy applies genome values.
 
-## Superseded direction
+## Framework lifecycle
 
-The former decision to create a package-owned Ray collective group solely for population
-resolution is rejected. It duplicated framework lifecycle, hard-coded an unnecessary
-communication layer, and separated population exchange from the distributed context that
-already spans the Clan.
+The qualified externally launched Lightning path leaves the PyTorch process group active
+when `Trainer.fit()` returns. CBT does not insert explicit teardown. In the tested Tune
+function lifecycle, the relevant worker/process lifecycle permits the repeated Clan path
+to form the next distributed invocation successfully.
 
-Isolated tests of Ray or GLOO scalar exchange may be useful framework observations, but
-they do not establish the accepted production topology.
+Actor reuse is not enabled or claimed. A future reuse path must directly qualify process
+group teardown/reformation rather than assuming the current process lifetime behavior.
+
+## Current evidence
+
+The retained contracts establish:
+
+- two real Tune trials forming one Lightning/PyTorch DDP world;
+- common reduced gradients;
+- two repeated Clan report boundaries through the function API;
+- fitness exchange over the established DDP world;
+- worker/scheduler winner agreement;
+- native PBT checkpoint/configuration handoff;
+- explicit userspace application of the resumed genome; and
+- exactly one instrumented `CheckpointIO` persistence call per Clan round.
+
+Exact versions and non-claims are recorded in
+[`../qualification/function_api_workflow.md`](../qualification/function_api_workflow.md).
+
+## Deferred implementation
+
+The current mechanism does not implement or claim:
+
+- gang admission when the cluster cannot concurrently schedule the complete Clan;
+- elastic membership;
+- actor reuse;
+- comprehensive distributed failure recovery;
+- multi-node topology;
+- accelerator/backend combinations not directly qualified; or
+- the later ClanFSDP topology.
+
+The former package-owned Ray population collective remains rejected. Later model-sharded
+work may require additional framework-owned process groups, but that is a separate design
+and qualification problem rather than a reason to introduce a second communication system
+into the initial DDP path.
