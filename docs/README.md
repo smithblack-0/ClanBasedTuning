@@ -1,45 +1,41 @@
 # ClanBasedTuning documentation
 
-This is the documentation entry point for users and maintainers.
+This directory separates the public usage path, the current implementation design, and the
+evidence supporting each compatibility claim.
 
-## Start with the user path
+## User path
 
-- [`../README.md`](../README.md) gives installation, the minimal function API, resource
-  semantics, the scientific genome boundary, and interrupted-run restore.
-- [`api.md`](api.md) is the detailed public API and lifecycle guide.
-- [`../examples/function_api.py`](../examples/function_api.py) is the runnable two-member
-  CPU mechanics example.
-- Root [`STATUS.md`](../STATUS.md) separates the currently qualified behavior from broader
-  repository/production-readiness gaps.
+- [`../README.md`](../README.md) gives installation and the shortest complete usage path.
+- [`api.md`](api.md) explains the public API and lifecycle in detail.
+- [`../examples/function_api.py`](../examples/function_api.py) is the runnable CPU example.
+- [`../STATUS.md`](../STATUS.md) records what is actually qualified now.
 
 ## Product and architecture
 
-- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning, project goals, userspace
-  ownership, and stable development criteria.
-- [`design/integration.md`](design/integration.md) records the current Ray/Lightning/PyTorch
-  integration and responsibility boundaries.
-- [`contracts/system_behavior.md`](contracts/system_behavior.md) states observable complete
-  Clan behavior.
+- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning and the durable project goals.
+- [`contracts/system_behavior.md`](contracts/system_behavior.md) states observable Clan
+  behavior independently of framework hooks.
 - [`contracts/population_resolution_invariants.md`](contracts/population_resolution_invariants.md)
-  and [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
-  define the generation boundary and ownership split.
+  defines the complete-population generation boundary.
+- [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
+  assigns ownership at that boundary.
+- [`design/integration.md`](design/integration.md) records the current Ray/Lightning/PyTorch
+  composition.
 
-## Evidence and support
+## Implementation evidence
 
-- [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
-  records the original external Tune-member DDP seam qualification.
-- [`qualification/function_api.md`](qualification/function_api.md) records direct evidence
-  for the complete repeated function path and its current support envelope.
 - [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
-  records framework evidence behind the topology/data/checkpoint seams.
+  records the externally launched Lightning DDP topology.
+- [`implementation/ray_scheduler_compatibility.md`](implementation/ray_scheduler_compatibility.md)
+  explains the owned synchronous scheduler and its narrow Ray compatibility seam.
+- [`qualification/function_api.md`](qualification/function_api.md) defines the executable
+  repeated-generation and restore qualification.
+- [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
+  records the foundational cross-trial DDP evidence.
 
 ## Maintainer process
 
-- [`plan.md`](plan.md) sequences current work and repository-readiness requirements.
+- [`plan.md`](plan.md) is the current corrective/production work sequence.
 - [`reviews/framework_native_review.md`](reviews/framework_native_review.md) is the standing
   framework-ownership review.
-- [`llm/README.md`](llm/README.md) contains the repository's engineering and technical-writing
-  process used by coding agents and maintainers doing substantial work.
-
-Git history, rather than an active archive or placeholder `old_code` tree, retains superseded
-implementations and previous milestone records.
+- [`llm/README.md`](llm/README.md) routes substantial engineering and writing work.

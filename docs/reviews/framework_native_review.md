@@ -1,105 +1,90 @@
-# Framework-native engineering review
+# Framework-native review
 
-Status: standing go/no-go review
+Status: standing engineering review
 
-## Purpose
+Use this review whenever a change touches Ray, Lightning, PyTorch, user/application
+ownership, checkpointing, resources, or distributed lifecycle.
 
-Use this review whenever a design or implementation changes a meaningful
-ClanBasedTuning framework boundary. It asks:
+## 1. Preserve Clan semantics
 
-> Does this unit preserve the Clan mechanism while leaving ordinary framework behavior
-> with its native owner?
+Confirm complete-population shared-gradient cooperation, member-local post-gradient
+variation, comparable member-local fitness, one selected continuation, and independent
+sibling mutations from one selected parent.
 
-The roadmap and accepted contracts define the required behavior. This review does not
-create new product requirements or choose an implementation before evidence exists.
+Fail when an implementation convenience changes scientific meaning.
 
-## 1. Preserve the Clan mechanism
+## 2. Use the native owner where it wins the overall design
 
-Confirm that the unit preserves complete-population cooperation, common gradients,
-member-side variation, comparable fitness, one selected continuation, and sibling
-next-generation mutations from that selected parent.
+Trace each responsibility to Ray Tune, Lightning, PyTorch, CBT, or user code. Prefer the
+native owner when its contract fits, but do not treat this as a mechanical rule: a small
+owned implementation can be better than dependence on a large unstable framework subsystem
+when it improves the overall correctness/maintenance/concision balance.
 
-Fail the review when engineering convenience changes one of those properties. That is a
-product or contract change, not a local implementation choice.
-
-## 2. Use the native owner
-
-Trace each responsibility to PyTorch, Lightning, Ray Tune, ClanBasedTuning, or the user
-application. Use the framework or user owner unchanged when its contract already fits.
-
-Fail when ClanBasedTuning repeats ordinary scheduling, training, validation,
-distribution, checkpoint, optimizer, data, resource, or lifecycle behavior merely for
-local convenience.
+The current example is scheduler evolution: CBT owns its narrow synchronous transition rather
+than inheriting Ray PBT internals, while Ray still owns trial execution/resources/storage and
+the unavoidable low-level transfer operations remain in one compatibility adapter.
 
 ## 3. Preserve userspace genome ownership
 
-Trace the genome all the way from Tune config assignment into the user's function.
+Pass only when Tune supplies the current config to the ordinary user function and user code
+alone decides what its values mean or how they modify optimizer/model/other state.
 
-Pass only when:
+Fail if production CBT introduces an optimizer schema, config-to-optimizer inference,
+`apply_genome` abstraction, package restore/application callback, or hidden post-load
+application hook.
 
-- CBT may select or mutate config values but does not define what their keys mean;
-- the user's function receives the ordinary current genome/config;
-- user code alone decides how that genome affects optimizer, model, or other state; and
-- tests that demonstrate application keep the application logic in test/userspace code.
+Using a user-owned Lightning lifecycle hook to apply the genome after restoration preserves
+this boundary; the operation is still user code.
 
-Fail immediately if production CBT introduces any of the following without an explicit
-product-contract change:
+## 4. Demand a demonstrated framework gap for custom machinery
 
-- an `apply_genome` abstraction owned or invoked by CBT;
-- inferred mapping from genome keys to optimizer fields;
-- optimizer-param-group inspection for genome application;
-- a restore callback whose purpose is to apply the genome;
-- a Lightning post-load hook that applies the genome; or
-- a convenience API that hides application while claiming the user still owns it.
+For each adapter/custom component, state:
 
-A genome commonly representing optimizer hyperparameters does not transfer optimizer
-application ownership to CBT.
+- what Clan behavior the frameworks cannot supply directly;
+- what existing lifecycle remains framework-owned;
+- why the chosen seam is preferable to the realistic alternatives; and
+- what evidence covers the version-sensitive behavior.
 
-## 4. Require a demonstrated framework gap
+Do not add generic infrastructure merely for symmetry or local control.
 
-Custom behavior requires a concrete statement of:
+## 5. Concentrate unstable dependencies
 
-- the Clan behavior required;
-- the native behavior that conflicts with or omits it;
-- the smallest seam capable of bridging the difference; and
-- the evidence showing that ordinary composition is insufficient.
+A private/Developer framework operation is not automatically rejected. Compare accepting the
+dependency, isolating/reimplementing the missing behavior, and owning a larger subsystem.
+Choose the near-optimal balance.
 
-Speculative generality, symmetry, or preference for local control is not a framework
-gap.
+If unstable calls remain, concentrate them in the smallest compatibility boundary and test
+that boundary through the real framework lifecycle. Do not spread private framework state
+through algorithm modules or solve the concern with needlessly restrictive point-version
+pinning.
 
-## 5. Keep one authority and a narrow seam
+## 6. Keep one authority per decision
 
-The custom seam adds only the missing Clan behavior. Policy, state, and execution each
-have one authoritative owner. Removing the seam should remove the Clan-specific behavior
-without taking an ordinary framework lifecycle with it.
+Selection, mutation RNG, stable member identity, checkpoint construction, Tune storage,
+process-group lifecycle, and genome application each need a clear owner. Convenience must not
+create a second source of truth.
 
-Fail when responsibilities overlap, configuration is mirrored without need, or custom
-machinery mainly exists to coordinate other custom machinery.
+## 7. Match support claims to evidence
 
-## 6. Match support to evidence
-
-Every version-sensitive, distributed, persistence, recovery, performance, device, or
-failure claim identifies direct source evidence or an executable qualification and the
-support envelope it establishes.
-
-Return **insufficient evidence** when the boundary is plausible but the claim is not yet
-established. Narrow the claim rather than freezing an implementation or inferring support
-from a neighboring path.
+Every version, device, topology, persistence, recovery, and performance claim must have
+corresponding evidence. Dependency metadata indicates what users may attempt/install; it does
+not automatically establish compatibility or production support.
 
 ## Result
 
-- **Pass:** all checks hold for the claimed behavior and support envelope.
-- **Fail:** the unit changes Clan meaning, duplicates a native/user owner, or creates
-  conflicting authority.
-- **Insufficient evidence:** the boundary may be correct, but the support claim has not
+- **Pass:** the claimed behavior has one coherent ownership model and the selected design is
+  the best-supported balance among realistic alternatives.
+- **Fail:** the unit changes Clan semantics, duplicates authority without benefit, hides user
+  ownership, or leaves avoidable unstable coupling spread through the system.
+- **Insufficient evidence:** the architecture may be sound, but the support claim has not yet
   been qualified.
 
-## Governing references
+## References
 
 - [Product roadmap](../product_roadmap.md)
-- [Current integration design](../design/integration.md)
-- [System behavioral contract](../contracts/system_behavior.md)
-- [Population-resolution invariants](../contracts/population_resolution_invariants.md)
-- [Population-resolution responsibilities](../contracts/population_resolution_responsibilities.md)
 - [Public API](../api.md)
-- [Current implementation plan](../plan.md)
+- [System behavior](../contracts/system_behavior.md)
+- [Population invariants](../contracts/population_resolution_invariants.md)
+- [Population responsibilities](../contracts/population_resolution_responsibilities.md)
+- [Ray scheduler compatibility](../implementation/ray_scheduler_compatibility.md)
+- [Current plan](../plan.md)

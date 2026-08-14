@@ -2,122 +2,69 @@
 
 Status: accepted architectural contract
 
-## Purpose
-
-This document defines the behavior that must remain true when the live Clan decides which
-member may retain and report a generation checkpoint. It constrains semantics without
-prescribing a backend, payload dtype, container type, timeout mechanism, or exact
-collective primitive.
-
 ## Population boundary
 
 1. One live Tune trial represents one stable Clan member.
-2. The complete configured Clan participates in one population-resolution boundary for
-   each qualifying generation boundary.
-3. Every required member contributes exactly one finite local fitness produced at that
-   same logical training boundary.
-4. Each contributed fitness remains associated with the correct stable member.
-5. A successful boundary contains one valid contribution from every required member and
-   no contribution from another generation.
+2. A successful generation boundary contains exactly one report from every configured member.
+3. Every report belongs to the same Tune progress boundary.
+4. Every fitness remains associated with its stable member and is finite/comparable.
+5. Candidate fitness remains member-local until the Clan population exchange.
+6. A missing, duplicated, malformed, failed, or cross-generation member cannot be
+   reinterpreted as a smaller valid Clan.
 
-For the initial DDP path, population resolution uses the framework-managed distributed
-context already spanning the live Clan for shared training. Population-resolution logic
-does not establish, choose the backend for, or tear down another process group.
+The initial DDP path uses the already-established Lightning/PyTorch group to exchange fitness;
+population resolution creates no second process group or backend lifecycle.
 
-A later model-sharded Clan topology may contain more than one framework-owned process
-group or process dimension. The invariant remains that the population operation uses the
-appropriate already-established Clan-wide context rather than creating its own distributed
-runtime.
+## Selection
 
-## Selection result
+A successful boundary identifies exactly one selected member. Comparison direction and stable
+tie behavior belong to the shared framework-independent selection implementation. Worker-side
+selection and scheduler-side verification use the same rule.
 
-A successful boundary provides enough complete member-associated fitness information for
-the shared framework-independent selection policy to identify exactly one stable member.
+Exactly one member may report the persistent Clan continuation checkpoint. The scheduler
+independently verifies that the declared checkpoint source equals its selected member.
 
-The selection policy owns:
-
-- minimizing or maximizing behavior;
-- comparison-validity requirements;
-- deterministic tie behavior; and
-- the selected stable member identity.
-
-Every successful worker reaches the same selected-member conclusion before reporting its
-round to Tune. Exactly one worker may report the CBT continuation checkpoint. Every other
-worker reports metrics without a checkpoint.
-
-## Local decision lifecycle
-
-The worker-side controller stores one local fitness and resolves one local answer to:
-
-> Is this stable member the selected checkpoint source?
-
-The first save-decision query may enter the framework-managed population-resolution
-boundary. Once resolved, the controller caches both the selected member identity and the
-local save answer. Repeated queries do not enter population communication again.
-
-The controller has no genome or genome-application responsibility.
-
-## Scheduler verification
-
-The CBT Tune scheduler independently receives one result from every required trial and
-applies the same selection policy. A valid scheduler boundary verifies that:
-
-- every assigned stable member is present exactly once;
-- all reports belong to the same Tune generation boundary;
-- every worker reports the same winner selected independently by the scheduler;
-- exactly the selected member identifies itself as the checkpoint source; and
-- the selected source is the sole Ray checkpoint available for the generation transition.
-
-The scheduler already owns the selected trial's Tune config. Correct transition behavior
-does not require copying that genome into the Lightning checkpoint merely to recover it
-again.
-
-Worker agreement is therefore necessary but not the Tune-side evolutionary authority.
-The scheduler owns the selected parent config, mutation random stream, next-member genome
-assignment, and use of Ray's native checkpoint/config transition lifecycle.
-
-## Next-generation invariant
+## Next generation
 
 Every next member receives:
 
 - the same selected training continuation; and
-- its own independently mutated genome derived from the selected parent's genome.
+- its own independently mutated genome derived from one snapshot of the selected parent's
+  current Tune config.
 
-The selected member is also a next-generation target and is not exempt from mutation.
-No child mutation may accidentally use another child's already-mutated genome as its
-parent.
+The prior winner is also a target and receives a mutation. No child mutation may use another
+already-mutated child as its parent. Seeded mutation assignment is stable with respect to
+member identity rather than incidental framework iteration order.
 
-Genome application remains userspace. These invariants concern which genome CBT supplies,
-not what the user's program does with it.
+Genome application remains userspace. These invariants determine which config CBT supplies,
+not what user code does with it.
 
-## Failure and generation isolation
+## Runtime isolation
 
-A boundary is invalid if any required member is missing, fails, contributes more than
-once, contributes malformed fitness, or participates under the wrong generation.
+Stable member assignment is scheduler-owned. Internal runtime discovery may choose any
+representation that preserves experiment/trial identity unambiguously. Concurrent Tune
+experiments with equal trial IDs must not collide.
 
-An invalid boundary must not be reinterpreted as a smaller valid Clan or intentionally
-release a mixed next generation. The implementation must surface known invalid state
-rather than silently choosing from a partial population.
+Each independently launched function invocation joins one complete rendezvous session using
+fresh invocation identity. Mixed old/new invocation members may not form a valid DDP cohort.
 
-The exact timeout, cancellation, and recovery mechanisms are qualification-dependent. The
-initial implementation has a bounded pre-DDP cohort rendezvous timeout but does not yet
-claim bounded recovery after a participant disappears inside an active framework
-collective. Lack of that support claim does not make partial-population selection valid.
+## Failure
+
+An invalid boundary must not intentionally:
+
+- choose from a partial population;
+- silently shrink the Clan;
+- accept a losing checkpoint as continuation; or
+- release a deliberately mixed next generation.
+
+Unsupported failure modes may fail the experiment rather than recover. Bounded recovery after
+a participant disappears inside an active framework collective is not implied by the
+pre-DDP rendezvous timeout.
 
 ## Representation freedom
 
-The implementation may choose any internal representation that preserves the invariants
-above. In particular, architecture does not require:
-
-- stable member identity to equal distributed rank, although the initial qualified path
-  deliberately uses that mapping;
-- a tuple, list, dictionary, tensor, or object as the population-fitness container;
-- CPU or accelerator storage for the fitness payload;
-- a particular floating-point dtype;
-- one specific collective operation over the established framework-owned context;
-- a specific internal collaborator, class, method, or module name; or
-- one fixed timeout duration.
-
-Those choices remain implementation details only while member association, deterministic
-selection, single checkpoint authority, common-parent mutation, and generation isolation
-remain mechanically established.
+The implementation may change internal container types, helper names, actor layout, timeout
+mechanisms, or exact framework hooks while these invariants remain mechanically established.
+Stable member ID currently equals DDP global rank by deliberate initial-topology design; a
+future model-sharded/multi-node topology may introduce additional dimensions without changing
+the population semantics above.

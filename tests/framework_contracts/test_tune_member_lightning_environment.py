@@ -1,65 +1,85 @@
-"""Framework contract for one Tune trial per Lightning/PyTorch DDP rank."""
+"""Framework contracts for one externally launched Tune process per Lightning DDP rank.
 
-from __future__ import annotations
+The focused environment contract establishes the logical one-process-node topology supplied
+to Lightning. The distributed contract then runs two real Tune trials in one PyTorch DDP
+world and proves that Lightning performs ordinary gradient all-reduce without CBT owning a
+second collective implementation.
+"""
 
 import socket
 from datetime import timedelta
+from pathlib import Path
+from typing import Any
 
+import lightning.pytorch as lightning
 import pytest
+import ray
+import torch
+from lightning.pytorch.strategies import DDPStrategy
+from ray import tune
+from torch.utils.data import DataLoader, TensorDataset
+
+from clan_based_tuning.lightning_environment import TuneMemberEnvironment
 
 pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
 def _free_local_port() -> int:
+    """Reserve and release one local port for the short-lived framework contract."""
+
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
-        return listener.getsockname()[1]
+        return int(listener.getsockname()[1])
 
 
-def _run_ddp_member(config):
-    import lightning.pytorch as lightning
-    import torch
-    from lightning.pytorch.strategies import DDPStrategy
-    from ray import tune
-    from torch.utils.data import DataLoader, TensorDataset
-
-    from clan_based_tuning.lightning_environment import TuneMemberEnvironment
+def _run_ddp_member(config: dict[str, Any]) -> None:
+    """Run one Tune process in an externally described Lightning DDP world."""
 
     torch.set_num_threads(1)
 
     class OneStepModel(lightning.LightningModule):
-        def __init__(self, local_gradient: float):
+        """Model exposing DDP topology and the reduced gradient after one step."""
+
+        def __init__(self, local_gradient: float) -> None:
             super().__init__()
             self.weight = torch.nn.Parameter(torch.tensor(0.0))
             self.local_gradient = local_gradient
-            self.observed_rank = None
-            self.observed_world_size = None
-            self.observed_backend = None
-            self.reduced_gradient = None
+            self.observed_rank: int | None = None
+            self.observed_world_size: int | None = None
+            self.observed_backend: str | None = None
+            self.reduced_gradient: float | None = None
 
-        def training_step(self, batch, batch_index):
+        def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
+            """Produce a rank-specific local gradient that DDP must average."""
+
             del batch, batch_index
             return self.weight * self.local_gradient
 
-        def configure_optimizers(self):
+        def configure_optimizers(self) -> torch.optim.Optimizer:
+            """Use unit learning rate so the reduced gradient equals the parameter update."""
+
             return torch.optim.SGD(self.parameters(), lr=1.0)
 
-        def on_train_start(self):
+        def on_train_start(self) -> None:
+            """Record the process-group topology created by Lightning/PyTorch."""
+
             self.observed_rank = torch.distributed.get_rank()
             self.observed_world_size = torch.distributed.get_world_size()
             self.observed_backend = torch.distributed.get_backend()
 
-        def on_before_optimizer_step(self, optimizer):
+        def on_before_optimizer_step(self, optimizer: torch.optim.Optimizer) -> None:
+            """Capture the gradient after Lightning DDP has reduced it."""
+
             del optimizer
             self.reduced_gradient = float(self.weight.grad.detach().item())
 
     environment = TuneMemberEnvironment(
-        global_rank=config["member_id"],
-        world_size=config["world_size"],
+        global_rank=int(config["member_id"]),
+        world_size=int(config["world_size"]),
         local_rank=0,
-        node_rank=config["member_id"],
-        main_address=config["main_address"],
-        main_port=config["main_port"],
+        node_rank=int(config["member_id"]),
+        main_address=str(config["main_address"]),
+        main_port=int(config["main_port"]),
     )
     strategy = DDPStrategy(
         cluster_environment=environment,
@@ -71,7 +91,7 @@ def _run_ddp_member(config):
     trainer = lightning.Trainer(
         accelerator="cpu",
         devices=1,
-        num_nodes=config["world_size"],
+        num_nodes=int(config["world_size"]),
         strategy=strategy,
         max_steps=1,
         logger=False,
@@ -95,8 +115,8 @@ def _run_ddp_member(config):
     )
 
 
-def test_environment_reports_external_topology_without_mutating_it():
-    from clan_based_tuning.lightning_environment import TuneMemberEnvironment
+def test_environment_exposes_logical_one_process_nodes() -> None:
+    """The adapter preserves an external member rank while every Tune process is local rank 0."""
 
     environment = TuneMemberEnvironment(
         global_rank=1,
@@ -125,9 +145,8 @@ def test_environment_reports_external_topology_without_mutating_it():
         environment.set_world_size(2)
 
 
-def test_two_tune_trials_form_one_framework_managed_ddp_world(tmp_path):
-    import ray
-    from ray import tune
+def test_two_tune_trials_form_one_framework_managed_ddp_world(tmp_path: Path) -> None:
+    """Two independent Tune processes become ranks of one native Lightning/PyTorch DDP world."""
 
     ray.shutdown()
     ray.init(num_cpus=2, include_dashboard=False, log_to_driver=False)

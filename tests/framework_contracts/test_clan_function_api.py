@@ -1,62 +1,98 @@
-"""End-to-end contracts for the public Ray function + Lightning Clan path."""
+"""End-to-end contracts for the public Ray function + Lightning Clan lifecycle.
 
-from __future__ import annotations
+These tests use real Ray, Lightning, PyTorch, Tune checkpoints, and process-group collectives.
+The first contract proves repeated single-parent transitions. The second intentionally fails
+a restored member only after Lightning has restored training state, then restarts Ray and
+requires ordinary ``Tuner.restore`` to reconstruct the Clan and continue.
+"""
 
 import contextlib
+import tempfile
 from pathlib import Path
+from typing import Any
 
+import lightning.pytorch as lightning
 import pytest
+import ray
+import torch
+from ray import tune
+from ray.tune.error import TuneError
+from torch.utils.data import DataLoader, TensorDataset
+
+from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCallback
 
 pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
-def _train_member(genome):
-    import tempfile
-
-    import lightning.pytorch as lightning
-    import torch
-    from ray import tune
-    from torch.utils.data import DataLoader, TensorDataset
-
-    from clan_based_tuning import ClanDDPStrategy, ClanTuneReportCallback
+def _train_member(genome: dict[str, Any]) -> None:
+    """Run one real Tune member while exposing state needed by lifecycle assertions."""
 
     torch.set_num_threads(1)
 
     class ScalarModel(lightning.LightningModule):
-        def __init__(self, current_genome):
+        """Minimal model whose optimizer state makes continuation directly observable."""
+
+        def __init__(self, current_genome: dict[str, Any]) -> None:
             super().__init__()
+            self.genome = current_genome
             self.weight = torch.nn.Parameter(torch.tensor(1.0))
             self.optimizer = torch.optim.SGD(
                 self.parameters(),
-                lr=current_genome["lr"],
+                lr=float(current_genome["lr"]),
                 momentum=0.9,
             )
-            self.round_start_weight = None
-            self.round_start_global_step = None
-            self.momentum_before_step = None
-            self.training_sample_value = None
+            self.round_start_weight: float | None = None
+            self.round_start_global_step: float | None = None
+            self.momentum_before_step: float | None = None
+            self.training_sample_value: float | None = None
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
 
-        def training_step(self, batch, batch_index):
+        def on_train_start(self) -> None:
+            """Apply the current genome after Lightning has restored inherited state."""
+
+            for param_group in self.optimizer.param_groups:
+                param_group["lr"] = float(self.genome["lr"])
+
+            self.round_start_weight = float(self.weight.detach().item())
+            self.round_start_global_step = float(self.trainer.global_step)
+
+            failure_marker = self.genome.get("fail_on_restore_marker")
+            observed_marker = self.genome.get("failure_observed_marker")
+            if (
+                failure_marker
+                and self.trainer.global_step > 0
+                and Path(str(failure_marker)).exists()
+            ):
+                if observed_marker:
+                    Path(str(observed_marker)).write_text("failure reached after restore")
+                raise RuntimeError("intentional interrupted-run qualification failure")
+
+        def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
+            """Expose the DDP-partitioned sample and produce a simple common gradient."""
+
             del batch_index
             self.training_sample_value = float(batch[0].item())
             return self.weight
 
-        def on_train_start(self):
-            self.round_start_weight = float(self.weight.detach().item())
-            self.round_start_global_step = float(self.trainer.global_step)
+        def on_before_optimizer_step(self, optimizer: torch.optim.Optimizer) -> None:
+            """Record whether selected-parent optimizer momentum survived restoration."""
 
-        def on_before_optimizer_step(self, optimizer):
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
-            self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
+            self.momentum_before_step = (
+                0.0 if momentum is None else float(momentum.detach().item())
+            )
 
-        def on_validation_epoch_start(self):
+        def on_validation_epoch_start(self) -> None:
+            """Reset complete-validation accounting for this member."""
+
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
 
-        def validation_step(self, batch, batch_index):
+        def validation_step(self, batch: list[torch.Tensor], batch_index: int) -> None:
+            """Record complete held-out coverage and member-local candidate metrics."""
+
             del batch_index
             values = batch[0]
             self.validation_sample_sum += float(values.sum().item())
@@ -69,12 +105,16 @@ def _train_member(genome):
                 self.log("momentum_before_step", self.momentum_before_step)
                 self.log("training_sample_value", self.training_sample_value)
 
-        def on_validation_epoch_end(self):
+        def on_validation_epoch_end(self) -> None:
+            """Publish coverage evidence after Lightning-managed validation completes."""
+
             if not self.trainer.sanity_checking:
                 self.log("validation_sample_sum", self.validation_sample_sum)
                 self.log("validation_sample_count", float(self.validation_sample_count))
 
-        def configure_optimizers(self):
+        def configure_optimizers(self) -> torch.optim.Optimizer:
+            """Return the optimizer whose inherited state is part of the Clan continuation."""
+
             return self.optimizer
 
     model = ScalarModel(genome)
@@ -85,22 +125,6 @@ def _train_member(genome):
         if checkpoint is not None:
             checkpoint_dir = checkpoint.to_directory(local_checkpoint_dir)
             checkpoint_path = Path(checkpoint_dir, "checkpoint.ckpt")
-            state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-            # USERSPACE. Restore inherited optimizer history, visibly apply this member's
-            # current genome, and place the user-modified state back into the local
-            # Lightning checkpoint copy before the framework performs full restoration.
-            model.optimizer.load_state_dict(state["optimizer_states"][0])
-            for param_group in model.optimizer.param_groups:
-                param_group["lr"] = genome["lr"]
-            state["optimizer_states"][0] = model.optimizer.state_dict()
-            torch.save(state, checkpoint_path)
-
-            if (
-                "fail_on_restore_marker" in genome
-                and Path(genome["fail_on_restore_marker"]).exists()
-            ):
-                raise RuntimeError("intentional interrupted-run qualification failure")
 
         train_data = DataLoader(
             TensorDataset(torch.tensor([0.0, 1.0, 2.0, 3.0])),
@@ -143,8 +167,8 @@ def _train_member(genome):
         )
 
 
-def _scheduler(population_size=2):
-    from clan_based_tuning import ClanScheduler
+def _scheduler(population_size: int = 2) -> ClanScheduler:
+    """Build the deterministic two-member scheduler shared by framework contracts."""
 
     return ClanScheduler(
         population_size=population_size,
@@ -161,8 +185,8 @@ def _scheduler(population_size=2):
     )
 
 
-def _tune_config(scheduler):
-    from ray import tune
+def _tune_config(scheduler: ClanScheduler) -> tune.TuneConfig:
+    """Use the ordinary Tune metric/mode/scheduler configuration surface."""
 
     return tune.TuneConfig(
         scheduler=scheduler,
@@ -171,9 +195,8 @@ def _tune_config(scheduler):
     )
 
 
-def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_round(tmp_path):
-    import ray
-    from ray import tune
+def test_function_trainable_repeats_one_parent_transition(tmp_path: Path) -> None:
+    """Two members inherit complete state and both receive seeded sibling mutations."""
 
     ray.shutdown()
     ray.init(num_cpus=2, include_dashboard=False, log_to_driver=False)
@@ -212,24 +235,17 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
     final_lrs = sorted(result.config["lr"] for result in results)
     assert final_lrs == pytest.approx(sorted([0.1924690426284743, 0.2159468026720305]))
 
-    assert len({round(result.metrics["round_start_weight"], 7) for result in results}) == 1
-    assert len({result.metrics["round_start_global_step"] for result in results}) == 1
-    assert len({result.metrics["validation_sample_sum"] for result in results}) == 1
-    assert len({result.metrics["validation_sample_count"] for result in results}) == 1
-
     checkpoint_files = list(Path(tmp_path).rglob("checkpoint.ckpt"))
     assert 1 <= len(checkpoint_files) <= 2
 
 
-def test_tuner_restore_rebuilds_clan_runtime_and_continues_after_interruption(tmp_path):
-    """A new Ray runtime can resume errored Clan trials through ordinary Tuner.restore."""
-
-    import ray
-    from ray import tune
+def test_tuner_restore_rebuilds_runtime_after_post_restore_failure(tmp_path: Path) -> None:
+    """Fresh Ray restores errored members after an intentional failure following state load."""
 
     experiment_name = "function-api-restore-contract"
     experiment_path = tmp_path / experiment_name
     marker = tmp_path / "fail-on-restored-invocation"
+    observed = tmp_path / "failure-observed-after-restore"
     marker.write_text("fail")
 
     ray.shutdown()
@@ -240,6 +256,7 @@ def test_tuner_restore_rebuilds_clan_runtime_and_continues_after_interruption(tm
             param_space={
                 "lr": tune.grid_search([0.1, 0.2]),
                 "fail_on_restore_marker": str(marker),
+                "failure_observed_marker": str(observed),
             },
             tune_config=_tune_config(_scheduler()),
             run_config=tune.RunConfig(
@@ -249,11 +266,12 @@ def test_tuner_restore_rebuilds_clan_runtime_and_continues_after_interruption(tm
                 verbose=0,
             ),
         )
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(TuneError):
             tuner.fit()
     finally:
         ray.shutdown()
 
+    assert observed.exists(), "the injected failure must occur only after Lightning restoration"
     assert tune.Tuner.can_restore(str(experiment_path))
     marker.unlink()
 

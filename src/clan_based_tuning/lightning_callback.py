@@ -1,6 +1,11 @@
-"""Lightning callback closing one Clan round through the established DDP context."""
+"""Lightning callback closing one Clan round through the active DDP context.
 
-from __future__ import annotations
+At validation end, ``ClanTuneReportCallback`` reads one member-local fitness, gathers one
+scalar from every Clan member through Lightning's existing strategy, selects the common
+winner, and reports the round to Ray Tune. Every rank participates in Lightning checkpoint
+construction/barriers while only the selected member persists and reports the continuation.
+Genome interpretation and application remain entirely in user code.
+"""
 
 import os
 import tempfile
@@ -9,8 +14,9 @@ from collections.abc import Mapping
 import torch
 from lightning.pytorch import LightningModule, Trainer
 from lightning.pytorch.callbacks import Callback
+from ray import tune
 
-from clan_based_tuning.controller import ClanController
+from clan_based_tuning.evolution import select_winner_id
 from clan_based_tuning.lightning_strategy import ClanDDPStrategy
 from clan_based_tuning.protocol import (
     CLAN_CHECKPOINT_SOURCE,
@@ -20,18 +26,13 @@ from clan_based_tuning.protocol import (
 
 
 class ClanTuneReportCallback(Callback):
-    """Resolve a Clan boundary and report it through ordinary Ray Tune.
-
-    The callback reads one member-local Lightning metric, exchanges fitness through the
-    active ``ClanDDPStrategy``, selects the common winner, has every rank participate in
-    Lightning checkpoint construction, and reports one Ray checkpoint from the selected
-    member only. It has no genome-application behavior.
+    """Resolve one Clan boundary and report it through ordinary Ray Tune.
 
     Args:
-        lightning_metric: Lightning callback-metric name to use as fitness. By default this
-            is the same metric configured on ``tune.TuneConfig``.
-        extra_metrics: Optional Lightning callback metrics to forward to Ray. A list keeps
-            the same names; a mapping uses ``{ray_name: lightning_name}``.
+        lightning_metric: Lightning callback-metric name to use as fitness. By default this is
+            the same metric configured on ``tune.TuneConfig``.
+        extra_metrics: Optional Lightning callback metrics to forward to Ray. A list preserves
+            names; a mapping uses ``{ray_name: lightning_name}``.
         filename: File name used inside the temporary Ray checkpoint directory.
 
     Raises:
@@ -40,7 +41,7 @@ class ClanTuneReportCallback(Callback):
 
     Notes:
         The fitness metric must remain member-local. Do not log it with cross-rank
-        ``sync_dist`` reduction before CBT compares the diverged candidates.
+        ``sync_dist`` reduction before CBT compares diverged candidates.
     """
 
     def __init__(
@@ -55,6 +56,8 @@ class ClanTuneReportCallback(Callback):
         self._filename = filename
 
     def on_validation_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
+        """Gather fitness, checkpoint the selected member, and report one Tune boundary."""
+
         del pl_module
         if trainer.sanity_checking:
             return
@@ -64,24 +67,15 @@ class ClanTuneReportCallback(Callback):
         runtime = trainer.strategy.clan_runtime
         lightning_metric = self._lightning_metric or runtime.spec.metric
         fitness = self._metric_value(trainer, lightning_metric)
-
-        controller = ClanController(
-            member_id=runtime.member_id,
-            population_size=runtime.world_size,
-            mode=runtime.spec.mode,
-            exchange_fitness=lambda local_fitness: self._exchange_fitness(trainer, local_fitness),
-        )
-        controller.set_fitness(fitness)
-        is_winner = controller.should_save_checkpoint()
-        winner_id = controller.winner_id
+        population = self._exchange_fitness(trainer, fitness)
+        winner_id = select_winner_id(population, runtime.spec.mode)
+        is_winner = runtime.member_id == winner_id
 
         report = self._extra_report(trainer)
         report[runtime.spec.metric] = fitness
         report[CLAN_MEMBER_ID] = runtime.member_id
         report[CLAN_WINNER_ID] = winner_id
         report[CLAN_CHECKPOINT_SOURCE] = is_winner
-
-        from ray import tune
 
         with tempfile.TemporaryDirectory() as checkpoint_dir:
             checkpoint_path = os.path.join(checkpoint_dir, self._filename)
@@ -123,7 +117,7 @@ class ClanTuneReportCallback(Callback):
 
     @staticmethod
     def _exchange_fitness(trainer: Trainer, local_fitness: float) -> list[float]:
-        """Gather one scalar per member through Lightning's active strategy."""
+        """Gather one scalar per member through Lightning's active DDP strategy."""
 
         value = torch.tensor(
             [local_fitness],

@@ -2,74 +2,96 @@
 
 ClanBasedTuning integrates Clan Tuning with Ray Tune, Lightning, and PyTorch. A Clan is a
 population of Tune trials that shares each training gradient through one Lightning/PyTorch
-DDP world while retaining member-local optimizer state. At validation boundaries the best
-member supplies the sole continuation checkpoint and every next member receives an
-independent mutation of that selected parent's Tune config.
+DDP world while retaining member-local optimizer state. At a validation boundary one member
+is selected as the sole training continuation, and every next member receives an independent
+mutation of that selected parent's Tune config.
 
-The project is still pre-release. The currently qualified complete path is two concurrent
-CPU members on one node; GPU, multi-node, active-collective failure recovery, and
-model-sharded execution remain explicit follow-up qualifications.
+The project is pre-release. The currently targeted complete path is one CPU node with two
+concurrent members; GPU/NCCL, multi-node execution, active-collective failure recovery, and
+model-sharded execution remain separate qualification work.
 
-## Install from a checkout
+## Install
 
-Python 3.11 through 3.13 is supported by the package. The complete Ray/Lightning mechanics
-path is currently qualified on Python 3.11.
+From a checkout:
 
 ```bash
 git clone https://github.com/smithblack-0/ClanBasedTuning.git
 cd ClanBasedTuning
-python -m pip install '.[ray]'
+python -m pip install -e .
 ```
 
 For development:
 
 ```bash
-python -m pip install -e '.[dev,ray]'
+python -m pip install -e '.[dev]'
 python -m pytest
 python -m ruff check .
 python -m ruff format --check .
 ```
 
-A PyPI release, license declaration, and release process are not yet claimed. See
-[`STATUS.md`](STATUS.md) for repository-readiness gaps rather than inferring production
-readiness from the mechanics tests.
+Ray, Lightning, and PyTorch are core runtime dependencies because the package's public
+surface is their integration. Dependency metadata intentionally uses minimum versions rather
+than a point-version Ray pin. Support claims remain limited to versions actually qualified;
+Ray-specific low-level checkpoint transfer is isolated in one compatibility module so an
+upstream change requires a local adapter repair rather than a scheduler redesign.
 
 ## Minimal function API
 
-The user function receives an ordinary Ray Tune config dictionary. CBT selects and mutates
-that dictionary but never interprets or applies its values.
+Ray supplies the current genome/config directly to the ordinary user function. CBT selects
+and mutates that dictionary but never interprets or applies its values.
+
+A receiving Lightning model can apply the current genome in `on_train_start`. Lightning has
+already restored optimizer/training state before this hook, so the user's edit applies to the
+real inherited optimizer without rewriting Lightning's checkpoint payload.
 
 ```python
 from pathlib import Path
 import tempfile
 
 import lightning.pytorch as pl
-import torch
 from ray import tune
+import torch
 
 from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCallback
 
 
+class Model(pl.LightningModule):
+    def __init__(self, genome):
+        super().__init__()
+        self.genome = genome
+        self.network = ...
+        self.optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=genome["lr"],
+            weight_decay=genome["weight_decay"],
+        )
+
+    def on_train_start(self):
+        # USERSPACE. Lightning restored optimizer history before this hook.
+        for group in self.optimizer.param_groups:
+            group["lr"] = self.genome["lr"]
+            group["weight_decay"] = self.genome["weight_decay"]
+
+    def training_step(self, batch, batch_index):
+        ...
+
+    def validation_step(self, batch, batch_index):
+        loss = ...
+        self.log("val_loss", loss)  # keep candidate fitness member-local
+
+    def configure_optimizers(self):
+        return self.optimizer
+
+
 def train(genome):
-    model = MyLightningModule(genome)
+    model = Model(genome)
     checkpoint = tune.get_checkpoint()
 
     with tempfile.TemporaryDirectory() as local_checkpoint_dir:
         checkpoint_path = None
-
         if checkpoint is not None:
             checkpoint_dir = checkpoint.to_directory(local_checkpoint_dir)
             checkpoint_path = Path(checkpoint_dir, "checkpoint.ckpt")
-            state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-            # USERSPACE: inherit optimizer history, then apply the current genome visibly.
-            model.optimizer.load_state_dict(state["optimizer_states"][0])
-            for group in model.optimizer.param_groups:
-                group["lr"] = genome["lr"]
-                group["weight_decay"] = genome["weight_decay"]
-
-            state["optimizer_states"][0] = model.optimizer.state_dict()
-            torch.save(state, checkpoint_path)
 
         trainer = pl.Trainer(
             strategy=ClanDDPStrategy(),
@@ -105,7 +127,6 @@ scheduler = ClanScheduler(
 )
 
 results = tune.Tuner(
-    # One Ray trial is one Clan member and one Lightning process/device.
     tune.with_resources(train, {"gpu": 1}),
     param_space={
         "lr": tune.loguniform(1e-4, 1e-3),
@@ -120,31 +141,25 @@ results = tune.Tuner(
 ).fit()
 ```
 
-Ray owns per-trial resources. In ordinary use, do not duplicate that topology with
-`Trainer(devices=...)`; Lightning's default resolves the one device made visible to each
-trial. `ClanDDPStrategy` rejects a trial that resolves more than one Lightning process/device.
-The whole Clan must fit concurrently because the members form one live DDP world.
+One Ray trial is one Clan member and one Lightning process/device. Ray owns per-trial
+resources; ordinary users should not duplicate that topology with `Trainer(devices=...)`.
+The complete Clan must fit concurrently because all members participate in one live DDP
+world.
 
-For a fixed initial population, `grid_search` can define exactly `population_size` trials
-without also setting `num_samples`. For a sampled initial population, set
-`TuneConfig(num_samples=population_size)` as in ordinary Ray Tune.
+## Genome validity
 
-### What may be in the genome?
+The software boundary is generic, but the Clan Tuning algorithm is not. A varying choice
+must be applied after the common gradient has been computed. Learning rate, weight decay,
+momentum/betas, and similar optimizer-side update policy are the intended use. Varying model
+architecture, training data, forward behavior, or loss would make members contribute
+gradients for different training problems and is not valid Clan Tuning.
 
-The software boundary is deliberately generic, but the Clan Tuning algorithm is not. A
-valid varying choice must be applied after the shared gradient has been computed. Learning
-rate, weight decay, momentum, and similar optimizer-side policy are the intended use.
-Changing model architecture, training data, the forward pass, or the loss would make the
-members contribute gradients for different training problems and is not valid Clan Tuning.
-
-The fitness metric must also remain member-local until CBT compares members. Do not
+Candidate fitness must also remain member-local until CBT compares members. Do not
 `sync_dist` the candidate fitness across the Clan.
 
 ## Restore an interrupted Tune run
 
-ClanBasedTuning uses Ray's normal experiment restoration path. Re-create the same trainable
-resource annotation and restore the experiment directory; the scheduler/runtime state is
-re-established from the saved Tune experiment.
+ClanBasedTuning uses Ray's ordinary experiment restoration path:
 
 ```python
 restored = tune.Tuner.restore(
@@ -156,20 +171,19 @@ restored = tune.Tuner.restore(
 results = restored.fit()
 ```
 
-The framework contract exercises this across a fresh Ray runtime after an intentional
-post-checkpoint failure. See [`docs/qualification/function_api.md`](docs/qualification/function_api.md)
-for the exact evidence boundary.
+The runtime registry/coordinator is reconstructed from scheduler state when the Tune
+experiment resumes; no CBT-specific restore API or trainable wrapper is required.
 
 ## Public components
 
-- `ClanScheduler`: Ray synchronous-PBT specialization implementing the single-parent Clan
-  generation transition and mutation policy.
-- `ClanDDPStrategy`: Lightning DDP strategy that joins independently launched Tune trials
-  into one framework-managed DDP world, preserves training partitioning, and replicates
+- `ClanScheduler`: synchronous Clan generation scheduler using Tune's scheduler lifecycle.
+  CBT owns the small single-parent transition instead of subclassing Ray's PBT internals.
+- `ClanDDPStrategy`: Lightning DDP strategy joining independently launched Tune trials into
+  one framework-managed DDP world while preserving training partitioning and comparable
   Lightning-managed validation.
-- `ClanTuneReportCallback`: Lightning callback that compares member-local fitness and
-  reports the selected continuation through Ray Tune.
+- `ClanTuneReportCallback`: Lightning callback that gathers member-local fitness and reports
+  the selected continuation through Tune.
 
-A complete runnable CPU example is [`examples/function_api.py`](examples/function_api.py).
-The detailed usage contract is [`docs/api.md`](docs/api.md). Architecture, support evidence,
-and current readiness are indexed from [`docs/README.md`](docs/README.md).
+A runnable CPU mechanics example is [`examples/function_api.py`](examples/function_api.py).
+Detailed behavior and compatibility boundaries are in [`docs/api.md`](docs/api.md); current
+qualification and repository readiness are in [`STATUS.md`](STATUS.md).

@@ -1,111 +1,81 @@
 # Population-resolution responsibilities
 
-Status: accepted and implemented for the initial DDP path
+Status: accepted responsibilities for the current DDP function path
 
-## Purpose
+## Scheduler
 
-This document assigns ownership for the population boundary defined by
-[`population_resolution_invariants.md`](population_resolution_invariants.md). It fixes
-semantic authority without turning transport details into public API.
+`ClanScheduler` owns the configured population, stable member assignment, complete Tune-side
+boundary verification, selected parent authority, mutation random stream, and complete child
+config assignment.
 
-## Complete-Clan topology
+It does not own trial resources, storage infrastructure, user optimizer application, or
+PyTorch distributed execution. It uses Tune's scheduler lifecycle and delegates the few
+low-level checkpoint/config transfer details to one compatibility module.
 
-`ClanScheduler` owns the configured Clan population and assigns stable member identity to
-Tune trial identity. It registers that assignment in the internal runtime registry and
-cohort coordinator before members run. The ordinary user trainable remains unwrapped.
+## Framework-independent evolution
 
-For the initial path, stable member ID is deliberately the corresponding DDP global rank.
-The complete population must be concurrently resident; an incomplete population is never
-reinterpreted as a smaller valid Clan.
+`evolution.py` owns finite comparison semantics, deterministic tie behavior, mutation rule
+normalization, and sibling generation from one selected parent. It accepts ordinary data and
+has no Ray/Lightning/checkpoint dependencies.
 
-## Framework-managed distributed context
+The Lightning callback and Tune scheduler share its selection rule; the scheduler additionally
+uses its complete generation-resolution operation to produce child configs.
 
-Lightning/PyTorch own process-group initialization/lifetime, backend and device behavior,
-rank/world-size realization, DDP gradient communication, barriers, and collective execution.
-The same already-established group carries population fitness. CBT creates no second Ray,
-GLOO, NCCL, CUDA, or PyTorch collective group for selection.
+## Cohort/runtime
 
-## Fitness exchange and selection
+`cohort.py` owns pure trial/member assignment and per-invocation complete-session state.
+`runtime.py` owns Ray actors, Tune-context lookup, polling/timeouts, host/port discovery, and
+other external effects needed to materialize that state.
 
-`ClanTuneReportCallback` exchanges one local fitness per member through
-`trainer.strategy.all_gather()`. `ClanController` verifies the complete finite vector and
-applies the shared deterministic selection rule. The Tune scheduler independently applies
-the same rule to the complete trial results and rejects disagreement.
+Runtime state contains no genome/application behavior. Registry lookup is scoped by Tune
+experiment plus trial ID so independent experiments cannot collide merely because Ray reused
+a trial identifier.
 
-Metric direction belongs to Ray's ordinary scheduler configuration. Users configure
-`metric` and `mode` on `TuneConfig`; the scheduler receives those through Ray and registers
-the same contract for the member-side runtime.
+## Lightning and PyTorch
 
-## Worker runtime
+Lightning/PyTorch own accelerator/backend selection, process-group initialization/lifetime,
+DDP model setup, gradient collectives, barriers, training/validation loops, optimizer and
+training-state restoration, and checkpoint construction.
 
-The internal runtime registry/coordinator owns only facts needed to connect separate Tune
-trials into one externally launched Lightning DDP world:
+`ClanDDPStrategy` supplies only the externally assigned topology, prevents per-forward buffer
+broadcast from erasing candidate divergence, distinguishes training versus comparable
+Lightning-managed validation sampler behavior, and scopes one Clan round checkpoint write to
+the selected rank.
 
-- trial-to-stable-member assignment;
-- population size;
-- comparison metric/mode;
-- rendezvous address/port; and
-- per-invocation cohort synchronization.
+The one-process-per-Tune-member environment treats each member as a logical one-process node
+for Lightning rank bookkeeping. This is not physical node authority.
 
-It has no genome field and does not inspect the Tune config. `ClanDDPStrategy` discovers the
-runtime for the current Tune trial directly; there is no public CBT trainable wrapper.
+## Callback
 
-The scheduler's serializable state retains the runtime identity/member assignment but not
-live actor handles. On Tune experiment restore, scheduler hooks re-create/register those
-actors before resumed trials run.
+`ClanTuneReportCallback` bridges one qualifying Lightning validation boundary to one Tune
+report boundary. It reads one member-local metric, gathers the complete fitness vector over
+the active Lightning strategy, resolves the shared winner, coordinates Lightning checkpoint
+construction, and reports the winner checkpoint plus ordinary metrics.
 
-## `ClanTuneReportCallback`
+It has no persistent population state, mutation logic, or genome-application responsibility.
 
-The callback bridges a qualifying Lightning validation boundary to Tune:
+## Ray compatibility adapter
 
-1. read one member-local Lightning fitness;
-2. exchange the complete fitness vector over the active Lightning strategy;
-3. resolve one common winner;
-4. have every rank participate in Lightning checkpoint construction/barrier while only the
-   winner persists the Clan continuation; and
-5. report ordinary metrics from every trial and a Ray checkpoint from the winner only.
+`ray_compat.py` owns the unavoidable Developer/private Tune operations required to capture a
+boundary checkpoint and install that checkpoint/config as another trial's continuation.
+These operations are kept separate because Ray does not promise DeveloperAPI stability across
+minor releases.
 
-The callback has no genome-application responsibility.
-
-## `ClanScheduler`
-
-`ClanScheduler` is a synchronous Ray `PopulationBasedTraining` specialization. It owns:
-
-- stable Clan membership and runtime registration;
-- verification of one complete generation boundary;
-- independent winner selection and worker/scheduler agreement;
-- verification of the single checkpoint source;
-- snapshotting the selected parent's Tune config;
-- one independent mutation for every next member, including the prior winner; and
-- the mutation random stream.
-
-Ray owns actual pause/checkpoint/config/restart and experiment restoration. CBT does not
-create another trial lifecycle.
-
-## Lightning strategy and checkpoint ownership
-
-Every rank participates in the Clan round checkpoint call because Lightning's
-`Trainer.save_checkpoint()` is collective. `ClanDDPStrategy` changes only which selected
-rank delegates that scoped checkpoint to `CheckpointIO`; the Trainer barrier remains
-framework-owned.
-
-Ray owns per-trial resources. The current topology allows one local Lightning process/device
-per Tune trial; the strategy rejects more. Ordinary users therefore configure the device
-once through Ray resources rather than repeating `devices=1` in the Trainer.
+A compatibility repair may change this module without changing Clan policy. Dependency
+metadata therefore does not point-pin one Ray minor merely to freeze upstream PBT internals.
 
 ## User code
 
-User code owns every interpretation and application of the Tune config/genome. Neither
-population resolution nor any other CBT component may infer optimizer mappings or arrange
-application for the user. Scientifically valid Clan variation must be applied after the
-shared gradient is computed.
+User code owns every interpretation and application of the Tune config/genome. The primary
+Lightning pattern applies it in a user-owned `on_train_start()` hook after normal checkpoint
+restore. CBT must not infer optimizer mappings or hide application in a convenience callback.
+
+Scientific validity still constrains what may vary: Clan genes must affect choices applied
+after common-gradient computation.
 
 ## Failure ownership
 
-Each layer rejects facts it can establish. The runtime times out if the assigned cohort does
-not rendezvous before DDP initialization; the scheduler rejects malformed/incomplete Tune
-boundaries; Lightning/PyTorch surface distributed and checkpoint failures. No layer may
-convert a known failure into a valid partial-population winner.
-
-Bounded recovery after a participant disappears inside an active framework collective is
-not yet a qualified support claim.
+Each layer rejects the invalid facts it can establish. Runtime rejects failed pre-DDP cohort
+formation; the callback/selection layer rejects invalid fitness; the scheduler rejects
+incomplete/misaligned Tune boundaries; Lightning/PyTorch surface distributed/checkpoint
+failures. No layer may convert known partial participation into a valid winner.

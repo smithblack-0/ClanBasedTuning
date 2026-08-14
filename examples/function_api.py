@@ -1,15 +1,15 @@
 """Runnable two-member CPU example for the public Clan Tune function API.
 
-From a repository checkout:
+From a repository checkout::
 
-    python -m pip install '.[ray]'
+    python -m pip install -e .
     python examples/function_api.py
 
-Ray supplies the current genome directly to ``train``. The optimizer edits below are
-intentionally inline because they are application policy, not ClanBasedTuning behavior.
+Ray supplies the current genome directly to ``train``. ``ScalarModel.on_train_start`` applies
+that genome to the real optimizer after Lightning has restored any selected checkpoint. The
+operation is intentionally visible in user code because genome meaning/application is not a
+ClanBasedTuning responsibility.
 """
-
-from __future__ import annotations
 
 import tempfile
 from pathlib import Path
@@ -23,10 +23,11 @@ from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCall
 
 
 class ScalarModel(pl.LightningModule):
-    """Tiny model whose learning rate produces visible member divergence."""
+    """Tiny Lightning model that visibly applies its Tune genome after restoration."""
 
-    def __init__(self, genome):
+    def __init__(self, genome: dict[str, float]) -> None:
         super().__init__()
+        self.genome = genome
         self.weight = torch.nn.Parameter(torch.tensor(1.0))
         self.optimizer = torch.optim.SGD(
             self.parameters(),
@@ -34,48 +35,48 @@ class ScalarModel(pl.LightningModule):
             momentum=0.9,
         )
 
-    def training_step(self, batch, batch_index):
+    def on_train_start(self) -> None:
+        """Apply the current Tune genome after Lightning restores optimizer state."""
+
+        # USERSPACE. Lightning has restored the selected optimizer history before this hook.
+        # CBT does not know what "lr" means and does not perform, wrap, or infer this edit.
+        for param_group in self.optimizer.param_groups:
+            param_group["lr"] = self.genome["lr"]
+
+    def training_step(self, batch: tuple[torch.Tensor], batch_index: int) -> torch.Tensor:
+        """Produce one deliberately simple gradient for the mechanics example."""
+
         del batch, batch_index
         return self.weight
 
-    def validation_step(self, batch, batch_index):
+    def validation_step(self, batch: tuple[torch.Tensor], batch_index: int) -> None:
+        """Report member-local fitness and the applied learning rate."""
+
         del batch, batch_index
         self.log("val_loss", self.weight.square())
         self.log("lr_seen", self.optimizer.param_groups[0]["lr"])
 
-    def configure_optimizers(self):
+    def configure_optimizers(self) -> torch.optim.Optimizer:
+        """Return the user-owned optimizer whose state is inherited between generations."""
+
         return self.optimizer
 
 
-def train(genome):
-    """One ordinary Ray Tune function trial, representing one Clan member."""
+def train(genome: dict[str, float]) -> None:
+    """Run one ordinary Ray Tune function trial representing one Clan member."""
 
     torch.set_num_threads(1)
     model = ScalarModel(genome)
     checkpoint = tune.get_checkpoint()
 
-    # Keep the local checkpoint copy alive until Lightning finishes restoring and training.
-    # This copy is transient; only the selected member reports a persistent CBT checkpoint.
+    # Keep Tune's local checkpoint materialization alive until Lightning finishes restoration.
+    # There is no userspace checkpoint rewriting: application happens against the restored
+    # optimizer in ScalarModel.on_train_start.
     with tempfile.TemporaryDirectory() as local_checkpoint_dir:
         checkpoint_path = None
-
         if checkpoint is not None:
             checkpoint_dir = checkpoint.to_directory(local_checkpoint_dir)
             checkpoint_path = Path(checkpoint_dir, "checkpoint.ckpt")
-            state = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
-
-            # USERSPACE. Inherit the selected optimizer history, then visibly apply this
-            # member's newly assigned genome. CBT does not know what "lr" means and does
-            # not perform, wrap, or infer these operations.
-            model.optimizer.load_state_dict(state["optimizer_states"][0])
-            for param_group in model.optimizer.param_groups:
-                param_group["lr"] = genome["lr"]
-
-            # trainer.fit(ckpt_path=...) performs Lightning's complete state restoration.
-            # Put the userspace optimizer edit into this member's local copy so the newly
-            # assigned genome remains authoritative after that restore.
-            state["optimizer_states"][0] = model.optimizer.state_dict()
-            torch.save(state, checkpoint_path)
 
         training_data = DataLoader(
             TensorDataset(torch.tensor([0.0, 1.0, 2.0, 3.0])),
@@ -107,7 +108,9 @@ def train(genome):
         )
 
 
-def main():
+def main() -> None:
+    """Run a complete two-member Clan for three generation boundaries."""
+
     population_size = 2
     scheduler = ClanScheduler(
         population_size=population_size,
@@ -124,7 +127,7 @@ def main():
     )
 
     # Valid Clan variation is applied after the common gradient is computed. Learning rate
-    # qualifies; model architecture, training data, and forward/loss behavior do not.
+    # qualifies; model architecture, training data, forward behavior, and loss do not.
     results = tune.Tuner(
         tune.with_resources(train, {"cpu": 1}),
         param_space={"lr": tune.grid_search([0.1, 0.2])},

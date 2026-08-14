@@ -1,6 +1,9 @@
-"""Distribution-artifact contracts for the installable package."""
+"""Distribution-artifact contracts for the installable ClanBasedTuning package.
 
-from __future__ import annotations
+The test builds wheel/sdist artifacts, verifies runtime dependency metadata, installs the wheel
+non-editably into an isolated target directory, and imports the actual public integration
+objects from that artifact rather than from the repository source tree.
+"""
 
 import json
 import os
@@ -10,7 +13,9 @@ import zipfile
 from pathlib import Path
 
 
-def test_wheel_is_clean_and_importable_without_repository_or_optional_dependencies(tmp_path):
+def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path: Path) -> None:
+    """The built wheel is clean, self-describing, and exposes the advertised package surface."""
+
     repository_root = Path(__file__).resolve().parents[1]
     dist_dir = tmp_path / "dist"
     install_dir = tmp_path / "installed"
@@ -30,11 +35,18 @@ def test_wheel_is_clean_and_importable_without_repository_or_optional_dependenci
 
     with zipfile.ZipFile(wheels[0]) as wheel:
         packaged_paths = set(wheel.namelist())
+        metadata_path = next(
+            path for path in packaged_paths if path.endswith(".dist-info/METADATA")
+        )
+        metadata = wheel.read(metadata_path).decode("utf-8")
 
     assert "clan_based_tuning/__init__.py" in packaged_paths
     assert not any(path.startswith("tests/") for path in packaged_paths)
     assert not any(path.startswith("examples/") for path in packaged_paths)
     assert not any(path.startswith("docs/") for path in packaged_paths)
+    assert "Requires-Dist: lightning<3,>=2.6" in metadata
+    assert "Requires-Dist: ray[tune]<3,>=2.56" in metadata
+    assert "Requires-Dist: torch<3,>=2.10" in metadata
 
     subprocess.run(
         [
@@ -59,7 +71,11 @@ def test_wheel_is_clean_and_importable_without_repository_or_optional_dependenci
         [
             sys.executable,
             "-c",
-            "import json, clan_based_tuning; print(json.dumps(clan_based_tuning.__all__))",
+            (
+                "import json, clan_based_tuning as cbt; "
+                "print(json.dumps([cbt.__all__, cbt.ClanScheduler.__name__, "
+                "cbt.ClanDDPStrategy.__name__, cbt.ClanTuneReportCallback.__name__]))"
+            ),
         ],
         cwd=tmp_path,
         env=env,
@@ -69,7 +85,8 @@ def test_wheel_is_clean_and_importable_without_repository_or_optional_dependenci
     )
 
     assert json.loads(completed.stdout) == [
-        "ClanDDPStrategy",
+        ["ClanDDPStrategy", "ClanScheduler", "ClanTuneReportCallback"],
         "ClanScheduler",
+        "ClanDDPStrategy",
         "ClanTuneReportCallback",
     ]
