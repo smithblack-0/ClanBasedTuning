@@ -9,7 +9,6 @@ No object here creates actors, touches sockets, or initializes distributed proce
 
 from dataclasses import dataclass
 
-
 # Helpers
 
 
@@ -189,12 +188,16 @@ class ClanCoordinator:
         }
 
     def _require_member(self, trial_id: str) -> int:
+        """Return the stable member ID or reject an unregistered Tune trial."""
+
         member_id = self.member_ids.get(trial_id)
         if member_id is None:
             raise RuntimeError(f"Tune trial {trial_id!r} is not registered with this Clan")
         return member_id
 
     def _try_open_session(self) -> None:
+        """Open one rendezvous session only after every registered member has announced."""
+
         if len(self.member_ids) != self.population_size:
             return
         if set(self._pending) != set(self.member_ids):
