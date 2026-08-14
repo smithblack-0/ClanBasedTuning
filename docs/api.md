@@ -196,6 +196,16 @@ strategy = ClanDDPStrategy(process_group_backend="...")
 The strategy disables DDP's per-forward buffer broadcast so one member's later local
 state is not silently copied over another member after divergence.
 
+For Lightning-managed dataloaders, the strategy preserves ordinary DDP partitioning for
+training and changes only Lightning's **automatically injected** validation sampler. At
+validation and sanity-validation setup it supplies `num_replicas=1, rank=0`, so every Clan
+member evaluates the complete held-out dataset instead of a rank shard. This lets diverged
+candidates be compared on the same examples.
+
+If the user explicitly supplies a `DistributedSampler`, Lightning does not auto-inject a
+replacement and CBT leaves that sampler alone. Such an explicit sampler is therefore
+userspace and must itself satisfy the intended evaluation semantics.
+
 During a CBT round checkpoint, every member participates in Lightning checkpoint
 construction and the normal `Trainer.save_checkpoint()` barrier. Only the selected rank
 delegates the checkpoint to Lightning's `CheckpointIO`. Ordinary checkpoint calls outside
@@ -270,6 +280,10 @@ The complete function path is directly qualified on a single node with two concu
 members using Ray 2.56.1, Lightning 2.6.5, PyTorch 2.10.0, and Python 3.11. The package's
 non-Ray tests also run on Python 3.13.
 
+The qualified Lightning-managed data path proves that training remains rank-partitioned
+while every member sees the same complete multi-example validation dataset, including
+when that validation loader is first prepared for Lightning's normal sanity check.
+
 The following are not yet support claims for the complete path:
 
 - CUDA/NCCL;
@@ -277,9 +291,8 @@ The following are not yet support claims for the complete path:
 - actor reuse across generations;
 - failure recovery after a member or distributed-collective failure;
 - model-sharded Clan execution; or
-- arbitrary validation-sampler arrangements.
+- the semantics of explicitly user-supplied distributed validation samplers.
 
-Lightning normally inserts distributed samplers for validation under DDP. The current
-integration requires the user to ensure that the chosen fitness metric is based on
-comparable held-out evaluation across members. Automatic replication of an identical
-validation set for every member is not yet provided by CBT.
+The candidate fitness metric must remain local until CBT's population exchange. Users who
+replace Lightning's automatic validation sampling are responsible for preserving
+comparable member evaluation.
