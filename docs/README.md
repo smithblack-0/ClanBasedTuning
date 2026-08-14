@@ -30,21 +30,23 @@ This is the active documentation entry point.
 
 - [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
   records the foundation for one Tune trial/member/process/rank while retaining
-  Lightning/PyTorch ownership of the distributed lifecycle.
+  Lightning/PyTorch ownership of the distributed lifecycle and the qualified
+  training/validation sampler behavior.
 - [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
   records the narrower distributed-environment qualification that preceded the complete
   integration.
 - [`qualification/function_api.md`](qualification/function_api.md) records direct evidence
   for the current complete two-generation single-node CPU function path, including shared
-  gradients, winner-only checkpoint persistence, full continuation restore, userspace
-  genome use, and independent mutation of every next member.
+  gradients, partitioned training, replicated Lightning-managed validation, winner-only
+  checkpoint persistence, full continuation restore, userspace genome use, and independent
+  mutation of every next member.
 
 ## Current state and next work
 
 - Root [`STATUS.md`](../STATUS.md) records what the repository implements and qualifies now.
-- [`plan.md`](plan.md) sequences the next work: evaluation comparability, cohort/failure
-  hardening, GPU qualification, multi-node qualification, and later scientific/scaled
-  evidence.
+- [`plan.md`](plan.md) sequences the next work: final mechanics/example synchronization,
+  cohort/failure hardening, GPU qualification, multi-node qualification, advanced
+  integration surfaces, and later scientific/scaled evidence.
 - Code and tests remain authoritative for executable behavior.
 
 ## Engineering process
