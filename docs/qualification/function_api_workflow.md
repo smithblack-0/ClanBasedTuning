@@ -41,6 +41,7 @@ ClanScheduler.wrap(train)
 → all ranks enter Trainer.save_checkpoint()
 → only selected rank writes through CheckpointIO
 → Tune receives reports and one Ray checkpoint
+→ scheduler verifies the actual checkpoint producer metadata
 → synchronous PBT assigns selected continuation + next genomes
 → resumed train(genome)
 → user restores optimizer history and explicitly reapplies current genome
@@ -83,9 +84,26 @@ At each boundary:
 - the producer genome reported to Tune must match the scheduler-controlled subset of that
   trial's active Tune config.
 
-Nested producer configuration is carried through the scheduler report as JSON because
-Ray Tune flattens nested result dictionaries before scheduler hooks. That representation
-is private and does not change the user genome.
+Nested producer configuration is carried through the scheduler result as JSON because
+Ray Tune flattens nested result dictionaries before scheduler hooks. That private
+representation does not change the user genome.
+
+## Selected checkpoint provenance evidence
+
+The selected Ray checkpoint itself carries metadata under `clan_based_tuning` containing:
+
+- schema version;
+- stable producer member ID; and
+- the scheduler-controlled genome values that produced the continuation.
+
+Synchronous PBT schedules or resolves the selected source checkpoint before exploiting the
+losing targets. `ClanScheduler` uses that point to call `Checkpoint.get_metadata()` on the
+actual continuation and rejects the transition unless the checkpoint schema, producer ID,
+and producer genome all agree with scheduler state.
+
+The repeated native contract passes through this verification on both report boundaries.
+The scheduler therefore verifies the artifact that Ray will redistribute, not merely a
+parallel result field claiming which artifact should have been selected.
 
 ## Checkpoint storage evidence
 
