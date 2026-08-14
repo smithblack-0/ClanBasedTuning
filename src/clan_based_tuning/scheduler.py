@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import random
 from collections.abc import Callable
 from typing import Any
@@ -14,7 +15,7 @@ from ray.tune.schedulers import PopulationBasedTraining
 from clan_based_tuning.evolution import MutationSpec, select_winner_id
 from clan_based_tuning.protocol import (
     CLAN_CHECKPOINT_SOURCE,
-    CLAN_GENOME,
+    CLAN_GENOME_JSON,
     CLAN_MEMBER_ID,
     CLAN_WINNER_ID,
 )
@@ -109,9 +110,7 @@ class ClanScheduler(PopulationBasedTraining):
 
         if len(self._trial_ids) == self.population_size:
             ordered = sorted(self._trial_ids)
-            self._member_ids = {
-                trial_id: member_id for member_id, trial_id in enumerate(ordered)
-            }
+            self._member_ids = {trial_id: member_id for member_id, trial_id in enumerate(ordered)}
             import ray
 
             ray.get(self._coordinator_handle.register_trials.remote(ordered))
@@ -167,15 +166,11 @@ class ClanScheduler(PopulationBasedTraining):
             expected_checkpoint_source = member_id == winner_id
             if bool(result[CLAN_CHECKPOINT_SOURCE]) != expected_checkpoint_source:
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
-            if result[CLAN_GENOME] != self._controlled_genome(trial.config):
-                raise RuntimeError(
-                    "reported producer genome disagrees with the active Tune config"
-                )
+            if json.loads(result[CLAN_GENOME_JSON]) != self._controlled_genome(trial.config):
+                raise RuntimeError("reported producer genome disagrees with the active Tune config")
 
         winner_trial = by_member[winner_id][0]
-        losers = [
-            trial for member_id, (trial, _) in by_member.items() if member_id != winner_id
-        ]
+        losers = [trial for member_id, (trial, _) in by_member.items() if member_id != winner_id]
         return losers, [winner_trial]
 
     def _get_new_config(self, trial, trial_to_clone):
