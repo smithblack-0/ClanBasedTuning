@@ -78,7 +78,9 @@ training:
 - `ClanScheduler` uses Ray's synchronous PBT lifecycle but selects one parent continuation
   for the whole Clan and independently mutates that parent genome for every next member;
 - `ClanDDPStrategy` connects one externally launched Tune trial per Clan member into the
-  Lightning/PyTorch DDP world without selecting another backend or process group;
+  Lightning/PyTorch DDP world without selecting another backend or process group, keeps
+  ordinary training partitioning, and replicates Lightning-managed validation across
+  candidates;
 - `ClanTuneReportCallback` compares member-local fitness over that existing distributed
   context and persists/reports only the selected CBT continuation; and
 - `ClanController` and `MutationSpec` provide the framework-independent selection and
@@ -92,13 +94,15 @@ checkpoint storage scales with rounds rather than population size times rounds.
 
 The complete function path is directly exercised over two successive generations with two
 concurrent members on one CPU node using Ray 2.56.1, Lightning 2.6.5, PyTorch 2.10.0, and
-Python 3.11. The contract verifies shared gradients, winner selection, one persistent
-continuation, Ray checkpoint transfer, userspace genome use, inherited model/optimizer
-history/Lightning progress, and independent next-gen mutations for every member.
+Python 3.11. The contract verifies shared gradients, partitioned training, replicated
+Lightning-managed validation over the same multi-example held-out set, winner selection,
+one persistent continuation, Ray checkpoint transfer, userspace genome use, inherited
+model/optimizer history/Lightning progress, and independent next-gen mutations for every
+member.
 
 The complete path is not yet qualified for CUDA/NCCL, multi-node execution, actor reuse,
-active-collective failure recovery, arbitrary validation-sampler arrangements, or
-ClanFSDP/model-sharded execution. See [`STATUS.md`](STATUS.md) and
+active-collective failure recovery, explicitly user-supplied distributed validation
+samplers, or ClanFSDP/model-sharded execution. See [`STATUS.md`](STATUS.md) and
 [`docs/qualification/function_api.md`](docs/qualification/function_api.md) for the precise
 support boundary.
 
