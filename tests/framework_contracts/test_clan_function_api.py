@@ -10,6 +10,8 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
 def _train_member(genome):
+    import tempfile
+
     import lightning.pytorch as lightning
     import torch
     from ray import tune
@@ -29,6 +31,7 @@ def _train_member(genome):
                 momentum=0.9,
             )
             self.round_start_weight = None
+            self.round_start_global_step = None
             self.momentum_before_step = None
 
         def training_step(self, batch, batch_index):
@@ -37,6 +40,7 @@ def _train_member(genome):
 
         def on_train_start(self):
             self.round_start_weight = float(self.weight.detach().item())
+            self.round_start_global_step = float(self.trainer.global_step)
 
         def on_before_optimizer_step(self, optimizer):
             state = optimizer.state[self.weight]
@@ -48,6 +52,7 @@ def _train_member(genome):
             self.log("val_loss", self.weight.square())
             self.log("lr_seen", self.optimizer.param_groups[0]["lr"])
             self.log("round_start_weight", self.round_start_weight)
+            self.log("round_start_global_step", self.round_start_global_step)
             self.log("momentum_before_step", self.momentum_before_step)
 
         def configure_optimizers(self):
@@ -55,20 +60,26 @@ def _train_member(genome):
 
     model = ScalarModel(genome)
     checkpoint = tune.get_checkpoint()
+    local_checkpoint = tempfile.TemporaryDirectory()
+    checkpoint_path = None
 
     if checkpoint is not None:
-        with checkpoint.as_directory() as checkpoint_dir:
-            state = torch.load(
-                Path(checkpoint_dir, "checkpoint.ckpt"),
-                map_location="cpu",
-                weights_only=False,
-            )
+        checkpoint_dir = checkpoint.to_directory(local_checkpoint.name)
+        checkpoint_path = Path(checkpoint_dir, "checkpoint.ckpt")
+        state = torch.load(
+            checkpoint_path,
+            map_location="cpu",
+            weights_only=False,
+        )
 
-        # USERSPACE. CBT neither knows this function exists nor calls equivalent logic.
-        model.load_state_dict(state["state_dict"])
+        # USERSPACE. CBT does not inspect, call, or know the meaning of this operation.
+        # Restore inherited optimizer history, apply this member's current genome, and
+        # place the user-modified optimizer state back into the local Lightning copy.
         model.optimizer.load_state_dict(state["optimizer_states"][0])
         for param_group in model.optimizer.param_groups:
             param_group["lr"] = genome["lr"]
+        state["optimizer_states"][0] = model.optimizer.state_dict()
+        torch.save(state, checkpoint_path)
 
     data = DataLoader(TensorDataset(torch.tensor([0.0])), batch_size=1)
     trainer = lightning.Trainer(
@@ -80,6 +91,7 @@ def _train_member(genome):
                 extra_metrics=[
                     "lr_seen",
                     "round_start_weight",
+                    "round_start_global_step",
                     "momentum_before_step",
                 ]
             )
@@ -97,6 +109,7 @@ def _train_member(genome):
         model,
         train_dataloaders=data,
         val_dataloaders=data,
+        ckpt_path=str(checkpoint_path) if checkpoint_path is not None else None,
     )
 
 
@@ -150,6 +163,7 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         assert result.metrics["training_iteration"] >= 2
         assert result.metrics["lr_seen"] == pytest.approx(result.config["lr"])
         assert result.metrics["round_start_weight"] == pytest.approx(0.8)
+        assert result.metrics["round_start_global_step"] == pytest.approx(1.0)
         assert result.metrics["momentum_before_step"] == pytest.approx(1.0)
 
     # The first winner used lr=0.2. Every second-round member receives an independent
@@ -157,8 +171,10 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
     final_lrs = sorted(result.config["lr"] for result in results)
     assert final_lrs == pytest.approx(sorted([0.1924690426284743, 0.2159468026720305]))
 
-    # The selected first-round state is the common second-round continuation.
+    # The selected first-round model state and Lightning progress are the common
+    # second-round continuation.
     assert len({round(result.metrics["round_start_weight"], 7) for result in results}) == 1
+    assert len({result.metrics["round_start_global_step"] for result in results}) == 1
 
     # All ranks may materialize checkpoint state at the Lightning barrier, but only one
     # persistent CBT continuation exists per completed round.
