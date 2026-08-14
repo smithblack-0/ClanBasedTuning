@@ -47,9 +47,7 @@ def test_mutation_rules_apply_linear_log_and_bounds() -> None:
     """Normalized rules preserve additive/log geometry and inclusive clipping."""
 
     linear = build_mutation_rule(_rule_config())
-    logarithmic = build_mutation_rule(
-        _rule_config(geometry="log", minimum=0.1, maximum=20.0)
-    )
+    logarithmic = build_mutation_rule(_rule_config(geometry="log", minimum=0.1, maximum=20.0))
 
     assert linear.mutate(2.0, FixedRandom(0.3)) == 2.3
     assert linear.mutate(2.9, FixedRandom(0.3)) == 3.0
