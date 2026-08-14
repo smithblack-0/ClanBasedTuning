@@ -33,6 +33,8 @@ class FixedRandom:
 
 
 def _rule_config(**overrides: Any) -> dict[str, Any]:
+    """Build one valid mutation dictionary with explicit per-test overrides."""
+
     config = {
         "standard_deviation": 0.2,
         "geometry": "linear",
