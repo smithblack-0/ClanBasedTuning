@@ -84,9 +84,7 @@ class _ClanCoordinator:
         if len(set(trial_ids)) != len(trial_ids):
             raise ValueError("Tune trial IDs must be unique")
 
-        assignment = {
-            trial_id: member_id for member_id, trial_id in enumerate(sorted(trial_ids))
-        }
+        assignment = {trial_id: member_id for member_id, trial_id in enumerate(sorted(trial_ids))}
         if self.member_ids and self.member_ids != assignment:
             raise RuntimeError("Clan coordinator was already registered with another population")
         self.member_ids = assignment
