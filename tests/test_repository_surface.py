@@ -48,11 +48,13 @@ def test_test_suite_contains_only_current_surface_contracts():
     }
 
 
-def test_no_active_training_example_precedes_the_qualified_function_api():
-    """The end-to-end example is added only after the native contract passes."""
+def test_active_training_example_is_the_qualified_function_api_path():
+    """The public example must stay on the same path exercised by the native contract."""
 
     repository_root = Path(__file__).resolve().parents[1]
     examples_root = repository_root / "examples"
-    example_files = list(examples_root.rglob("*.py")) if examples_root.exists() else []
+    example_files = {
+        path.relative_to(repository_root).as_posix() for path in examples_root.rglob("*.py")
+    }
 
-    assert example_files == []
+    assert example_files == {"examples/simple_clan_tuning.py"}
