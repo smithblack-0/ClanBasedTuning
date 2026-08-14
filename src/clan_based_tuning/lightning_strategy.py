@@ -58,7 +58,8 @@ class ClanDDPStrategy(DDPStrategy):
 
         if self.num_processes != 1:
             raise RuntimeError(
-                "the initial Clan DDP path requires exactly one Lightning device/process per Tune trial"
+                "the initial Clan DDP path requires exactly one Lightning "
+                "device/process per Tune trial"
             )
         super().setup_environment()
 
