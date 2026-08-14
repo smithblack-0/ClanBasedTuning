@@ -1,6 +1,6 @@
 # Public API
 
-Status: implementation target on the active function-API branch
+Status: current function-API surface on the active integration branch
 
 ## Ordinary use
 
@@ -139,7 +139,7 @@ scheduler = ClanScheduler(
 result = tune.Tuner(
     tune.with_resources(
         scheduler.wrap(train),
-        {"cpu": 4, "gpu": 1},
+        {"cpu": 1, "gpu": 1},  # resources for each Clan member
     ),
     param_space={
         "lr": tune.loguniform(1e-4, 1e-3),
@@ -153,10 +153,12 @@ result = tune.Tuner(
 ).fit()
 ```
 
-For the initial DDP path, the complete Clan must be resident together, so the Tune run
-must permit `population_size` concurrent trials and the cluster must have the requested
-resources for all of them. Each wrapped function still receives only the ordinary Ray
-`genome` mapping supplied by Tune.
+`with_resources` describes one Tune trial/member, so the example above requires four GPUs
+and at least four CPUs for the complete four-member Clan. For the initial DDP path, the
+complete Clan must be resident together: the Tune run must permit `population_size`
+concurrent trials and the cluster must be able to satisfy all of their per-member resource
+requests at once. Each wrapped function still receives only the ordinary Ray `genome`
+mapping supplied by Tune.
 
 ## `ClanScheduler`
 
@@ -168,9 +170,11 @@ At each Tune report boundary it:
 1. verifies one report from every stable Clan member;
 2. independently selects the same winner chosen by the workers;
 3. retains that member as the sole parent;
-4. lets Ray assign the parent's reported checkpoint to every resumed member;
-5. leaves the winning member's genome unchanged; and
-6. clones the winning genome to every losing target and applies the declared
+4. verifies the selected checkpoint's producer metadata against the selected member and
+   active controlled genome;
+5. lets Ray assign the parent's reported checkpoint to every resumed member;
+6. leaves the winning member's genome unchanged; and
+7. clones the winning genome to every losing target and applies the declared
    `MutationSpec` values to the controlled keys.
 
 Mutation keys identify scheduler-controlled **genome values**, not optimizer fields. CBT
