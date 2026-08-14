@@ -77,9 +77,7 @@ class ClanScheduler(PopulationBasedTraining):
             raise ValueError("poll_interval_s must be positive")
 
         self.population_size = population_size
-        self._mutations = {
-            key: _MutationRule.from_config(rule) for key, rule in mutations.items()
-        }
+        self._mutations = {key: _MutationRule.from_config(rule) for key, rule in mutations.items()}
         self._random = random.Random(seed)
         self._trial_ids: set[str] = set()
         self._member_ids: dict[str, int] = {}

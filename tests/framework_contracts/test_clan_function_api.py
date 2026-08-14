@@ -50,9 +50,7 @@ def _train_member(genome):
         def on_before_optimizer_step(self, optimizer):
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
-            self.momentum_before_step = (
-                0.0 if momentum is None else float(momentum.detach().item())
-            )
+            self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def on_validation_epoch_start(self):
             self.validation_sample_sum = 0.0
@@ -98,9 +96,10 @@ def _train_member(genome):
             state["optimizer_states"][0] = model.optimizer.state_dict()
             torch.save(state, checkpoint_path)
 
-            if "fail_on_restore_marker" in genome and Path(
-                genome["fail_on_restore_marker"]
-            ).exists():
+            if (
+                "fail_on_restore_marker" in genome
+                and Path(genome["fail_on_restore_marker"]).exists()
+            ):
                 raise RuntimeError("intentional interrupted-run qualification failure")
 
         train_data = DataLoader(
