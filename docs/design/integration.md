@@ -18,8 +18,7 @@ policy with the Clan single-parent transition.
 The public path begins with an ordinary Tune function:
 
 ```python
-def train(genome):
-    ...
+def train(genome): ...
 ```
 
 The mapping passed by Tune is the member's current genome. ClanBasedTuning does not add
@@ -146,9 +145,10 @@ For each completed population boundary, the CBT Tune scheduler:
 3. independently applies the deterministic selection policy;
 4. verifies that all workers reported the same selected member and that only that member
    supplied the continuation;
-5. uses Ray's native PBT checkpoint/configuration transfer to make the selected
+5. verifies the selected checkpoint's producer metadata against that member and genome;
+6. uses Ray's native PBT checkpoint/configuration transfer to make the selected
    continuation the parent for the next target members; and
-6. mutates the declared genome keys for losing targets while preserving the selected
+7. mutates the declared genome keys for losing targets while preserving the selected
    member's exact genome.
 
 The resumed Tune function then receives the assigned checkpoint and genome. Userspace
@@ -196,9 +196,9 @@ is backend-neutral, but only the directly exercised device/backend combination i
 qualified by that evidence.
 
 The contract proves repeated function invocation, DDP participation, population fitness
-exchange, winner agreement, Ray checkpoint/configuration handoff, explicit userspace
-genome application after optimizer-state restore, and one physical Lightning checkpoint
-write per Clan round.
+exchange, winner agreement, selected-checkpoint producer verification, Ray
+checkpoint/configuration handoff, explicit userspace genome application after
+optimizer-state restore, and one physical Lightning checkpoint write per Clan round.
 
 Incomplete-cohort failure behavior, CUDA/NCCL execution, multi-node operation, broader
 checkpoint stores, elastic membership, actor reuse, arbitrary optimizer layouts, and
