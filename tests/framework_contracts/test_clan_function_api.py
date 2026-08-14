@@ -76,9 +76,7 @@ def _train_member(genome: dict[str, Any]) -> None:
 
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
-            self.momentum_before_step = (
-                0.0 if momentum is None else float(momentum.detach().item())
-            )
+            self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def on_validation_epoch_start(self) -> None:
             """Reset complete-validation accounting for this member."""
