@@ -152,6 +152,11 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         assert result.metrics["round_start_weight"] == pytest.approx(0.8)
         assert result.metrics["momentum_before_step"] == pytest.approx(1.0)
 
+    # The first winner used lr=0.2. Every second-round member receives an independent
+    # deterministic mutation of that same selected parent genome, including the winner.
+    final_lrs = sorted(result.config["lr"] for result in results)
+    assert final_lrs == pytest.approx(sorted([0.1924690426284743, 0.2159468026720305]))
+
     # The selected first-round state is the common second-round continuation.
     assert len({round(result.metrics["round_start_weight"], 7) for result in results}) == 1
 
