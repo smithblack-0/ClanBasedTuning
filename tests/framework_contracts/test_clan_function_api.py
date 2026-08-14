@@ -12,15 +12,26 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 def _train_member(genome):
     import tempfile
+    from uuid import uuid4
 
     import lightning.pytorch as lightning
     import torch
+    from lightning.pytorch.plugins.io import TorchCheckpointIO
     from ray import tune
     from torch.utils.data import DataLoader, TensorDataset
 
     from clan_based_tuning import ClanDDPStrategy, ClanTuneReportCallback
 
     torch.set_num_threads(1)
+
+    class AuditCheckpointIO(TorchCheckpointIO):
+        """Record every physical Lightning checkpoint write across the Clan."""
+
+        def save_checkpoint(self, checkpoint, path, storage_options=None):
+            super().save_checkpoint(checkpoint, path, storage_options=storage_options)
+            audit_dir = Path(genome["checkpoint_audit_dir"])
+            audit_dir.mkdir(parents=True, exist_ok=True)
+            Path(audit_dir, uuid4().hex).touch()
 
     class ScalarModel(lightning.LightningModule):
         def __init__(self, current_genome):
@@ -66,7 +77,9 @@ def _train_member(genome):
     trainer = lightning.Trainer(
         accelerator="cpu",
         devices=1,
-        strategy=ClanDDPStrategy(),
+        strategy=ClanDDPStrategy(
+            checkpoint_io=AuditCheckpointIO(),
+        ),
         callbacks=[ClanTuneReportCallback(extra_metrics=["lr_seen"])],
         max_epochs=100,
         num_sanity_val_steps=0,
@@ -89,6 +102,8 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
 
     from clan_based_tuning import ClanScheduler, MutationSpec
 
+    checkpoint_audit_dir = tmp_path / "checkpoint-writes"
+
     ray.shutdown()
     ray.init(num_cpus=2, include_dashboard=False, log_to_driver=False)
     try:
@@ -109,7 +124,10 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         )
         tuner = tune.Tuner(
             tune.with_resources(scheduler.wrap(_train_member), {"cpu": 1}),
-            param_space={"lr": tune.grid_search([0.1, 0.2])},
+            param_space={
+                "lr": tune.grid_search([0.1, 0.2]),
+                "checkpoint_audit_dir": str(checkpoint_audit_dir),
+            },
             tune_config=tune.TuneConfig(
                 scheduler=scheduler,
                 max_concurrent_trials=2,
@@ -133,7 +151,11 @@ def test_function_trainable_repeats_clan_transition_with_one_checkpoint_per_roun
         genome = json.loads(result.metrics["clan/genome_json"])
         assert result.metrics["lr_seen"] == pytest.approx(genome["lr"])
 
-    # Both ranks materialize Lightning checkpoint dictionaries at the barrier, but only
-    # the selected member writes a persistent checkpoint for each completed round.
+    # Each of two rounds produces exactly one actual Lightning persistence call, even
+    # though both ranks construct checkpoint state and enter the save barrier.
+    assert len(list(checkpoint_audit_dir.iterdir())) == 2
+
+    # Ray's persisted continuation also remains one source artifact per round rather than
+    # one checkpoint file per member.
     checkpoint_files = list(Path(tmp_path).rglob("checkpoint.ckpt"))
     assert 1 <= len(checkpoint_files) <= 2
