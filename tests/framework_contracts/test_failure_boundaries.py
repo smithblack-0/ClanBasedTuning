@@ -27,6 +27,8 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
 def _error_texts(storage_path: Path) -> list[str]:
+    """Read every Tune trial error file beneath one qualification storage root."""
+
     return [path.read_text(errors="replace") for path in storage_path.rglob("error.txt")]
 
 
