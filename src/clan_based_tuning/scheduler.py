@@ -223,9 +223,13 @@ class ClanScheduler(PopulationBasedTraining):
         if provenance.get("schema_version") != CLAN_SCHEMA_VERSION:
             raise RuntimeError("selected Clan checkpoint has an unsupported provenance schema")
         if provenance.get("member_id") != expected_member_id:
-            raise RuntimeError("selected Clan checkpoint producer identity disagrees with scheduler state")
+            raise RuntimeError(
+                "selected Clan checkpoint producer identity disagrees with scheduler state"
+            )
         if provenance.get("genome") != expected_genome:
-            raise RuntimeError("selected Clan checkpoint producer genome disagrees with scheduler state")
+            raise RuntimeError(
+                "selected Clan checkpoint producer genome disagrees with scheduler state"
+            )
 
     def _get_new_config(self, trial, trial_to_clone):
         """Clone the selected genome and mutate only the scheduler-controlled keys."""
