@@ -41,9 +41,7 @@ def _train_member(genome):
         def on_before_optimizer_step(self, optimizer):
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
-            self.momentum_before_step = (
-                0.0 if momentum is None else float(momentum.detach().item())
-            )
+            self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def validation_step(self, batch, batch_index):
             del batch, batch_index
