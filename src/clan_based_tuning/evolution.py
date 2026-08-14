@@ -118,7 +118,15 @@ def build_mutation_rules(
     configs: Mapping[str, Mapping[str, Any]],
     _build_rule: Callable[[Mapping[str, Any]], _MutationRule] = build_mutation_rule,
 ) -> dict[str, _MutationRule]:
-    """Normalize all configured mutation rules while preserving public genome keys."""
+    """Normalize all mutation dictionaries while preserving user genome keys.
+
+    Args:
+        configs: Mutation dictionaries keyed by the corresponding Tune config/genome field.
+        _build_rule: Injectable single-rule construction function for isolated tests.
+
+    Returns:
+        Validated immutable mutation rules keyed by the original user genome fields.
+    """
 
     return {key: _build_rule(config) for key, config in configs.items()}
 
