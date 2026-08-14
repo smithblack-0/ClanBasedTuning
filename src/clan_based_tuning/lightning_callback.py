@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from collections.abc import Mapping
@@ -14,7 +15,7 @@ from clan_based_tuning.controller import ClanController
 from clan_based_tuning.lightning_strategy import ClanDDPStrategy
 from clan_based_tuning.protocol import (
     CLAN_CHECKPOINT_SOURCE,
-    CLAN_GENOME,
+    CLAN_GENOME_JSON,
     CLAN_MEMBER_ID,
     CLAN_METADATA_KEY,
     CLAN_SCHEMA_VERSION,
@@ -62,9 +63,7 @@ class ClanTuneReportCallback(Callback):
             member_id=runtime.member_id,
             population_size=runtime.world_size,
             mode=runtime.spec.mode,
-            exchange_fitness=lambda local_fitness: self._exchange_fitness(
-                trainer, local_fitness
-            ),
+            exchange_fitness=lambda local_fitness: self._exchange_fitness(trainer, local_fitness),
         )
         controller.set_fitness(fitness)
         is_winner = controller.should_save_checkpoint()
@@ -74,7 +73,11 @@ class ClanTuneReportCallback(Callback):
         report[runtime.spec.metric] = fitness
         report[CLAN_MEMBER_ID] = runtime.member_id
         report[CLAN_WINNER_ID] = winner_id
-        report[CLAN_GENOME] = runtime.controlled_genome
+        report[CLAN_GENOME_JSON] = json.dumps(
+            runtime.controlled_genome,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         report[CLAN_CHECKPOINT_SOURCE] = is_winner
 
         from ray import tune
