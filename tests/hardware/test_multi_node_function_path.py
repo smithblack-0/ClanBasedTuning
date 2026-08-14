@@ -3,10 +3,11 @@
 This contract connects to an already-running Ray cluster and requires two CPU members to land
 on different physical nodes. The cluster should expose one schedulable CPU per intended test
 node (or otherwise constrain placement) so a successful run actually proves cross-node DDP.
+Tune checkpoints require storage shared by every cluster node, supplied explicitly through
+``CLAN_TEST_STORAGE_PATH`` when this qualification is enabled.
 """
 
 import os
-from pathlib import Path
 
 import pytest
 import ray
@@ -26,13 +27,18 @@ pytestmark = [
 ]
 
 
-def test_two_members_train_on_distinct_physical_nodes(tmp_path: Path) -> None:
+def test_two_members_train_on_distinct_physical_nodes() -> None:
     """Two Ray-cluster nodes join one framework-managed GLOO Clan world."""
 
     if "CLAN_RUN_MULTI_NODE" not in os.environ or os.environ["CLAN_RUN_MULTI_NODE"] != "1":
         pytest.skip("set CLAN_RUN_MULTI_NODE=1 after starting the qualification Ray cluster")
+    if "CLAN_TEST_STORAGE_PATH" not in os.environ:
+        raise RuntimeError(
+            "CLAN_TEST_STORAGE_PATH must name NFS/cloud storage visible to every Ray node"
+        )
 
     address = os.environ.get("CLAN_TEST_RAY_ADDRESS", "auto")
+    storage_path = os.environ["CLAN_TEST_STORAGE_PATH"]
     ray.shutdown()
     ray.init(address=address, log_to_driver=False)
     try:
@@ -48,7 +54,7 @@ def test_two_members_train_on_distinct_physical_nodes(tmp_path: Path) -> None:
             tune_config=tiny_tune_config(build_tiny_scheduler(join_timeout_s=60.0)),
             run_config=tune.RunConfig(
                 name="tiny-mlp-multi-node-contract",
-                storage_path=str(tmp_path),
+                storage_path=storage_path,
                 stop={"training_iteration": 2},
                 verbose=0,
             ),
