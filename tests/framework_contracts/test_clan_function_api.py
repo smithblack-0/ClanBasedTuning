@@ -1,9 +1,11 @@
 """End-to-end contracts for the public Ray function + Lightning Clan lifecycle.
 
-These tests use real Ray, Lightning, PyTorch, Tune checkpoints, and process-group collectives.
-The first contract proves repeated single-parent transitions. The second intentionally fails
-a restored member only after Lightning has restored training state, then restarts Ray and
-requires ordinary ``Tuner.restore`` to reconstruct the Clan and continue.
+These tests intentionally cross real framework boundaries rather than isolating CBT. The first
+proves that two ordinary Tune functions form one Lightning DDP world, diverge only after the
+shared gradient, select one parent, and inherit its complete Lightning/optimizer state. The
+second fails only after a restored invocation reaches userspace, restarts Ray entirely, and
+requires ordinary ``Tuner.restore`` to reconstruct CBT runtime authority without a special
+restore API.
 """
 
 import contextlib
@@ -25,12 +27,19 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
 def _train_member(genome: dict[str, Any]) -> None:
-    """Run one real Tune member while exposing state needed by lifecycle assertions."""
+    """Expose just enough real training state to prove the complete continuation contract.
+
+    The scalar model is intentionally transparent rather than realistic: weight, momentum,
+    global step, training partition, validation coverage, and applied learning rate all become
+    independently observable. That lets one test distinguish "checkpoint copied" from the
+    stronger requirement that selected model state, optimizer history, Lightning progress,
+    replicated validation, and userspace child-genome application all survive the transition.
+    """
 
     torch.set_num_threads(1)
 
     class ScalarModel(lightning.LightningModule):
-        """Minimal model whose optimizer state makes continuation directly observable."""
+        """Make every state component that should cross a Clan boundary directly observable."""
 
         def __init__(self, current_genome: dict[str, Any]) -> None:
             super().__init__()
@@ -49,7 +58,13 @@ def _train_member(genome: dict[str, Any]) -> None:
             self.validation_sample_count = 0
 
         def on_train_start(self) -> None:
-            """Apply the current genome after Lightning has restored inherited state."""
+            """Prove restore precedes userspace child-genome application, then optionally fail.
+
+            Start-of-round weight/global step are sampled before new training mutates them. The
+            marker-controlled failure is deliberately placed here: observing its external file
+            proves the interrupted restore test reached this hook with nonzero restored
+            Lightning progress rather than failing earlier in Tune or checkpoint loading.
+            """
 
             for param_group in self.optimizer.param_groups:
                 param_group["lr"] = float(self.genome["lr"])
@@ -65,27 +80,27 @@ def _train_member(genome: dict[str, Any]) -> None:
                     raise RuntimeError("intentional interrupted-run qualification failure")
 
         def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
-            """Expose the DDP-partitioned sample and produce a simple common gradient."""
+            """Make DDP data partitioning visible while keeping the common gradient trivial."""
 
             del batch_index
             self.training_sample_value = float(batch[0].item())
             return self.weight
 
         def on_before_optimizer_step(self, optimizer: torch.optim.Optimizer) -> None:
-            """Record whether selected-parent optimizer momentum survived restoration."""
+            """Observe inherited momentum after DDP reduction but before the next update changes it."""
 
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
             self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def on_validation_epoch_start(self) -> None:
-            """Reset complete-validation accounting for this member."""
+            """Start fresh coverage accounting so each member proves full validation independently."""
 
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
 
         def validation_step(self, batch: list[torch.Tensor], batch_index: int) -> None:
-            """Record complete held-out coverage and member-local candidate metrics."""
+            """Accumulate full-workload evidence while keeping fitness member-local."""
 
             del batch_index
             values = batch[0]
@@ -100,14 +115,14 @@ def _train_member(genome: dict[str, Any]) -> None:
                 self.log("training_sample_value", self.training_sample_value)
 
         def on_validation_epoch_end(self) -> None:
-            """Publish coverage evidence after Lightning-managed validation completes."""
+            """Publish coverage only after Lightning has traversed the complete validation loader."""
 
             if not self.trainer.sanity_checking:
                 self.log("validation_sample_sum", self.validation_sample_sum)
                 self.log("validation_sample_count", float(self.validation_sample_count))
 
         def configure_optimizers(self) -> torch.optim.Optimizer:
-            """Return the optimizer whose inherited state is part of the Clan continuation."""
+            """Keep optimizer ownership in userspace so inherited momentum tests the public path."""
 
             return self.optimizer
 
@@ -162,7 +177,12 @@ def _train_member(genome: dict[str, Any]) -> None:
 
 
 def _scheduler(population_size: int = 2) -> ClanScheduler:
-    """Build the deterministic two-member scheduler shared by framework contracts."""
+    """Hold mutation/seed semantics constant between transition and restore contracts.
+
+    ``population_size`` is exposed only because malformed/capacity variants occasionally need
+    the same scheduler policy with a different cohort shape; all mutation semantics remain one
+    source of truth so restore tests cannot accidentally qualify a different algorithm.
+    """
 
     return ClanScheduler(
         population_size=population_size,
@@ -180,7 +200,7 @@ def _scheduler(population_size: int = 2) -> ClanScheduler:
 
 
 def _tune_config(scheduler: ClanScheduler) -> tune.TuneConfig:
-    """Use the ordinary Tune metric/mode/scheduler configuration surface."""
+    """Keep driver selection metric/direction identical across all lifecycle contracts."""
 
     return tune.TuneConfig(
         scheduler=scheduler,
@@ -190,7 +210,7 @@ def _tune_config(scheduler: ClanScheduler) -> tune.TuneConfig:
 
 
 def test_function_trainable_repeats_one_parent_transition(tmp_path: Path) -> None:
-    """Two members inherit complete state and both receive seeded sibling mutations."""
+    """One transition preserves full parent state while producing two seeded child policies."""
 
     ray.shutdown()
     ray.init(num_cpus=2, include_dashboard=False, log_to_driver=False)
@@ -234,7 +254,13 @@ def test_function_trainable_repeats_one_parent_transition(tmp_path: Path) -> Non
 
 
 def test_tuner_restore_rebuilds_runtime_after_post_restore_failure(tmp_path: Path) -> None:
-    """Fresh Ray restores errored members after an intentional failure following state load."""
+    """Fresh Ray must reconstruct CBT authority after failure proven to occur post-restore.
+
+    The external marker establishes failure ordering before the first Ray runtime is destroyed.
+    Removing only the trigger and using ordinary ``Tuner.restore(..., resume_errored=True)``
+    then proves scheduler serialization contains enough durable authority to recreate named
+    runtime actors and continue both members without user reconstruction code.
+    """
 
     experiment_name = "function-api-restore-contract"
     experiment_path = tmp_path / experiment_name
