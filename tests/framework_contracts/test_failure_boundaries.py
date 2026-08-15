@@ -1,9 +1,10 @@
-"""Framework contracts for bounded Clan failure behavior.
+"""Framework contracts that distinguish CBT-owned admission failure from backend failure.
 
-The normal suite proves that insufficient resources fail through the configured Clan
-rendezvous boundary instead of reaching DDP with a partial cohort. A separate destructive
-participant-exit test is available for explicit local qualification because intentionally
-killing a live DDP rank is not appropriate for every CI run.
+Insufficient resident capacity is a CBT problem because CBT requires the whole Clan before DDP
+can exist; both trials must therefore fail at the Clan rendezvous boundary, not later in
+PyTorch networking. Loss of a participant after DDP is active belongs to the distributed
+backend, so that destructive qualification is opt-in and checks only bounded experiment
+termination rather than inventing a CBT recovery mechanism.
 """
 
 import contextlib
@@ -27,14 +28,19 @@ pytestmark = [pytest.mark.framework_contract, pytest.mark.requires_ray]
 
 
 def _error_texts(storage_path: Path) -> list[str]:
-    """Read every Tune trial error file beneath one qualification storage root."""
+    """Use Tune's persisted per-trial errors as evidence of which failure boundary actually won.
+
+    Inspecting stored errors after Ray shuts down avoids relying on console formatting or which
+    trial happened to fail first. The contract needs every member's terminal cause because a
+    stale rendezvous can make the first member fail correctly while a later member reaches DDP.
+    """
 
     return [path.read_text(errors="replace") for path in storage_path.rglob("error.txt")]
 
 
 @pytest.mark.failure_contract
 def test_insufficient_capacity_fails_at_clan_rendezvous_boundary(tmp_path: Path) -> None:
-    """One available CPU makes both two-member Clan trials fail before DDP initialization."""
+    """A partial Clan must never be time-multiplexed into a later dead-peer DDP attempt."""
 
     ray.shutdown()
     ray.init(num_cpus=1, include_dashboard=False, log_to_driver=False)
@@ -64,7 +70,13 @@ def test_insufficient_capacity_fails_at_clan_rendezvous_boundary(tmp_path: Path)
 @pytest.mark.failure_contract
 @pytest.mark.requires_failure_injection
 def test_active_collective_peer_exit_is_bounded(tmp_path: Path) -> None:
-    """Opt-in test kills one live DDP member and requires the experiment to terminate."""
+    """A hard rank exit must surface through framework failure rather than hang indefinitely.
+
+    ``TinyRegressionModel`` uses ``os._exit`` so Lightning cannot perform graceful teardown.
+    The test deliberately does not require CBT recovery or a particular backend exception; once
+    the process group exists, PyTorch/Ray own failure propagation. The bounded wall clock is a
+    qualification guard against an indefinitely stuck experiment, not a normal-runtime SLO.
+    """
 
     if (
         "CLAN_RUN_DESTRUCTIVE_FAILURE" not in os.environ
