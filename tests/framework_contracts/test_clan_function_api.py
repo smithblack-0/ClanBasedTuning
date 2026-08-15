@@ -94,7 +94,7 @@ def _train_member(genome: dict[str, Any]) -> None:
             self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def on_validation_epoch_start(self) -> None:
-            """Start fresh coverage accounting for each member's independently complete validation."""
+            """Reset coverage so each member proves full validation independently."""
 
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
