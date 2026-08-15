@@ -1,8 +1,9 @@
 """Distribution-artifact contracts for the installable ClanBasedTuning package.
 
-The test builds wheel/sdist artifacts, verifies runtime dependency and typing metadata, checks
-release rendering, installs the wheel non-editably into an isolated target directory, and
-imports the actual public integration objects rather than repository source.
+This test deliberately leaves the repository import path: it builds wheel/sdist artifacts,
+checks release rendering and metadata, installs the wheel non-editably into an isolated target,
+and imports from that target. The goal is to catch packaging failures that editable-source
+unit tests cannot see without freezing irrelevant source layout such as ``__all__`` order.
 """
 
 import json
@@ -14,7 +15,13 @@ from pathlib import Path
 
 
 def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path: Path) -> None:
-    """The built release artifacts are clean, typed, renderable, and expose the public API."""
+    """Verify the artifact users install contains exactly the intended runtime/package surface.
+
+    ``twine check`` covers release metadata/rendering; direct wheel inspection covers typing and
+    dependency declarations; the isolated import proves those declarations correspond to a
+    usable installed package rather than the checkout. Public export membership is sorted only
+    for comparison so harmless ``__all__`` reordering is not promoted to an API contract.
+    """
 
     repository_root = Path(__file__).resolve().parents[1]
     dist_dir = tmp_path / "dist"
@@ -83,7 +90,7 @@ def test_wheel_declares_runtime_dependencies_and_imports_public_surface(tmp_path
             "-c",
             (
                 "import json, clan_based_tuning as cbt; "
-                "print(json.dumps([cbt.__all__, cbt.ClanScheduler.__name__, "
+                "print(json.dumps([sorted(cbt.__all__), cbt.ClanScheduler.__name__, "
                 "cbt.ClanDDPStrategy.__name__, cbt.ClanTuneReportCallback.__name__]))"
             ),
         ],
