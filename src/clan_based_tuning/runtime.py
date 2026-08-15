@@ -154,6 +154,10 @@ def join_runtime(
         if session is None:
             time.sleep(runtime_spec.poll_interval_s)
     if session is None:
+        # A timed-out process will not enter DDP. Remove its exact token before raising so a
+        # later Tune process cannot form a new session with this dead participant's stale
+        # rendezvous address/port.
+        ray.get(coordinator.abort_announcement.remote(trial_id, token))
         _timeout(
             "the complete Clan did not become resident before the rendezvous timeout; "
             "provision enough Ray resources to run every member concurrently"
