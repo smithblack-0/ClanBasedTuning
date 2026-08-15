@@ -10,7 +10,7 @@ Genome interpretation and application remain entirely in user code.
 import logging
 import os
 import tempfile
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 
 import torch
 from lightning.pytorch import LightningModule, Trainer
@@ -40,6 +40,7 @@ class ClanTuneReportCallback(Callback):
         extra_metrics: Optional Lightning callback metrics to forward to Ray. A list preserves
             names; a mapping uses ``{ray_name: lightning_name}``.
         filename: File name used inside the temporary Ray checkpoint directory.
+        _winner_selector: Injectable population-selection function used by isolated tests.
 
     Raises:
         TypeError: If used without ``ClanDDPStrategy``.
@@ -56,10 +57,12 @@ class ClanTuneReportCallback(Callback):
         lightning_metric: str | None = None,
         extra_metrics: list[str] | dict[str, str] | None = None,
         filename: str = "checkpoint.ckpt",
+        _winner_selector: Callable[[Sequence[float], str], int] = select_winner_id,
     ) -> None:
         self._lightning_metric = lightning_metric
         self._extra_metrics = extra_metrics
         self._filename = filename
+        self._winner_selector = _winner_selector
 
     def on_validation_end(self, trainer: Trainer, pl_module: LightningModule) -> None:
         """Gather fitness, checkpoint the selected member, and report one Tune boundary."""
@@ -74,7 +77,7 @@ class ClanTuneReportCallback(Callback):
         lightning_metric = self._lightning_metric or runtime.spec.metric
         fitness = self._metric_value(trainer, lightning_metric)
         population = self._exchange_fitness(trainer, fitness)
-        winner_id = select_winner_id(population, runtime.spec.mode)
+        winner_id = self._winner_selector(population, runtime.spec.mode)
         is_winner = runtime.member_id == winner_id
 
         report = self._extra_report(trainer)
