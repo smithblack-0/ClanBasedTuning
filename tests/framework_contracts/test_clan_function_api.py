@@ -87,14 +87,14 @@ def _train_member(genome: dict[str, Any]) -> None:
             return self.weight
 
         def on_before_optimizer_step(self, optimizer: torch.optim.Optimizer) -> None:
-            """Observe inherited momentum after DDP reduction but before the next update changes it."""
+            """Observe inherited momentum after DDP reduction, before the next update changes it."""
 
             state = optimizer.state[self.weight]
             momentum = state.get("momentum_buffer")
             self.momentum_before_step = 0.0 if momentum is None else float(momentum.detach().item())
 
         def on_validation_epoch_start(self) -> None:
-            """Start fresh coverage accounting so each member proves full validation independently."""
+            """Start fresh coverage accounting for each member's independently complete validation."""
 
             self.validation_sample_sum = 0.0
             self.validation_sample_count = 0
@@ -115,7 +115,7 @@ def _train_member(genome: dict[str, Any]) -> None:
                 self.log("training_sample_value", self.training_sample_value)
 
         def on_validation_epoch_end(self) -> None:
-            """Publish coverage only after Lightning has traversed the complete validation loader."""
+            """Publish coverage after Lightning traverses the complete validation loader."""
 
             if not self.trainer.sanity_checking:
                 self.log("validation_sample_sum", self.validation_sample_sum)
