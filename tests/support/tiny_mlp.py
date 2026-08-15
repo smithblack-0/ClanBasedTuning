@@ -1,9 +1,14 @@
-"""Small realistic Lightning workload shared by CPU, GPU, and multi-node contracts.
+"""One realistic-but-small workload shared across environment qualification.
 
-The workload is deliberately tiny: a two-layer regression model, AdamW optimizer, synthetic
-fixed data, and two training batches per invocation. It exercises real forward/backward,
-optimizer-state restoration, userspace genome application, DDP backend/device selection, and
-Tune checkpoint continuation without requiring a model download or a long training run.
+CPU, CUDA/NCCL, multi-node, destructive-failure, and benchmark paths should differ in the
+thing they are qualifying—not in model/training semantics. This module therefore centralizes a
+two-layer regression model, AdamW, fixed synthetic data, two training batches per invocation,
+and the same Clan scheduler/search space. Changes here intentionally affect every realistic
+qualification path and should be reviewed as changes to the common test workload.
+
+The workload is large enough to exercise real forward/backward, optimizer-state restoration,
+userspace genome application, DDP topology/backend selection, and Tune checkpoint
+continuation, but small enough to run without a model/dataset download.
 """
 
 import os
@@ -34,7 +39,13 @@ _EXTRA_METRICS = [
 
 
 class TinyRegressionModel(lightning.LightningModule):
-    """Tiny MLP whose optimizer and runtime state are observable across Clan generations."""
+    """Make inherited optimizer state and runtime topology observable in a real training loop.
+
+    The model owns its optimizer exactly as user code does in the public API. Runtime facts are
+    sampled after Lightning starts training and surfaced as validation metrics so framework
+    contracts can verify restore order, userspace genome application, backend/device choice,
+    and physical-node placement without reaching into CBT internals.
+    """
 
     def __init__(self, genome: dict[str, Any]) -> None:
         super().__init__()
@@ -56,7 +67,12 @@ class TinyRegressionModel(lightning.LightningModule):
         self.world_size_seen = 0.0
 
     def on_train_start(self) -> None:
-        """Apply the receiving genome after Lightning restores optimizer/training state."""
+        """Exercise the documented userspace seam after Lightning has restored optimizer state.
+
+        Applying the child genome here is the behavior the package promises users: CBT provides
+        config values but never edits the optimizer. Capturing ``global_step`` at the same hook
+        proves resumed invocations reached this code after Lightning restoration.
+        """
 
         for param_group in self.optimizer.param_groups:
             param_group["lr"] = float(self.genome["lr"])
@@ -72,7 +88,12 @@ class TinyRegressionModel(lightning.LightningModule):
         self.world_size_seen = float(self.trainer.strategy.world_size)
 
     def training_step(self, batch: list[torch.Tensor], batch_index: int) -> torch.Tensor:
-        """Run ordinary regression training and optionally inject a destructive rank exit."""
+        """Run ordinary regression, with one opt-in hard-exit path for failure qualification.
+
+        The crash keys are absent from normal qualification configs. When explicitly supplied,
+        ``os._exit`` kills the process without Lightning cleanup so the destructive contract
+        exercises real active-collective peer loss rather than a graceful exception path.
+        """
 
         del batch_index
         if "crash_member_id" in self.genome:
@@ -87,7 +108,7 @@ class TinyRegressionModel(lightning.LightningModule):
         return torch.nn.functional.mse_loss(prediction, target)
 
     def validation_step(self, batch: list[torch.Tensor], batch_index: int) -> None:
-        """Compute member-local held-out loss over the replicated validation workload."""
+        """Produce member-local fitness on the validation workload CBT must replicate exactly."""
 
         del batch_index
         features, target = batch
@@ -96,7 +117,7 @@ class TinyRegressionModel(lightning.LightningModule):
         self.log("val_loss", loss, on_step=False, on_epoch=True)
 
     def on_validation_epoch_end(self) -> None:
-        """Expose optimizer application and distributed-runtime facts to Tune assertions."""
+        """Publish observability facts only at real, reportable validation boundaries."""
 
         if self.trainer.sanity_checking:
             return
@@ -109,13 +130,18 @@ class TinyRegressionModel(lightning.LightningModule):
         self.log("world_size_seen", self.world_size_seen)
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        """Return the user-owned optimizer whose history is inherited between generations."""
+        """Give Lightning the same user-owned optimizer whose history crosses generations."""
 
         return self.optimizer
 
 
 def train_tiny_mlp_member(genome: dict[str, Any]) -> None:
-    """Run one ordinary Tune function member using the tiny regression workload."""
+    """Run the shared workload through the same ordinary Tune-function API a user would write.
+
+    Checkpoint handling intentionally uses only ``tune.get_checkpoint`` plus Lightning's normal
+    ``ckpt_path`` restore. Keeping this helper realistic prevents hardware tests from quietly
+    qualifying a special CBT-only execution path that examples/users do not exercise.
+    """
 
     torch.manual_seed(17)
     if str(genome["accelerator"]) == "cpu":
@@ -164,7 +190,12 @@ def train_tiny_mlp_member(genome: dict[str, Any]) -> None:
 
 
 def build_tiny_scheduler(*, join_timeout_s: float = 60.0) -> ClanScheduler:
-    """Build the deterministic two-member scheduler shared by realistic qualification tests."""
+    """Keep scheduler/mutation semantics identical across all realistic qualification paths.
+
+    Tests may vary the rendezvous timeout when failure behavior is the dimension under test;
+    population shape, mutation geometry, seed, and bounds stay fixed so GPU/multi-node results
+    remain comparable to the CPU baseline.
+    """
 
     return ClanScheduler(
         population_size=2,
@@ -188,7 +219,11 @@ def build_tiny_scheduler(*, join_timeout_s: float = 60.0) -> ClanScheduler:
 
 
 def tiny_param_space(*, accelerator: str, ddp_timeout_s: float = 30.0) -> dict[str, Any]:
-    """Return the complete two-member Tune config for the tiny workload."""
+    """Vary only execution environment while preserving the two initial candidate genomes.
+
+    Centralizing the Tune config prevents CUDA/multi-node/failure tests from accidentally
+    changing optimizer starting points while claiming to qualify only an environment change.
+    """
 
     return {
         "lr": tune.grid_search([0.01, 0.02]),
@@ -199,7 +234,11 @@ def tiny_param_space(*, accelerator: str, ddp_timeout_s: float = 30.0) -> dict[s
 
 
 def tiny_tune_config(scheduler: ClanScheduler) -> tune.TuneConfig:
-    """Return the ordinary Tune configuration used by realistic qualification tests."""
+    """Bind every realistic contract to the same fitness name and minimization direction.
+
+    This helper is intentionally shared because worker and driver selection must agree on these
+    values; copying them into each hardware test would create needless drift risk.
+    """
 
     return tune.TuneConfig(
         scheduler=scheduler,
