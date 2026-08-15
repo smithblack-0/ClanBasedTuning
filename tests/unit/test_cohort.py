@@ -1,9 +1,9 @@
-"""Unit contracts for experiment identity, stable members, and invocation rendezvous.
+"""Pure-state contracts for experiment identity, stable ranks, and invocation rendezvous.
 
-The cohort state is deliberately tested without Ray actors. These contracts establish that
-concurrent experiments cannot collide in the registry, completed assignments are releasable,
-and a DDP session opens only for one complete set of fresh invocation tokens. Failed pre-DDP
-announcements are retractable so later members cannot rendezvous with a dead process.
+These tests deliberately exclude Ray so failures identify the cohort state machine rather than
+actor/runtime behavior. They pin the properties distributed integration depends on: experiment
+scoping, deterministic member assignment, complete same-invocation session formation, and
+compare-before-delete cleanup of timed-out announcements.
 """
 
 import pytest
@@ -15,7 +15,7 @@ def _runtime_spec(
     coordinator_name: str = "coordinator-a",
     experiment_name: str = "experiment-a",
 ) -> ClanRuntimeSpec:
-    """Build one small immutable cohort assignment for pure-state unit contracts."""
+    """Centralize immutable assignment values so identity-scoping tests vary only identity."""
 
     return ClanRuntimeSpec(
         coordinator_name=coordinator_name,
@@ -30,7 +30,7 @@ def _runtime_spec(
 
 
 def test_registry_scopes_trial_ids_by_experiment_rejects_conflicts_and_releases() -> None:
-    """Registry identity is experiment-scoped, conflict-safe, and removable after completion."""
+    """The same Tune trial ID may exist in two experiments but never map twice within one."""
 
     registry = RuntimeRegistry()
     first = _runtime_spec()
@@ -57,7 +57,7 @@ def test_registry_scopes_trial_ids_by_experiment_rejects_conflicts_and_releases(
 
 
 def test_coordinator_assigns_stable_members_and_opens_only_complete_sessions() -> None:
-    """Sorted trial identity fixes ranks and a session waits for every registered member."""
+    """Sorted trial identity fixes rank order and no member sees a session before the cohort."""
 
     coordinator = ClanCoordinator(population_size=2)
     coordinator.register_trials(["trial-b", "trial-a"])
@@ -84,7 +84,7 @@ def test_coordinator_assigns_stable_members_and_opens_only_complete_sessions() -
 
 
 def test_aborted_announcement_cannot_form_a_session_with_a_later_member() -> None:
-    """A timed-out process leaves no rendezvous token that can represent a dead participant."""
+    """Timeout cleanup removes dead peers without allowing an older process to erase a retry."""
 
     coordinator = ClanCoordinator(population_size=2)
     coordinator.register_trials(["trial-a", "trial-b"])
@@ -107,7 +107,7 @@ def test_aborted_announcement_cannot_form_a_session_with_a_later_member() -> Non
 
 
 def test_coordinator_rejects_malformed_population_and_reused_invocation_token() -> None:
-    """Malformed registration and reuse of a completed invocation identity fail immediately."""
+    """Population identity must be complete/unique and completed invocation tokens stay one-use."""
 
     coordinator = ClanCoordinator(population_size=2)
 
