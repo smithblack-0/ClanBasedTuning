@@ -68,15 +68,13 @@ def test_coordinator_assigns_stable_members_and_opens_only_complete_sessions() -
     coordinator.announce("trial-a", "token-a", "host-a", 12345)
     assert coordinator.get_session("trial-a", "token-a") is None
 
-    coordinator.announce("trial-b", "token-b", "host-b", None)
+    coordinator.announce("trial-b", "token-b", None, None)
     assert coordinator.get_session("trial-a", "token-a") == {
-        "session_id": 0,
         "member_id": 0,
         "main_address": "host-a",
         "main_port": 12345,
     }
     assert coordinator.get_session("trial-b", "token-b") == {
-        "session_id": 0,
         "member_id": 1,
         "main_address": "host-a",
         "main_port": 12345,
@@ -91,7 +89,7 @@ def test_aborted_announcement_cannot_form_a_session_with_a_later_member() -> Non
 
     coordinator.announce("trial-a", "dead-token", "host-a", 12345)
     coordinator.abort_announcement("trial-a", "dead-token")
-    coordinator.announce("trial-b", "token-b", "host-b", None)
+    coordinator.announce("trial-b", "token-b", None, None)
 
     assert coordinator.get_session("trial-b", "token-b") is None
 
@@ -99,7 +97,6 @@ def test_aborted_announcement_cannot_form_a_session_with_a_later_member() -> Non
     coordinator.announce("trial-a", "fresh-token", "host-a", 54321)
     coordinator.abort_announcement("trial-a", "dead-token")
     assert coordinator.get_session("trial-a", "fresh-token") == {
-        "session_id": 0,
         "member_id": 0,
         "main_address": "host-a",
         "main_port": 54321,
@@ -118,7 +115,7 @@ def test_coordinator_rejects_malformed_population_and_reused_invocation_token() 
 
     coordinator.register_trials(["trial-a", "trial-b"])
     coordinator.announce("trial-a", "token-a", "host-a", 12345)
-    coordinator.announce("trial-b", "token-b", "host-b", None)
+    coordinator.announce("trial-b", "token-b", None, None)
 
     with pytest.raises(RuntimeError, match="reuse"):
         coordinator.announce("trial-a", "token-a", "host-a", 54321)
