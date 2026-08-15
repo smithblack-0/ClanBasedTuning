@@ -129,9 +129,7 @@ class ClanScheduler(FIFOScheduler):
 
         super().__init__()
         self.population_size = population_size
-        self._mutations = {
-            key: _mutation_rule_builder(config) for key, config in mutations.items()
-        }
+        self._mutations = {key: _mutation_rule_builder(config) for key, config in mutations.items()}
         self._random = random.Random(seed)
         self._generation_resolver = _generation_resolver
         self._checkpoint_capture = _checkpoint_capture
