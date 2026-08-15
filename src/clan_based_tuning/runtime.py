@@ -172,9 +172,9 @@ def join_runtime(
         raise TimeoutError(message)
 
     token = uuid4().hex
-    host = ray.util.get_node_ip_address()
-    port = _find_port() if member_id == 0 else None
-    ray.get(coordinator.announce.remote(trial_id, token, host, port))
+    main_address = ray.util.get_node_ip_address() if member_id == 0 else None
+    main_port = _find_port() if member_id == 0 else None
+    ray.get(coordinator.announce.remote(trial_id, token, main_address, main_port))
 
     session = None
     while session is None and time.monotonic() < deadline:
