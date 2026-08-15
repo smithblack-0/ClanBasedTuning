@@ -1,90 +1,88 @@
-# Framework-native review
+# Framework-native integration review
 
-Status: standing engineering review
+Status: complete for the qualified CPU function path
+Date: 2026-08-14
 
-Use this review whenever a change touches Ray, Lightning, PyTorch, user/application
-ownership, checkpointing, resources, or distributed lifecycle.
+## Review question
 
-## 1. Preserve Clan semantics
+Does ClanBasedTuning own only the coordination that the upstream frameworks cannot already
+provide, while leaving execution, resources, distributed mechanics, optimizer restoration,
+and genome application with their natural owners?
 
-Confirm complete-population shared-gradient cooperation, member-local post-gradient
-variation, comparable member-local fitness, one selected continuation, and independent
-sibling mutations from one selected parent.
+For the qualified CPU function path, yes.
 
-Fail when an implementation convenience changes scientific meaning.
+## Framework ownership retained
 
-## 2. Use the native owner where it wins the overall design
+Ray Tune still owns trial creation, per-trial resources, pause/resume execution, checkpoint
+storage, result handling, and experiment restoration. CBT supplies a Tune scheduler but does
+not create a second trial executor or resource scheduler.
 
-Trace each responsibility to Ray Tune, Lightning, PyTorch, CBT, or user code. Prefer the
-native owner when its contract fits, but do not treat this as a mechanical rule: a small
-owned implementation can be better than dependence on a large unstable framework subsystem
-when it improves the overall correctness/maintenance/concision balance.
+Lightning/PyTorch still own the Trainer lifecycle, optimizer restoration, backend selection,
+process-group initialization, DDP gradient synchronization, barriers, and checkpoint
+construction. CBT supplies topology facts Lightning cannot infer from independently launched
+Tune trials and scopes which member persists the round continuation.
 
-The current example is scheduler evolution: CBT owns its narrow synchronous transition rather
-than inheriting Ray PBT internals, while Ray still owns trial execution/resources/storage and
-the unavoidable low-level transfer operations remain in one compatibility adapter.
+User code still owns the Tune config/genome meaning and applies it to the restored optimizer.
+CBT does not infer optimizer mappings, provide an `apply_genome` callback, edit Lightning's
+serialized optimizer payload, or own a package-side optimizer schema.
 
-## 3. Preserve userspace genome ownership
+## Clan-owned behavior
 
-Pass only when Tune supplies the current config to the ordinary user function and user code
-alone decides what its values mean or how they modify optimizer/model/other state.
+The scheduler owns only the synchronous Clan population transition: wait for one boundary
+report from every stable member, select one parent, capture its checkpoint, construct one
+independently mutated child config per member, and assign those continuations before the next
+generation resumes.
 
-Fail if production CBT introduces an optimizer schema, config-to-optimizer inference,
-`apply_genome` abstraction, package restore/application callback, or hidden post-load
-application hook.
+The pure evolution module owns selection/mutation arithmetic. The pure cohort module owns
+experiment-scoped identity and invocation rendezvous state. The Ray runtime module owns actor,
+Tune-context, socket, timeout, registration, and release effects. These concerns no longer
+collapse into one operational scheduler object.
 
-Using a user-owned Lightning lifecycle hook to apply the genome after restoration preserves
-this boundary; the operation is still user code.
+## Runtime construction and lifecycle
 
-## 4. Demand a demonstrated framework gap for custom machinery
+The final readiness audit found that runtime actor registration was still being reached as
+scheduler-owned construction and was repeated on scheduling callbacks. That was corrected.
 
-For each adapter/custom component, state:
+`ClanScheduler` now receives runtime registration/release operations through explicit
+injection. `runtime.py` constructs or reuses the named registry/coordinator, performs the Ray
+registration calls, and releases successful completed assignments. Scheduler state only holds
+opaque handles while live and strips them before serialization.
 
-- what Clan behavior the frameworks cannot supply directly;
-- what existing lifecycle remains framework-owned;
-- why the chosen seam is preferable to the realistic alternatives; and
-- what evidence covers the version-sensitive behavior.
+The shared registry removes completed experiment/trial assignments and the scheduler-owned
+coordinator is terminated after the full successful population completes. A timed-out pre-DDP
+member retracts its exact pending rendezvous token before raising, preventing later members
+from constructing DDP state with a dead peer.
 
-Do not add generic infrastructure merely for symmetry or local control.
+## Tune compatibility boundary
 
-## 5. Concentrate unstable dependencies
+Tune exposes scheduler lifecycle hooks but not a public atomic operation equivalent to
+"resume this trial with that trial's checkpoint and this new config." The small unsupported
+transfer seam therefore remains isolated in `ray_compat.py`.
 
-A private/Developer framework operation is not automatically rejected. Compare accepting the
-dependency, isolating/reimplementing the missing behavior, and owning a larger subsystem.
-Choose the near-optimal balance.
+This is preferable to inheriting all of PBT's private policy internals or copying a second Tune
+executor. The dependency metadata consequently uses broad major-version bounds; direct
+framework tests determine support and a future Tune change should normally require one
+compatibility-adapter repair.
 
-If unstable calls remain, concentrate them in the smallest compatibility boundary and test
-that boundary through the real framework lifecycle. Do not spread private framework state
-through algorithm modules or solve the concern with needlessly restrictive point-version
-pinning.
+## DDP topology
 
-## 6. Keep one authority per decision
+One Tune member is one independently launched Lightning process/device. CBT presents each as a
+logical one-process node so Lightning can preserve the externally assigned global rank/world
+size without spawning another local process. This is adapter bookkeeping, not a physical-node
+claim.
 
-Selection, mutation RNG, stable member identity, checkpoint construction, Tune storage,
-process-group lifecycle, and genome application each need a clear owner. Convenience must not
-create a second source of truth.
+Training retains normal DDP partitioning. Lightning-managed validation is replicated for
+candidate comparability. Explicit user-supplied distributed samplers remain user-owned.
 
-## 7. Match support claims to evidence
+## Failure ownership
 
-Every version, device, topology, persistence, recovery, and performance claim must have
-corresponding evidence. Dependency metadata indicates what users may attempt/install; it does
-not automatically establish compatibility or production support.
+Pre-DDP complete-cohort failure is bounded and diagnosed by CBT because CBT owns the
+cross-trial rendezvous facts. Once PyTorch DDP is active, collective/backend failure remains
+framework-owned. The repository contains a destructive peer-exit qualification harness, but
+transparent active-collective recovery is not claimed.
 
-## Result
+## Review result
 
-- **Pass:** the claimed behavior has one coherent ownership model and the selected design is
-  the best-supported balance among realistic alternatives.
-- **Fail:** the unit changes Clan semantics, duplicates authority without benefit, hides user
-  ownership, or leaves avoidable unstable coupling spread through the system.
-- **Insufficient evidence:** the architecture may be sound, but the support claim has not yet
-  been qualified.
-
-## References
-
-- [Product roadmap](../product_roadmap.md)
-- [Public API](../api.md)
-- [System behavior](../contracts/system_behavior.md)
-- [Population invariants](../contracts/population_resolution_invariants.md)
-- [Population responsibilities](../contracts/population_resolution_responsibilities.md)
-- [Ray scheduler compatibility](../implementation/ray_scheduler_compatibility.md)
-- [Current plan](../plan.md)
+No second scheduler, optimizer manager, checkpoint format, process group, or execution runtime
+was introduced. The remaining private Ray dependency is narrow and explicitly qualified.
+This framework-ownership result is also included in the final repository quality audit.

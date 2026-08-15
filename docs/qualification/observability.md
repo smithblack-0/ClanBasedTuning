@@ -12,11 +12,16 @@ CBT emits diagnostics for:
 - member rendezvous/join with stable member ID and world size;
 - each reported generation boundary and current report count;
 - resolved generation, winner ID, selected parent mutation values, and child mutation values;
-- selected checkpoint-source member and fitness; and
-- runtime timeout boundaries before the corresponding exception is raised.
+- selected checkpoint-source member and fitness;
+- runtime timeout boundaries before the corresponding exception is raised; and
+- successful experiment runtime release after the complete population finishes.
 
 Generation logs include only mutation-controlled keys when showing parent/child values. They
 do not dump an arbitrary full user Tune config.
+
+A pre-DDP rendezvous timeout retracts the timed-out member's exact pending announcement before
+the timeout is logged/raised, so later diagnostics are not polluted by a session formed with a
+dead peer.
 
 Applications configure logging using ordinary Python mechanisms. No CBT-specific logging
 configuration is required. These messages are diagnostic evidence, not a durable machine API;

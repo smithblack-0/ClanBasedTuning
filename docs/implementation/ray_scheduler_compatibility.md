@@ -1,78 +1,64 @@
-# Ray scheduler compatibility boundary
-
-Status: corrective implementation decision
+# Ray scheduler compatibility
 
 ## Problem
 
-Clan Tuning needs a synchronous population transition that Ray Tune does not expose as one
-stable public operation:
+Clan Tuning needs a synchronous complete-population transition: all members report one common
+boundary, one parent is selected, and every member resumes from that parent's checkpoint with
+an independently mutated sibling config.
 
-1. wait for every trial at one boundary;
-2. choose one parent;
-3. capture that parent's just-reported checkpoint;
-4. pause every member;
-5. replace every member's config; and
-6. make every member resume from the same parent checkpoint.
+Ray Tune exposes scheduler lifecycle hooks for controlling trial decisions, but the atomic
+checkpoint/config replacement used by PBT is not a stable public operation. Inheriting the
+full PBT implementation would couple Clan semantics to unrelated private policy internals.
 
-Ray's Population Based Training implementation already proves that Tune can perform these
-operations, but PBT itself uses internal scheduler state and private/Developer Tune machinery.
-Subclassing PBT therefore couples CBT simultaneously to PBT's internal algorithm layout and
-to the lower-level Tune transfer operations.
+## Current boundary
 
-## Decision
+`ClanScheduler` therefore subclasses Tune's FIFO scheduler surface and owns only the small
+Clan-specific synchronous transition. Pure winner/mutation logic lives in `evolution.py`.
 
-CBT owns the small synchronous Clan scheduler algorithm directly as a `FIFOScheduler`
-specialization. It does not vendor the full general-purpose PBT implementation and does not
-inherit PBT's private `_quantiles`, `_trial_state`, `_checkpoint_or_exploit`, mutation, or
-asynchronous machinery.
+The unavoidable low-level Tune transfer operations are isolated in `ray_compat.py`:
 
-The current implementation was behaviorally derived from Ray synchronous PBT because that is
-the upstream reference for checkpoint/pause/config transfer. CBT keeps only the operations
-needed by Clan Tuning.
+- obtain/resolve the selected boundary checkpoint;
+- pause a member without requesting a duplicate checkpoint; and
+- assign a receiving member's child config and selected checkpoint continuation.
 
-## Compatibility adapter
+Ray-specific actor construction is not part of the scheduler. `runtime.py` constructs/reuses
+registry and coordinator actors and exposes injected registration/release operations to the
+scheduler.
 
-`src/clan_based_tuning/ray_compat.py` is the sole intended location for Tune implementation
-details beneath the scheduler callback API. It currently owns:
+## Generation scheduling invariant
 
-- scheduling/resolving the selected trial checkpoint at the current report boundary;
-- pausing a trial without requesting an extra checkpoint; and
-- assigning a child config plus inherited checkpoint into the state Tune uses on resume.
+Once any member reports a boundary, `ClanScheduler.choose_trial_to_run` returns no paused
+member until every current member has reported and the population transition completes. This
+prevents an early reporter from starting the next invocation while another member is still in
+the previous generation.
 
-These operations use Ray Developer/private APIs because Tune does not provide a stable public
-atomic alternative. No selection, mutation, cohort, Lightning, or user policy belongs in the
-adapter.
+Every sibling mutation is generated from one snapshotted parent config in stable member-ID
+order. The previous winner is mutated too.
 
-## Version policy
+## Runtime registration and cleanup
 
-Ray's stable `PublicAPI` receives a strong backward-compatibility commitment; `DeveloperAPI`
-may change across minor releases. `TrialScheduler`/`Trial` are Developer APIs, so CBT cannot
-claim that an arbitrary future Ray minor is guaranteed compatible.
+A complete Tune population is registered once per live scheduler process. Repeated scheduling
+callbacks reuse the already-live handles rather than performing synchronous Ray registration
+round-trips every time.
 
-That does not justify point/minor pinning every user to the exact version used while this code
-was written. Historically the Tune scheduler lifecycle has changed slowly, and isolating the
-few lower-level operations gives the project a small repair surface when Ray changes.
+The scheduler excludes actor handles from serialized state. Restore reconstructs and
+re-registers them through the runtime construction layer.
 
-Package metadata therefore expresses a reasonable major-version envelope rather than
-`ray==2.56.x` or `<2.57`. Actual support is established by representative compatibility tests.
-If an upstream version breaks `ray_compat.py`, the preferred response is to adapt that module
-and rerun framework qualification; dependency bounds are narrowed only when no reasonable
-compatible implementation exists.
+After every member of a successful population completes, the experiment-scoped registry
+entries are removed and the cohort-specific coordinator actor is terminated. Errored runs are
+not eagerly destroyed because Ray retry/restore policy remains the owner of whether they
+continue.
 
-## Why not copy all of PBT?
+During pre-DDP rendezvous, a member that reaches the configured complete-cohort timeout
+retracts its exact pending announcement before raising. A later member therefore cannot open a
+session using that dead process's address/port.
 
-A verbatim PBT copy would freeze substantial behavior CBT does not need: asynchronous mode,
-quantile fractions, arbitrary parent sampling, Ray mutation/resampling formats, logging
-formats, and several PBT-specific state paths. It would also still contain the same private
-Tune transfer operations that can change upstream.
+## Dependency policy
 
-Reducing the implementation to the Clan-specific synchronous algorithm improves auditability
-and leaves one explicit compatibility seam instead of silently inheriting a much larger
-upstream subsystem.
+Package metadata admits `ray[tune]>=2.56,<3` rather than pinning one minor release. This is a
+compatibility envelope, not a blanket qualification claim. The exact readiness candidate was
+directly exercised with Ray 2.57.0.
 
-## Qualification requirement
-
-Any change to scheduler transition logic or `ray_compat.py` requires the real Ray framework
-contracts: repeated two-member continuation, child mutation, selected checkpoint transfer,
-and fresh-runtime `Tuner.restore`. A green pure unit suite is not evidence that these
-Developer/private Tune interactions remain compatible.
+If a future Ray minor changes the low-level transfer operations, repair `ray_compat.py` and
+rerun framework contracts first. Narrow the dependency range only if the upstream change is
+actually incompatible rather than as a substitute for maintaining the adapter.

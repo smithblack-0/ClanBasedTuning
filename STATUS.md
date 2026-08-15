@@ -2,66 +2,102 @@
 
 Last updated: 2026-08-14
 
-## Current branch
+## Current readiness branch
 
-The corrected function API from merged PR #52 is the baseline. The current readiness branch
-adds executable qualification surfaces around that architecture without changing the public
-three-object API or taking genome application out of userspace.
+Merged PR #52 remains the corrected function-API baseline. The readiness branch adds
+qualification, diagnostics, typing/distribution checks, release process, and the final
+repository quality audit without changing the accepted public three-object API or moving
+genome application out of userspace.
 
-## Directly established baseline
+The executable readiness/audit candidate is commit
+`8f4e07ea93c8d4525920212f93c365cfd148e1e7`. GitHub Actions run `31852871160` passed both
+ordinary Python validation jobs and the real Ray/Lightning framework job on that exact commit.
 
-The merged CPU path is directly qualified on Python 3.11.15, Ray 2.57.0, Lightning 2.6.5,
-PyTorch 2.10.0+cpu, Linux, one node, and two concurrent members. The merged contracts establish
-repeated single-parent generation transition, fresh-runtime `Tuner.restore`, logical external
-Lightning topology, and a real two-rank framework-managed DDP world.
+## Directly established CPU behavior
 
-The dependency envelope remains deliberately broader than that evidence:
-`ray[tune]>=2.56,<3`, `lightning>=2.6,<3`, and `torch>=2.10,<3`. Those bounds avoid needless
-minor-version installation failures; they are not a blanket qualification claim.
+The real framework job used Python 3.11.15, Ray 2.57.0, Lightning 2.6.5, PyTorch 2.10.0+cpu,
+Linux, and local CPU execution. It passed:
 
-## Readiness work on this branch
+- repeated two-member single-parent Clan generation transition;
+- fresh-runtime `Tuner.restore` after a deliberate post-restore failure;
+- insufficient-capacity failure at the CBT rendezvous boundary before DDP;
+- a realistic tiny two-layer MLP + AdamW repeated training/restore contract;
+- logical one-process-member Lightning topology; and
+- a real two-rank framework-managed GLOO DDP world.
 
-The repository now includes:
+The insufficient-capacity contract gives Ray only one CPU for a two-member Clan. Both trials
+must fail with the CBT `complete Clan did not become resident` rendezvous error and neither may
+reach a `DistNetworkError`. Timed-out pre-DDP announcements are retracted before failure so a
+later process cannot rendezvous with a dead member.
 
-- a small realistic MLP + AdamW CPU framework contract in addition to the scalar mechanics
-  contract;
-- a bounded insufficient-capacity failure contract;
-- an opt-in destructive live-peer failure contract;
-- a two-GPU CUDA/NCCL contract that self-skips without two visible GPUs;
-- an opt-in physical multi-node contract requiring shared Tune storage and distinct nodes;
-- standard Python diagnostics for cohort registration/join, boundary progress, selection,
-  mutation continuations, checkpoint source, and timeout failures;
-- a PEP 561 marker plus maintained package-source mypy contract;
-- wheel/sdist metadata/import checks and release-artifact validation;
-- a no-download tiny function-path measurement harness; and
-- security, release, hardware, performance, and quality-audit documentation.
+The ordinary validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
+package-source mypy, wheel/sdist build and `twine check`, non-editable installed-wheel import,
+package-surface checks, pure cohort/runtime/evolution contracts, and the remaining non-Ray
+suite.
 
-A harness existing in the repository is not itself qualification. CPU/static/distribution
-claims from this branch become current only when the exact branch head passes its normal
-checks. CUDA/NCCL, physical multi-node, and destructive active-peer behavior remain non-claims
-until their opt-in contracts are run in the required environment and the evidence is recorded.
+## Dependency and compatibility policy
 
-## Release blockers and non-claims
+The package dependency envelope remains intentionally broader than the directly tested
+configuration:
 
-The following remain external or evidence-dependent gates:
+- `ray[tune]>=2.56,<3`;
+- `lightning>=2.6,<3`; and
+- `torch>=2.10,<3`.
 
-- **License:** blocked on the project owner's legal/license choice. No license is selected by
-  this branch.
-- **CUDA/NCCL:** locally runnable, but not claimed until the two-GPU contract passes on named
-  hardware/software.
-- **Physical multi-node:** locally runnable against a configured Ray cluster with shared
-  storage, but not claimed until direct evidence exists.
-- **Active-collective participant failure:** destructive harness exists; bounded behavior is
-  not claimed until it passes in the intended environment.
-- **Performance:** measurement tooling exists; representative throughput/overhead/scaling data
-  must be recorded before making performance claims or reopening actor reuse.
-- **Model sharding/custom checkpoint plugins:** not qualified.
+These are compatibility/installability bounds, not a claim that every admitted version has
+been qualified. Ray-specific low-level continuation transfer remains isolated in
+`ray_compat.py`; framework-minor changes should be repaired at that boundary when possible
+rather than forcing users onto one point release.
 
-## Completion rule
+## Repository quality audit
 
-Production/readiness work does not end when tests turn green. After executable gates and
-active docs/examples are synchronized, the mandatory final gate is a repository-wide audit
-against the authoritative style and quality contract. Any concrete issue found there is fixed
-before the audit can pass.
+The mandatory post-gate repository-wide audit is recorded in
+[`docs/reviews/readiness_quality_audit.md`](docs/reviews/readiness_quality_audit.md). It reviewed
+shipped source, tests, examples, active docs, packaging, qualification, and release surfaces
+against the project style/quality contract after the readiness work was synchronized.
 
-CI workflow expansion remains separately approved work and is not modified by this branch.
+Concrete audit findings were fixed before the audit passed, including runtime-construction
+ownership, repeated Ray registration work, completed-runtime cleanup, stale pre-DDP
+rendezvous state, auxiliary-function injection seams, and documentation/module-organization
+gaps. Passing tests were treated as evidence for the review rather than as the review itself.
+
+## Runnable but not yet qualified locally
+
+The repository contains no-download/local qualification harnesses for remaining environment-
+dependent claims:
+
+- two-GPU CUDA/NCCL;
+- physical multi-node Ray execution with shared Tune storage; and
+- destructive live-DDP-participant failure.
+
+A skip is not evidence. These support claims remain open until the corresponding test passes
+on a named environment and that evidence is recorded.
+
+The CUDA/NCCL test can be run from a checkout with:
+
+```bash
+python -m pip install -e '.[dev]'
+python -m pytest tests/hardware/test_cuda_function_path.py -vv
+```
+
+It uses only the tiny synthetic MLP/AdamW workload; no model or dataset download is required.
+Physical multi-node and destructive-failure setup are documented in
+[`docs/qualification/hardware.md`](docs/qualification/hardware.md).
+
+## Remaining external release gates
+
+The repository engineering/readiness audit is complete, but an ordinary production/public
+release is still blocked by evidence or owner decisions outside this CPU qualification run:
+
+- **License:** the project owner must choose the license; this branch does not make that legal
+  decision.
+- **CUDA/NCCL:** test exists but has not been run on two visible GPUs in recorded evidence.
+- **Physical multi-node:** test exists but has not been run against a recorded two-node cluster.
+- **Active-collective participant failure:** destructive harness exists but has not been run in
+  recorded evidence.
+- **Performance:** reproducible measurement tooling exists, but representative workload/hardware
+  measurements are still required before making overhead or scaling claims.
+- **Model sharding/custom checkpoint plugins:** remain unqualified and are not current support
+  claims.
+
+CI workflow expansion remains separately approved work and was not modified by this branch.

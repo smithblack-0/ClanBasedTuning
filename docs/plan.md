@@ -8,11 +8,11 @@ baseline; green mechanics are necessary evidence, not production completion.
 - Retain the exact scalar state-transfer contract.
 - Add a small realistic MLP/AdamW contract with real forward/backward and optimizer restore.
 - Prove insufficient resident capacity terminates through a bounded, diagnosable rendezvous
-  failure rather than time-multiplexing a partial Clan indefinitely.
+  failure rather than time-multiplexing a partial Clan into DDP.
 - Keep destructive active-peer failure separately opt-in so ordinary CI does not deliberately
   kill live framework processes.
 
-Exit: exact branch head passes pure, package, CPU framework, restore, and bounded-capacity
+Exit: exact branch head passes pure, package, CPU framework, restore, and insufficient-capacity
 contracts.
 
 ## 2. Hardware/topology qualification surfaces
@@ -29,12 +29,13 @@ present. Support remains a non-claim until the corresponding test is actually ex
 ## 3. Diagnostics
 
 - Emit standard Python logging for cohort registration/join, generation boundary progress,
-  selected parent/child mutation values, checkpoint source, and timeout/failure boundaries.
+  selected parent/child mutation values, checkpoint source, timeout/failure, and successful
+  runtime release.
 - Keep diagnostics at Clan ownership seams; do not replace Ray/Lightning/PyTorch logging.
 - Avoid dumping arbitrary full user configs when only mutation-controlled keys are relevant.
 
-Exit: an operator can identify cohort/member/round/selection/checkpoint/timeout state without a
-second package-owned execution system.
+Exit: an operator can identify cohort/member/round/selection/checkpoint/timeout/release state
+without a second package-owned execution system.
 
 ## 4. Typing and distribution
 
@@ -102,3 +103,10 @@ Any concrete issue found is corrected and the relevant executable evidence is re
 may the audit record pass. External evidence gates such as owner license selection or hardware
 that has not been run remain explicitly blocked/non-claimed rather than being waved through by
 the code-quality audit.
+
+### Gate result
+
+Completed against executable commit `8f4e07ea93c8d4525920212f93c365cfd148e1e7`
+after correcting the issues found during review. Exact executable evidence is GitHub Actions
+run `31852871160`. The audit result and remaining external blockers are recorded in
+[`reviews/readiness_quality_audit.md`](reviews/readiness_quality_audit.md).
