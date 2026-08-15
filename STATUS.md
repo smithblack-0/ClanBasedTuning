@@ -1,6 +1,6 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 ## Current readiness branch
 
@@ -9,9 +9,10 @@ qualification, diagnostics, typing/distribution checks, release process, and the
 repository quality audit without changing the accepted public three-object API or moving
 genome application out of userspace.
 
-The executable readiness/audit candidate is commit
-`8f4e07ea93c8d4525920212f93c365cfd148e1e7`. GitHub Actions run `31852871160` passed both
+The latest executable candidate is commit
+`5f117df15b89d468663abdb6ec9e316ca89ca2b8`. GitHub Actions run `31902897008` passed both
 ordinary Python validation jobs and the real Ray/Lightning framework job on that exact commit.
+Subsequent commits only synchronize audit/status documentation.
 
 ## Directly established CPU behavior
 
@@ -56,10 +57,16 @@ The mandatory post-gate repository-wide audit is recorded in
 shipped source, tests, examples, active docs, packaging, qualification, and release surfaces
 against the project style/quality contract after the readiness work was synchronized.
 
-Concrete audit findings were fixed before the audit passed, including runtime-construction
-ownership, repeated Ray registration work, completed-runtime cleanup, stale pre-DDP
-rendezvous state, auxiliary-function injection seams, and documentation/module-organization
-gaps. Passing tests were treated as evidence for the review rather than as the review itself.
+The audit was reopened for a documentation-driven abstraction pass after it became clear that
+mere docstring coverage could hide weak functions. Retained functions now document non-obvious
+responsibility, invariants, framework contracts, failure semantics, or ownership. Helpers and
+state that could not justify an independent boundary were removed rather than given ceremonial
+docstrings. The same pass removed tests that froze harmless `__all__` ordering.
+
+Earlier audit findings also fixed runtime-construction ownership, repeated Ray registration
+work, completed-runtime cleanup, stale pre-DDP rendezvous state, and auxiliary-function
+injection seams. Passing tests were treated as evidence for the review rather than as the
+review itself.
 
 ## Runnable but not yet qualified locally
 
