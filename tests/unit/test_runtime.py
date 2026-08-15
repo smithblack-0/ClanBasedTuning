@@ -1,9 +1,9 @@
-"""Unit contracts for Ray runtime construction and release boundaries.
+"""Unit contracts for Ray runtime publication and successful-run cleanup.
 
-These tests avoid real actors by injecting tiny handles into the runtime construction
-functions. They prove that actor construction stays outside ``ClanScheduler``, existing
-handles are reusable, registration is resolved before use, and successful completion removes
-registry assignments and terminates only the scheduler-owned coordinator.
+The production functions are small effect boundaries whose ordering matters: coordinator state
+must exist before registry publication, and registry discovery must disappear before the
+coordinator is killed. These tests replace only Ray handles/resolution so that ordering and
+ownership can be asserted without making the unit suite depend on a live Ray runtime.
 """
 
 from typing import Any
@@ -13,21 +13,21 @@ from clan_based_tuning.runtime import register_runtime_assignment, release_runti
 
 
 class FakeRemoteMethod:
-    """Record actor-method invocations while returning a resolvable sentinel."""
+    """Mimic Ray's ``actor.method.remote(...)`` shape while retaining call order/input evidence."""
 
     def __init__(self, name: str) -> None:
         self.name = name
         self.calls: list[tuple[Any, ...]] = []
 
     def remote(self, *args: Any) -> tuple[str, tuple[Any, ...]]:
-        """Record one remote call and return a stable value for the injected resolver."""
+        """Produce a resolver-visible sentinel so tests can prove each remote write was awaited."""
 
         self.calls.append(args)
         return self.name, args
 
 
 class FakeActor:
-    """Expose only the actor methods used by runtime registration and release."""
+    """Expose only the two RPCs used by the runtime publication/cleanup contract."""
 
     def __init__(self) -> None:
         self.register_trials = FakeRemoteMethod("register")
@@ -35,7 +35,7 @@ class FakeActor:
 
 
 def _runtime_spec() -> ClanRuntimeSpec:
-    """Build one immutable assignment for runtime-construction unit contracts."""
+    """Keep one canonical assignment so construction and publication assertions cannot drift."""
 
     return ClanRuntimeSpec(
         coordinator_name="coordinator-a",
@@ -50,25 +50,25 @@ def _runtime_spec() -> ClanRuntimeSpec:
 
 
 def test_registration_constructs_missing_handles_and_registers_complete_assignment() -> None:
-    """Construction functions are invoked only for missing handles and both writes resolve."""
+    """Publish the registry entry only after the complete coordinator assignment resolves."""
 
     registry = FakeActor()
     coordinator = FakeActor()
     resolved: list[Any] = []
 
     def get_registry() -> FakeActor:
-        """Return the injected registry handle."""
+        """Stand in for cluster-wide registry construction without starting Ray."""
 
         return registry
 
     def get_coordinator(runtime_spec: ClanRuntimeSpec) -> FakeActor:
-        """Return the injected coordinator after checking the requested assignment."""
+        """Ensure coordinator construction receives the exact immutable assignment under test."""
 
         assert runtime_spec == _runtime_spec()
         return coordinator
 
     def resolve(value: Any) -> Any:
-        """Record each synchronously resolved actor operation."""
+        """Record synchronous completion so publication ordering is observable."""
 
         resolved.append(value)
         return value
@@ -88,11 +88,14 @@ def test_registration_constructs_missing_handles_and_registers_complete_assignme
     assert registry.register_trials.calls == [
         ("experiment-a", ["trial-a", "trial-b"], _runtime_spec())
     ]
-    assert len(resolved) == 2
+    assert resolved == [
+        ("register", (["trial-a", "trial-b"],)),
+        ("register", ("experiment-a", ["trial-a", "trial-b"], _runtime_spec())),
+    ]
 
 
 def test_release_unregisters_trials_and_kills_only_coordinator() -> None:
-    """Successful completion clears the shared registry before terminating its cohort actor."""
+    """Withdraw shared discovery state before terminating only the cohort-owned actor."""
 
     registry = FakeActor()
     coordinator = FakeActor()
@@ -100,13 +103,13 @@ def test_release_unregisters_trials_and_kills_only_coordinator() -> None:
     killed: list[tuple[Any, bool]] = []
 
     def resolve(value: Any) -> Any:
-        """Record the registry mutation completion."""
+        """Make completion of the registry withdrawal visible before actor termination."""
 
         resolved.append(value)
         return value
 
     def kill(actor: Any, *, no_restart: bool) -> None:
-        """Record the scheduler-owned actor selected for termination."""
+        """Capture the actor selected for destruction without touching the shared registry."""
 
         killed.append((actor, no_restart))
 
@@ -120,5 +123,5 @@ def test_release_unregisters_trials_and_kills_only_coordinator() -> None:
     )
 
     assert registry.unregister_trials.calls == [("experiment-a", ["trial-a", "trial-b"])]
-    assert len(resolved) == 1
+    assert resolved == [("unregister", ("experiment-a", ["trial-a", "trial-b"]))]
     assert killed == [(coordinator, True)]
