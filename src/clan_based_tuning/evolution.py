@@ -164,6 +164,7 @@ def resolve_generation(
     mode: str,
     mutations: Mapping[str, _MutationRule],
     random_stream: _GaussianRandom,
+    _select_winner: Callable[[Sequence[float], str], int] = select_winner_id,
 ) -> GenerationDecision:
     """Resolve one complete Clan boundary into a parent and next-generation configs.
 
@@ -173,6 +174,7 @@ def resolve_generation(
         mode: ``"min"`` or ``"max"`` selection direction.
         mutations: Normalized mutation rules keyed by user genome/config field.
         random_stream: Scheduler-owned random stream whose state persists with the scheduler.
+        _select_winner: Injectable winner-selection function for isolated composition tests.
 
     Returns:
         One winner plus a complete tuple of independently mutated child configs.
@@ -189,7 +191,7 @@ def resolve_generation(
     if any(not math.isfinite(float(fitness)) for fitness in fitnesses):
         raise ValueError("generation fitnesses must be finite")
 
-    winner_id = select_winner_id([float(value) for value in fitnesses], mode)
+    winner_id = _select_winner([float(value) for value in fitnesses], mode)
     parent_config = copy.deepcopy(dict(configs[winner_id]))
 
     child_configs = []
