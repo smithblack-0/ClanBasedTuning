@@ -119,8 +119,6 @@ def test_release_unregisters_trials_and_kills_only_coordinator() -> None:
         _kill=kill,
     )
 
-    assert registry.unregister_trials.calls == [
-        ("experiment-a", ["trial-a", "trial-b"])
-    ]
+    assert registry.unregister_trials.calls == [("experiment-a", ["trial-a", "trial-b"])]
     assert len(resolved) == 1
     assert killed == [(coordinator, True)]
