@@ -19,6 +19,7 @@ from typing import Any
 from uuid import uuid4
 
 from ray.air.constants import TRAINING_ITERATION
+from ray.tune import Checkpoint
 from ray.tune.experiment import Trial
 from ray.tune.schedulers import FIFOScheduler, TrialScheduler
 
@@ -46,6 +47,11 @@ _RuntimeRegistrar = Callable[
     tuple[Any, Any],
 ]
 _RuntimeReleaser = Callable[[ClanRuntimeSpec, list[str], Any | None, Any | None], None]
+_MutationBuilder = Callable[[Mapping[str, Mapping[str, Any]]], Any]
+_GenerationResolver = Callable[..., Any]
+_CheckpointCapture = Callable[[Any, Trial, dict[str, Any]], Checkpoint]
+_TrialPause = Callable[[Any, Trial], None]
+_ContinuationAssigner = Callable[[Trial, dict[str, Any], Checkpoint, dict[str, Any]], None]
 
 
 # Main
@@ -73,6 +79,11 @@ class ClanScheduler(FIFOScheduler):
         seed: Seed for the scheduler-owned mutation random stream.
         join_timeout_s: Maximum seconds a member waits for the complete Clan rendezvous.
         poll_interval_s: Poll interval used while members rendezvous.
+        _mutation_builder: Injectable mutation-rule construction function.
+        _generation_resolver: Injectable complete-generation policy function.
+        _checkpoint_capture: Injectable selected-boundary checkpoint operation.
+        _pause_trial: Injectable Tune pause operation used during the transition.
+        _assign_continuation: Injectable Tune continuation assignment operation.
         _runtime_spec_builder: Injectable construction function for immutable runtime facts.
         _runtime_registrar: Injectable operation that creates/reuses and registers Ray actors.
         _runtime_releaser: Injectable operation that removes a completed runtime assignment.
@@ -96,6 +107,11 @@ class ClanScheduler(FIFOScheduler):
         seed: int = 0,
         join_timeout_s: float = 120.0,
         poll_interval_s: float = 0.05,
+        _mutation_builder: _MutationBuilder = build_mutation_rules,
+        _generation_resolver: _GenerationResolver = resolve_generation,
+        _checkpoint_capture: _CheckpointCapture = capture_trial_checkpoint,
+        _pause_trial: _TrialPause = pause_trial_without_checkpoint,
+        _assign_continuation: _ContinuationAssigner = assign_trial_continuation,
         _runtime_spec_builder: Callable[..., ClanRuntimeSpec] = build_runtime_spec,
         _runtime_registrar: _RuntimeRegistrar = register_runtime_assignment,
         _runtime_releaser: _RuntimeReleaser = release_runtime_assignment,
@@ -111,8 +127,12 @@ class ClanScheduler(FIFOScheduler):
 
         super().__init__()
         self.population_size = population_size
-        self._mutations = build_mutation_rules(mutations)
+        self._mutations = _mutation_builder(mutations)
         self._random = random.Random(seed)
+        self._generation_resolver = _generation_resolver
+        self._checkpoint_capture = _checkpoint_capture
+        self._pause_trial = _pause_trial
+        self._assign_continuation = _assign_continuation
         self._mode: str | None = None
         self._trial_ids: set[str] = set()
         self._member_ids: dict[str, int] = {}
@@ -242,7 +262,7 @@ class ClanScheduler(FIFOScheduler):
 
         ordered_trials = self._ordered_trials(tune_controller)
         ordered_reports = [self._reports[candidate.trial_id] for candidate in ordered_trials]
-        decision = resolve_generation(
+        decision = self._generation_resolver(
             fitnesses=[float(report[self.metric]) for report in ordered_reports],
             configs=[candidate.config for candidate in ordered_trials],
             mode=self._require_mode(),
@@ -253,15 +273,15 @@ class ClanScheduler(FIFOScheduler):
 
         winner_trial = ordered_trials[decision.winner_id]
         winner_report = ordered_reports[decision.winner_id]
-        checkpoint = capture_trial_checkpoint(tune_controller, winner_trial, winner_report)
+        checkpoint = self._checkpoint_capture(tune_controller, winner_trial, winner_report)
 
         # Ray's scheduler callback may still be executing inside one running trial. Pause every
         # member without creating another checkpoint, then make one explicit continuation the
         # authoritative state for the entire next generation.
         for candidate in ordered_trials:
-            pause_trial_without_checkpoint(tune_controller, candidate)
+            self._pause_trial(tune_controller, candidate)
         for member_id, candidate in enumerate(ordered_trials):
-            assign_trial_continuation(
+            self._assign_continuation(
                 candidate,
                 decision.child_configs[member_id],
                 checkpoint,
@@ -307,6 +327,8 @@ class ClanScheduler(FIFOScheduler):
         return "Using Clan synchronous single-parent scheduling."
 
     def _validate_report_identity(self, trial: Trial, result: dict[str, Any]) -> None:
+        """Require worker-reported stable member identity to match scheduler assignment."""
+
         try:
             member_id = int(result[CLAN_MEMBER_ID])
         except KeyError as error:
@@ -321,6 +343,8 @@ class ClanScheduler(FIFOScheduler):
         ordered_reports: list[dict[str, Any]],
         winner_id: int,
     ) -> None:
+        """Require every worker to agree with the driver's winner and checkpoint source."""
+
         for member_id, report in enumerate(ordered_reports):
             if int(report[CLAN_WINNER_ID]) != winner_id:
                 raise RuntimeError("worker and scheduler winner selection disagree")
@@ -329,6 +353,8 @@ class ClanScheduler(FIFOScheduler):
                 raise RuntimeError("Clan result reports the wrong checkpoint source")
 
     def _ordered_trial_ids(self) -> list[str]:
+        """Return registered Tune trial IDs in stable Clan member-ID order."""
+
         return [
             trial_id
             for trial_id, _member_id in sorted(
@@ -338,6 +364,8 @@ class ClanScheduler(FIFOScheduler):
         ]
 
     def _ordered_trials(self, tune_controller: Any) -> list[Trial]:
+        """Return live Tune trial objects in stable Clan member-ID order."""
+
         by_id = {
             candidate.trial_id: candidate
             for candidate in tune_controller.get_trials()
@@ -348,6 +376,8 @@ class ClanScheduler(FIFOScheduler):
         return [by_id[trial_id] for trial_id in self._ordered_trial_ids()]
 
     def _require_mode(self) -> str:
+        """Return the configured Tune selection mode after scheduler setup."""
+
         if self._mode is None:
             raise RuntimeError("Tune did not configure the Clan selection mode")
         return self._mode
