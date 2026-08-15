@@ -121,7 +121,9 @@ class ClanCoordinator:
 
     Trial registration fixes the mapping from Tune trial ID to Clan member ID. Each function
     invocation supplies a fresh token; a session opens only when every member has announced,
-    preventing members from different invocations from entering one DDP rendezvous.
+    preventing members from different invocations from entering one DDP rendezvous. A member
+    that abandons a pre-DDP rendezvous retracts its token so a later process cannot form a
+    session with a dead participant.
     """
 
     def __init__(self, population_size: int) -> None:
@@ -173,6 +175,18 @@ class ClanCoordinator:
 
         self._pending[trial_id] = _PendingMember(token=token, host=host, port=port)
         self._try_open_session()
+
+    def abort_announcement(self, trial_id: str, token: str) -> None:
+        """Retract this exact pending invocation announcement after pre-DDP failure.
+
+        A stale or superseded token is ignored so an older failing process cannot remove a
+        newer invocation that has already replaced its pending announcement.
+        """
+
+        self._require_member(trial_id)
+        pending = self._pending.get(trial_id)
+        if pending is not None and pending.token == token:
+            del self._pending[trial_id]
 
     def get_session(self, trial_id: str, token: str) -> dict[str, int | str] | None:
         """Return the opened session only when it contains this trial's current token."""
