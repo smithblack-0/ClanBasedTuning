@@ -1,4 +1,11 @@
-"""Measure the complete tiny Clan function path without a model or dataset download."""
+"""Measure Clan control-path cost with the same tiny workload used by qualification.
+
+This is an instrumentation harness, not a production throughput benchmark. It deliberately
+uses the shared two-member MLP/AdamW workload so repeated runs can attribute changes in wall
+clock, Tune member time, and checkpoint volume to framework/control-path changes rather than a
+different model or dataset. Representative performance claims still require running this (or a
+larger workload) on named target hardware and comparing the result to an appropriate baseline.
+"""
 
 import argparse
 import json
@@ -17,18 +24,19 @@ from tests.support.tiny_mlp import (
 )
 
 
-def _parse_args() -> argparse.Namespace:
-    """Parse the requested number of complete Clan generation boundaries to measure."""
+def main() -> None:
+    """Emit one machine-readable record spanning the complete repeated Clan lifecycle.
+
+    Wall clock includes Ray/Tune orchestration, worker startup, Lightning training, generation
+    transitions, checkpoint transfer, and shutdown. Per-member Tune time and checkpoint volume
+    are recorded beside it so a regression can be localized before changing architecture. No
+    threshold is embedded here because acceptable overhead depends on the real round length and
+    target hardware.
+    """
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--generations", type=int, default=3)
-    return parser.parse_args()
-
-
-def main() -> None:
-    """Run the tiny CPU Clan and print a compact JSON measurement record."""
-
-    args = _parse_args()
+    args = parser.parse_args()
     if args.generations < 1:
         raise ValueError("--generations must be positive")
 
