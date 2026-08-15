@@ -1,13 +1,13 @@
-"""Narrow compatibility boundary for Tune trial state transfer.
+"""Narrow compatibility boundary for Tune trial continuation transfer.
 
-ClanScheduler owns its synchronous generation algorithm instead of subclassing Ray's PBT
-implementation. Tune currently exposes scheduler lifecycle callbacks but not a public atomic
-operation for "resume this trial from that trial's checkpoint and config". The few Developer
-or private Ray operations required for that transfer live only in this module so future Ray
-changes require one compatibility repair rather than a scheduler redesign.
+ClanScheduler owns the Clan algorithm, but Tune does not expose a stable public atomic
+operation for "resume this trial from that trial's checkpoint with this new config." The few
+Developer/private operations needed to reproduce that transition live here and nowhere else.
 
-The behavior mirrors the corresponding synchronous-PBT operations in Ray Tune. No mutation,
-selection, cohort, or Lightning policy belongs here.
+This module is intentionally small even when individual functions are only a few lines: each
+function names one unsupported upstream operation that may need repair when Ray changes. Do
+not move selection, mutation, cohort, or Lightning policy into this layer; doing so would turn
+a compatibility adapter back into a fork of PBT/Tune internals.
 """
 
 import copy
@@ -24,7 +24,12 @@ from ray.tune.experiment import Trial
 def _resolve_scheduled_checkpoint(
     scheduled: Checkpoint | _FutureTrainingResult | None,
 ) -> Checkpoint | None:
-    """Resolve Tune's asynchronous save wrapper while preserving direct checkpoints."""
+    """Normalize the two checkpoint shapes produced by Tune's internal save path.
+
+    A scheduler-triggered save may already be a concrete checkpoint or may still be wrapped in
+    Ray's asynchronous ``_FutureTrainingResult``. Keeping this normalization local prevents the
+    Clan scheduler from depending on that private result-wrapper shape.
+    """
 
     if not isinstance(scheduled, _FutureTrainingResult):
         return scheduled
@@ -46,19 +51,16 @@ def capture_trial_checkpoint(
         [Checkpoint | _FutureTrainingResult | None], Checkpoint | None
     ] = _resolve_scheduled_checkpoint,
 ) -> Checkpoint:
-    """Return the checkpoint representing ``trial`` at its current scheduler boundary.
+    """Materialize the selected parent's exact boundary state before children are reassigned.
 
-    Args:
-        tune_controller: Active Tune controller supplying the internal save operation.
-        trial: Selected parent trial whose just-reported state must become the continuation.
-        result: Selected parent result associated with the boundary checkpoint.
-        _resolve_checkpoint: Injectable save-result resolver for isolated compatibility tests.
-
-    Returns:
-        Concrete Tune checkpoint containing the selected boundary state.
+    Early-reporting trials may already be paused with a save in flight; the last reporter may
+    still be running inside the scheduler callback. Ray PBT handles those states differently,
+    so this adapter mirrors that distinction instead of asking for a duplicate save. The
+    returned checkpoint is concrete because every child continuation must reference one stable
+    parent artifact before the generation gate opens.
 
     Raises:
-        RuntimeError: If the boundary produced no checkpoint to inherit.
+        RuntimeError: If the selected boundary produces no checkpoint to inherit.
     """
 
     if trial.status == Trial.PAUSED:
@@ -74,11 +76,13 @@ def capture_trial_checkpoint(
 
 
 def pause_trial_without_checkpoint(tune_controller: Any, trial: Trial) -> None:
-    """Pause one running trial without asking Tune to create a duplicate checkpoint.
+    """Pause a member without letting Tune create a second, member-local continuation.
 
-    Args:
-        tune_controller: Active Tune controller owning trial execution state.
-        trial: Clan member to pause at the completed generation boundary.
+    The selected parent checkpoint is captured once and later installed on every child. Using
+    Tune's normal checkpoint-on-pause behavior here would create redundant candidate-specific
+    saves and could make the wrong artifact look authoritative. The function remains separate
+    despite its size because ``pause_trial(..., should_checkpoint=False)`` is an upstream
+    compatibility seam, not Clan policy.
     """
 
     if trial.status != Trial.PAUSED:
@@ -91,17 +95,16 @@ def assign_trial_continuation(
     checkpoint: Checkpoint,
     checkpoint_metrics: dict[str, Any],
 ) -> None:
-    """Assign the config and inherited checkpoint Tune will use when a member resumes.
+    """Install the config/checkpoint pair Tune will use for the member's next invocation.
 
-    Args:
-        trial: Clan member receiving the selected continuation.
-        config: Independently mutated child Tune config for this stable member.
-        checkpoint: Selected parent's concrete Tune checkpoint.
-        checkpoint_metrics: Selected parent's boundary metrics stored with the checkpoint.
+    Tune currently has no public scheduler operation for replacing both pieces atomically, so
+    this mirrors the checkpoint-manager state update used by PBT. Copying the checkpoint object
+    gives each trial its own continuation record while all records still point at the same
+    selected parent artifact. The metrics travel with that checkpoint because Tune's restore
+    bookkeeping expects a complete ``_TrainingResult`` rather than a bare checkpoint.
 
-    Ray PBT performs the same checkpoint-manager update internally. Keeping it here makes the
-    unsupported Tune detail explicit while the Clan scheduler remains independent of PBT's
-    private class layout and mutation implementation.
+    If a future Ray release changes checkpoint-manager internals, repair this function first;
+    callers should not learn the new private layout.
     """
 
     trial.set_config(config)
