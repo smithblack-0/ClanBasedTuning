@@ -16,24 +16,25 @@ from dataclasses import dataclass
 class _PendingMember:
     """One not-yet-complete invocation announcement.
 
-    ``token`` distinguishes process invocations of the same stable Tune trial. Rank zero also
-    contributes the rendezvous port; other members contribute only their host identity.
+    ``token`` distinguishes process invocations of the same stable Tune trial. Only rank zero
+    contributes the DDP rendezvous endpoint; other members need only prove readiness with a
+    fresh token.
     """
 
     token: str
-    host: str
-    port: int | None
+    main_address: str | None
+    main_port: int | None
 
 
 @dataclass(frozen=True, slots=True)
 class _Session:
     """Immutable rendezvous snapshot shared by one complete invocation cohort.
 
-    The per-trial token map is what prevents a process from accidentally reading a session
-    opened for an older invocation of the same Tune trial.
+    The per-trial token map is the session identity: it prevents a process from reading a
+    rendezvous opened for an older invocation of the same Tune trial. No separate session
+    counter is required.
     """
 
-    session_id: int
     tokens: dict[str, str]
     main_address: str
     main_port: int
@@ -151,7 +152,6 @@ class ClanCoordinator:
         self._pending: dict[str, _PendingMember] = {}
         self._last_tokens: dict[str, str] = {}
         self._session: _Session | None = None
-        self._next_session_id = 0
 
     def validate_population_size(self, population_size: int) -> None:
         """Protect named-actor reuse from binding a new scheduler to an old cohort shape.
@@ -190,12 +190,19 @@ class ClanCoordinator:
 
         return self.member_ids.get(trial_id)
 
-    def announce(self, trial_id: str, token: str, host: str, port: int | None) -> None:
+    def announce(
+        self,
+        trial_id: str,
+        token: str,
+        main_address: str | None,
+        main_port: int | None,
+    ) -> None:
         """Publish readiness for one exact function invocation and try to open its session.
 
-        Rank zero alone supplies the rendezvous port because every member must converge on one
-        endpoint. Reusing the previous completed token is rejected: without fresh invocation
-        identity, a restarted process could consume a session belonging to its predecessor.
+        Rank zero alone supplies the rendezvous address/port because every member must converge
+        on one endpoint. Other members publish no unused network identity. Reusing the previous
+        completed token is rejected: without fresh invocation identity, a restarted process
+        could consume a session belonging to its predecessor.
         """
 
         if trial_id not in self.member_ids:
@@ -203,16 +210,18 @@ class ClanCoordinator:
         member_id = self.member_ids[trial_id]
         if not token:
             raise ValueError("runtime token must be non-empty")
-        if not host:
-            raise ValueError("runtime host must be non-empty")
-        if member_id == 0 and port is None:
-            raise ValueError("member zero must provide the DDP rendezvous port")
-        if member_id != 0 and port is not None:
-            raise ValueError("only member zero may provide the DDP rendezvous port")
+        if member_id == 0 and (not main_address or main_port is None):
+            raise ValueError("member zero must provide the DDP rendezvous address and port")
+        if member_id != 0 and (main_address is not None or main_port is not None):
+            raise ValueError("only member zero may provide the DDP rendezvous endpoint")
         if self._last_tokens.get(trial_id) == token:
             raise RuntimeError("a function invocation cannot reuse its previous runtime token")
 
-        self._pending[trial_id] = _PendingMember(token=token, host=host, port=port)
+        self._pending[trial_id] = _PendingMember(
+            token=token,
+            main_address=main_address,
+            main_port=main_port,
+        )
         self._try_open_session()
 
     def abort_announcement(self, trial_id: str, token: str) -> None:
@@ -241,7 +250,6 @@ class ClanCoordinator:
         if session is None or session.tokens.get(trial_id) != token:
             return None
         return {
-            "session_id": session.session_id,
             "member_id": self.member_ids[trial_id],
             "main_address": session.main_address,
             "main_port": session.main_port,
@@ -251,9 +259,9 @@ class ClanCoordinator:
         """Atomically snapshot a complete pending cohort into one immutable DDP session.
 
         The pending set must exactly equal the registered population. Rank zero's announced
-        host/port becomes the common rendezvous endpoint. Once snapshotted, pending entries are
-        cleared so announcements for the next invocation cannot mix with the current session;
-        ``_last_tokens`` separately prevents completed-token reuse.
+        address/port becomes the common rendezvous endpoint. Once snapshotted, pending entries
+        are cleared so announcements for the next invocation cannot mix with the current
+        session; ``_last_tokens`` separately prevents completed-token reuse.
         """
 
         if len(self.member_ids) != self.population_size:
@@ -265,16 +273,14 @@ class ClanCoordinator:
             trial_id for trial_id, member_id in self.member_ids.items() if member_id == 0
         )
         rank_zero = self._pending[rank_zero_trial]
-        if rank_zero.port is None:
-            raise RuntimeError("rank-zero rendezvous port disappeared before session creation")
+        if rank_zero.main_address is None or rank_zero.main_port is None:
+            raise RuntimeError("rank-zero rendezvous endpoint disappeared before session creation")
 
         tokens = {trial_id: member.token for trial_id, member in self._pending.items()}
         self._session = _Session(
-            session_id=self._next_session_id,
             tokens=tokens,
-            main_address=rank_zero.host,
-            main_port=rank_zero.port,
+            main_address=rank_zero.main_address,
+            main_port=rank_zero.main_port,
         )
-        self._next_session_id += 1
         self._last_tokens = tokens
         self._pending = {}
