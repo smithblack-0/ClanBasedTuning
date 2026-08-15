@@ -1,12 +1,14 @@
 """Unit contracts for framework-independent Clan selection and mutation policy.
 
 These tests exercise the algorithm without Ray or Lightning. They verify stable winner
-selection, mutation validation, and the defining generation contract: every next member is
-an independent mutation of the same selected parent in stable member-ID order.
+selection, mutation validation, injected composition, and the defining generation contract:
+every next member is an independent mutation of the same selected parent in stable member-ID
+order.
 """
 
 import math
 import random
+from collections.abc import Sequence
 from typing import Any
 
 import pytest
@@ -112,6 +114,32 @@ def test_generation_mutates_every_sibling_from_one_parent_in_stable_order() -> N
     assert [child["lr"] for child in decision.child_configs] == pytest.approx(
         [0.1924690426284743, 0.2159468026720305]
     )
+
+
+def test_generation_uses_injected_winner_selection() -> None:
+    """Generation orchestration reaches winner policy through its explicit composition seam."""
+
+    selections: list[tuple[list[float], str]] = []
+
+    def select_first(population: Sequence[float], mode: str) -> int:
+        """Record the policy input and deliberately select member zero."""
+
+        selections.append((list(population), mode))
+        return 0
+
+    decision = resolve_generation(
+        fitnesses=[9.0, 1.0],
+        configs=[{"lr": 0.1}, {"lr": 0.2}],
+        mode="min",
+        mutations={},
+        random_stream=random.Random(7),
+        _select_winner=select_first,
+    )
+
+    assert selections == [([9.0, 1.0], "min")]
+    assert decision.winner_id == 0
+    assert decision.parent_config == {"lr": 0.1}
+    assert decision.child_configs == ({"lr": 0.1}, {"lr": 0.1})
 
 
 def test_selection_supports_min_max_and_stable_ties() -> None:
