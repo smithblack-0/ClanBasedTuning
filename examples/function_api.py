@@ -23,7 +23,11 @@ from clan_based_tuning import ClanDDPStrategy, ClanScheduler, ClanTuneReportCall
 
 
 class ScalarModel(pl.LightningModule):
-    """Tiny Lightning model that visibly applies its Tune genome after restoration."""
+    """Keep the public ownership boundary visible with the smallest useful Lightning model.
+
+    The model stores the Tune genome and owns the optimizer. Nothing in CBT knows that ``lr``
+    is an optimizer field; that mapping exists only in this userspace class.
+    """
 
     def __init__(self, genome: dict[str, float]) -> None:
         super().__init__()
@@ -36,7 +40,12 @@ class ScalarModel(pl.LightningModule):
         )
 
     def on_train_start(self) -> None:
-        """Apply the current Tune genome after Lightning restores optimizer state."""
+        """Apply the child genome only after Lightning has restored inherited optimizer state.
+
+        This ordering is the key userspace contract: checkpoint restore supplies the selected
+        parent's model/optimizer history, then user code applies the receiving member's new
+        policy values to that live optimizer.
+        """
 
         # USERSPACE. Lightning has restored the selected optimizer history before this hook.
         # CBT does not know what "lr" means and does not perform, wrap, or infer this edit.
@@ -44,26 +53,31 @@ class ScalarModel(pl.LightningModule):
             param_group["lr"] = self.genome["lr"]
 
     def training_step(self, batch: tuple[torch.Tensor], batch_index: int) -> torch.Tensor:
-        """Produce one deliberately simple gradient for the mechanics example."""
+        """Use a deliberately transparent gradient so the example foregrounds CBT mechanics."""
 
         del batch, batch_index
         return self.weight
 
     def validation_step(self, batch: tuple[torch.Tensor], batch_index: int) -> None:
-        """Report member-local fitness and the applied learning rate."""
+        """Report local candidate fitness plus evidence that userspace applied the genome."""
 
         del batch, batch_index
         self.log("val_loss", self.weight.square())
         self.log("lr_seen", self.optimizer.param_groups[0]["lr"])
 
     def configure_optimizers(self) -> torch.optim.Optimizer:
-        """Return the user-owned optimizer whose state is inherited between generations."""
+        """Hand Lightning the user-owned optimizer whose momentum history CBT later inherits."""
 
         return self.optimizer
 
 
 def train(genome: dict[str, float]) -> None:
-    """Run one ordinary Ray Tune function trial representing one Clan member."""
+    """Implement one Clan member as an ordinary Tune function and ordinary Lightning restore.
+
+    Tune checkpoint materialization is kept alive only long enough for ``Trainer.fit`` to
+    restore it. There is no CBT-specific trainable wrapper and no checkpoint surgery; the
+    receiving genome is applied later by the model's normal ``on_train_start`` hook.
+    """
 
     torch.set_num_threads(1)
     model = ScalarModel(genome)
@@ -109,7 +123,12 @@ def train(genome: dict[str, float]) -> None:
 
 
 def main() -> None:
-    """Run a complete two-member Clan for three generation boundaries."""
+    """Compose the three public CBT objects with Tune while keeping variation scientifically valid.
+
+    The only mutated field is learning rate, which changes the optimizer update after the
+    common DDP gradient has already been computed. Architecture, data, forward computation,
+    and loss remain identical across members.
+    """
 
     population_size = 2
     scheduler = ClanScheduler(

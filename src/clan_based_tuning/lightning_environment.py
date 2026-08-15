@@ -1,31 +1,40 @@
 """Lightning cluster environment for one externally launched Tune member process.
 
-Ray launches one process and exposes one device per Clan member. Lightning still expects a
-``ClusterEnvironment`` describing ranks and rendezvous facts before it initializes PyTorch
-DDP. ``TuneMemberEnvironment`` supplies those immutable facts without owning process launch,
-backend selection, process-group creation, collectives, or teardown.
+Ray launches one process/device per Clan member, while Lightning expects one
+``ClusterEnvironment`` to describe the ranks and rendezvous endpoint before DDP setup. This
+adapter supplies only those facts. It does not launch processes, choose the backend, create the
+process group, or own collectives/teardown.
 
-Each Tune member is represented as one logical one-process Lightning node: ``local_rank`` is
-zero while ``node_rank`` and ``global_rank`` both identify the stable Clan member. This is a
-framework adapter representation, not a claim that every member runs on a distinct physical
-machine.
+The unusual part is deliberate: every Tune trial is a separate OS process with local rank 0,
+but CBT presents each process as a logical one-process Lightning node. Therefore node rank and
+global rank are the same stable Clan member ID. This is framework bookkeeping, not a claim
+that each member runs on a different physical host.
 """
 
 from lightning.pytorch.plugins.environments import ClusterEnvironment
 
 from clan_based_tuning.cohort import ClanRuntime
 
+# Main
+
 
 class TuneMemberEnvironment(ClusterEnvironment):
-    """Expose scheduler-assigned one-process-per-member topology to Lightning."""
+    """Present one already-running Tune member as a fixed external Lightning rank.
+
+    Only values that can legitimately vary are constructor inputs. ``local_rank`` is always
+    zero and ``node_rank`` always equals ``global_rank`` for the supported one-process-per-
+    trial topology, so callers cannot construct a contradictory mapping.
+
+    Lightning may call the setter methods during strategy setup. They are validation hooks,
+    not mutation hooks: CBT's scheduler/runtime already assigned the world before Lightning
+    entered it, so a different value indicates framework configuration drift and is rejected.
+    """
 
     def __init__(
         self,
         *,
         global_rank: int,
         world_size: int,
-        local_rank: int,
-        node_rank: int,
         main_address: str,
         main_port: int,
     ) -> None:
@@ -36,79 +45,92 @@ class TuneMemberEnvironment(ClusterEnvironment):
 
         self._global_rank = global_rank
         self._world_size = world_size
-        self._local_rank = local_rank
-        self._node_rank = node_rank
         self._main_address = main_address
         self._main_port = main_port
 
     @property
     def creates_processes_externally(self) -> bool:
-        """Tell Lightning that Ray Tune already launched every member process."""
+        """Prevent Lightning from spawning processes that Ray Tune already launched."""
 
         return True
 
     @property
     def main_address(self) -> str:
-        """Return the scheduler-supplied rendezvous address."""
+        """Give every rank the rank-zero rendezvous host selected for this invocation."""
 
         return self._main_address
 
     @property
     def main_port(self) -> int:
-        """Return the scheduler-supplied rendezvous port."""
+        """Give every rank the rank-zero rendezvous port selected for this invocation."""
 
         return self._main_port
 
     @staticmethod
     def detect() -> bool:
-        """Require explicit construction because arbitrary Tune trials are not a Clan."""
+        """Disable automatic detection because an arbitrary Tune trial is not necessarily CBT.
+
+        The strategy constructs this environment only after successful Clan runtime discovery;
+        environment-variable heuristics would risk attaching CBT topology to unrelated Tune
+        workloads.
+        """
 
         return False
 
     def world_size(self) -> int:
-        """Return the complete externally assigned Clan world size."""
+        """Expose the immutable scheduler-assigned Clan population as Lightning's DDP world."""
 
         return self._world_size
 
     def set_world_size(self, size: int) -> None:
-        """Reject a Lightning configuration that conflicts with scheduler topology."""
+        """Catch Lightning configuration that would split or enlarge the fixed Clan world."""
 
         if size != self._world_size:
             raise RuntimeError("Lightning world size conflicts with the assigned Clan topology")
 
     def global_rank(self) -> int:
-        """Return this member process's externally assigned distributed rank."""
+        """Expose the stable Clan member ID as the process's DDP global rank."""
 
         return self._global_rank
 
     def set_global_rank(self, rank: int) -> None:
-        """Reject a Lightning configuration that changes the assigned member rank."""
+        """Reject any attempt to remap the stable member after runtime rendezvous."""
 
         if rank != self._global_rank:
             raise RuntimeError("Lightning global rank conflicts with the assigned Clan topology")
 
     def local_rank(self) -> int:
-        """Return zero for the single process/device visible inside this Tune trial."""
+        """Report local rank zero because each Tune trial exposes exactly one process/device."""
 
-        return self._local_rank
+        return 0
 
     def node_rank(self) -> int:
-        """Return the logical one-process-node index used to preserve the external rank."""
+        """Use the member ID as a logical one-process-node rank for Lightning's rank formula.
 
-        return self._node_rank
+        ``ClanDDPStrategy.set_world_ranks`` preserves the externally assigned global rank, so
+        this value is topology metadata for Lightning rather than physical-node identity.
+        """
+
+        return self._global_rank
+
+
+# Construction
 
 
 def build_tune_member_environment(
     runtime: ClanRuntime,
     _cls: type[TuneMemberEnvironment] = TuneMemberEnvironment,
 ) -> TuneMemberEnvironment:
-    """Construct Lightning's topology adapter from one resolved Clan runtime."""
+    """Translate resolved Clan runtime identity into Lightning topology exactly once.
+
+    Keeping this translation outside ``ClanDDPStrategy`` prevents the strategy from learning
+    Ray runtime layout and gives tests one construction seam. A replacement class must honor
+    the same fixed mapping: member ID -> global/node rank, with one local process per trial.
+    """
 
     return _cls(
         global_rank=runtime.member_id,
-        world_size=runtime.world_size,
-        local_rank=0,
-        node_rank=runtime.member_id,
+        world_size=runtime.spec.population_size,
         main_address=runtime.main_address,
         main_port=runtime.main_port,
     )

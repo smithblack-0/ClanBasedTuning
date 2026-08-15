@@ -1,10 +1,10 @@
 """Lightning DDP strategy for independently launched Clan Tune members.
 
-``ClanDDPStrategy`` adapts Lightning's native DDP strategy to a world whose ranks are separate
-Ray Tune trials rather than processes spawned by Lightning. Runtime discovery supplies only
-the topology Lightning cannot infer. Lightning/PyTorch retain backend selection, process-group
-creation, gradient reduction, barriers, and teardown; CBT additionally scopes one round
-checkpoint write to the selected member and replicates Lightning-managed validation data.
+``ClanDDPStrategy`` keeps Lightning/PyTorch in charge of DDP while adapting two assumptions
+that do not hold for CBT: ranks are separate Tune trials rather than Lightning-spawned local
+processes, and the checkpoint writer changes each generation with the selected winner.
+Runtime discovery supplies the external topology; Lightning still owns backend selection,
+process-group creation, gradient reduction, barriers, optimizer restore, and teardown.
 """
 
 from collections.abc import Callable
@@ -22,23 +22,29 @@ from clan_based_tuning.lightning_environment import (
 )
 from clan_based_tuning.runtime import join_runtime
 
+# Main
+
 
 class ClanDDPStrategy(DDPStrategy):
-    """Use Lightning's native DDP across independently launched Tune trials.
+    """Run native Lightning DDP across one independently launched Tune process per member.
+
+    Construction resolves Clan runtime before ``DDPStrategy`` is initialized because
+    Lightning requires a ``ClusterEnvironment`` during base-strategy construction. This is an
+    intentional framework-lifecycle constraint, not hidden CBT process creation: runtime
+    discovery joins already-launched Tune workers and returns topology facts only.
+
+    ``broadcast_buffers`` is forced off because buffers belong to each candidate's diverged
+    model state after the shared-gradient point. Broadcasting them from one rank would silently
+    couple candidates outside the intended DDP gradient synchronization.
 
     Args:
-        _runtime_provider: Injectable runtime discovery function used by isolated tests. Normal
-            users leave this at ``join_runtime``.
-        _environment_builder: Injectable topology adapter construction function. Normal users
-            leave this at ``build_tune_member_environment``.
-        **ddp_kwargs: Ordinary Lightning ``DDPStrategy`` keyword arguments. A custom
-            ``cluster_environment`` is not allowed because CBT supplies the Tune-member
-            topology. ``process_group_backend`` remains an ordinary Lightning override.
-
-    Raises:
-        TypeError: If a custom cluster environment is supplied.
-        ValueError: If DDP buffer broadcasting is explicitly enabled.
-        RuntimeError: During setup if Lightning resolves more than one local process/device.
+        _runtime_provider: Runtime discovery seam. Replacements must return the stable identity
+            and rendezvous assigned to the current Tune trial without creating a second process.
+        _environment_builder: Translation seam from Clan runtime to Lightning's fixed external
+            topology contract.
+        **ddp_kwargs: Ordinary Lightning ``DDPStrategy`` options. Backend and timeout remain
+            Lightning-owned; a custom ``cluster_environment`` is rejected because it would
+            conflict with the scheduler-assigned world.
     """
 
     def __init__(
@@ -52,11 +58,12 @@ class ClanDDPStrategy(DDPStrategy):
     ) -> None:
         if "cluster_environment" in ddp_kwargs:
             raise TypeError("ClanDDPStrategy supplies its Tune-member cluster environment")
-        if ddp_kwargs.get("broadcast_buffers") is True:
+        if "broadcast_buffers" in ddp_kwargs and ddp_kwargs["broadcast_buffers"] is True:
             raise ValueError("Clan members require broadcast_buffers=False after DDP setup")
 
-        # DDPStrategy requires its ClusterEnvironment during construction, so runtime discovery
-        # cannot be deferred to setup_environment without replacing Lightning's own lifecycle.
+        # DDPStrategy consumes ClusterEnvironment during __init__. Deferring discovery to
+        # setup_environment would require replacing Lightning's construction lifecycle rather
+        # than adapting it, so resolve only the already-existing external runtime here.
         runtime = _runtime_provider()
         environment = _environment_builder(runtime)
         ddp_kwargs["broadcast_buffers"] = False
@@ -67,13 +74,24 @@ class ClanDDPStrategy(DDPStrategy):
 
     @property
     def clan_runtime(self) -> ClanRuntime:
-        """Return the stable Clan identity assigned to this Tune trial."""
+        """Expose the already-resolved member identity to the reporting callback.
+
+        The callback must use the same runtime that created this DDP strategy; rediscovering it
+        independently could observe a different invocation during retry/restore.
+        """
 
         return self._clan_runtime
 
     @property
     def distributed_sampler_kwargs(self) -> dict[str, int]:
-        """Partition training while replicating Lightning-managed validation data."""
+        """Partition training but replicate Lightning-managed validation across candidates.
+
+        Training must retain ordinary DDP partitioning so all ranks contribute to one shared
+        gradient stream. Candidate fitness, however, is comparable only when every member sees
+        the same full validation workload, so Lightning's automatic validation sampler is
+        presented as a one-replica rank-zero sampler on every process. Explicit user-provided
+        distributed samplers remain user-owned.
+        """
 
         trainer = self.lightning_module.trainer if self.lightning_module is not None else None
         if trainer is not None and (trainer.validating or trainer.sanity_checking):
@@ -81,7 +99,12 @@ class ClanDDPStrategy(DDPStrategy):
         return {"num_replicas": self.world_size, "rank": self.global_rank}
 
     def setup_environment(self) -> None:
-        """Enter ordinary DDP setup without asking Lightning to spawn another process."""
+        """Reject nested local spawning, then let Lightning perform normal DDP setup.
+
+        One Tune trial must correspond to exactly one Lightning process/device. If Lightning
+        resolves more than one local process, proceeding would create ranks that the scheduler
+        never registered and break stable member identity.
+        """
 
         if self.num_processes != 1:
             raise RuntimeError(
@@ -91,12 +114,23 @@ class ClanDDPStrategy(DDPStrategy):
         super().setup_environment()
 
     def set_world_ranks(self) -> None:
-        """Keep the externally assigned cross-trial rank and world size unchanged."""
+        """Preserve ranks assigned across Tune trials instead of letting Lightning recompute them.
+
+        Normal ``DDPStrategy`` derives global rank from Lightning's own node/local launch
+        topology. CBT's processes were launched independently by Tune and already have stable
+        global ranks from ``TuneMemberEnvironment``. Updating only Lightning's rank-zero helper
+        state keeps decorators/logging aligned without replacing the external assignment.
+        """
 
         rank_zero_only.rank = utilities_rank_zero_only.rank = self.global_rank
 
     def begin_round_checkpoint(self, source_rank: int) -> None:
-        """Scope the next Lightning checkpoint persistence to the selected Clan member."""
+        """Temporarily select which Clan member may persist the round continuation.
+
+        Every rank still enters ``Trainer.save_checkpoint`` so Lightning's checkpoint hooks and
+        post-save barrier remain symmetric. This flag changes only the physical writer; it does
+        not bypass checkpoint construction on losing members.
+        """
 
         if self._round_checkpoint_source is not None:
             raise RuntimeError("a Clan round checkpoint is already active")
@@ -105,7 +139,11 @@ class ClanDDPStrategy(DDPStrategy):
         self._round_checkpoint_source = source_rank
 
     def end_round_checkpoint(self) -> None:
-        """Return later user-requested checkpoints to ordinary Lightning semantics."""
+        """End the temporary winner-only write scope before user checkpointing can continue.
+
+        Failing to clear this state would make later ordinary Lightning checkpoints silently
+        winner-gated, so an unmatched begin/end pair is treated as lifecycle corruption.
+        """
 
         if self._round_checkpoint_source is None:
             raise RuntimeError("no Clan round checkpoint is active")
@@ -117,7 +155,14 @@ class ClanDDPStrategy(DDPStrategy):
         filepath: str | Path,
         storage_options: Any | None = None,
     ) -> None:
-        """Persist only the selected round source while Trainer retains its barrier."""
+        """Change only the round's physical writer while preserving Lightning checkpoint flow.
+
+        Outside a Clan round, delegate unchanged to Lightning. During a round, the selected
+        member writes through the configured ``CheckpointIO`` while losing ranks return from
+        this strategy hook; ``Trainer.save_checkpoint`` still executes its normal barrier after
+        the hook on every rank. This is necessary because CBT's winner is dynamic and need not
+        be global rank zero.
+        """
 
         source_rank = self._round_checkpoint_source
         if source_rank is None:

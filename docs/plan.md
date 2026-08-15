@@ -1,74 +1,117 @@
-# Active corrective and production plan
+# Remaining readiness gates
 
-Status: correction wave qualified; production qualification continues
+This plan begins from merged PR #52. The corrected function API and CPU mechanics are the
+baseline; green mechanics are necessary evidence, not production completion.
 
-## Corrective baseline
+## 1. Executable CPU and failure qualification
 
-The architecture correction is implemented and directly qualified on the initial two-member
-single-node CPU path. The public userspace API was preserved while the internal ownership was
-simplified:
+- Retain the exact scalar state-transfer contract.
+- Add a small realistic MLP/AdamW contract with real forward/backward and optimizer restore.
+- Prove insufficient resident capacity terminates through a bounded, diagnosable rendezvous
+  failure rather than time-multiplexing a partial Clan into DDP.
+- Keep destructive active-peer failure separately opt-in so ordinary CI does not deliberately
+  kill live framework processes.
 
-- the scheduler owns the small synchronous Clan transition instead of inheriting Ray PBT
-  internals;
-- low-level Tune checkpoint/config transfer is isolated in `ray_compat.py`;
-- generation selection/mutation is framework-independent and stable by member ID;
-- the obsolete stateful worker controller is gone;
-- pure cohort state is separate from Ray runtime effects;
-- userspace applies the receiving genome after Lightning optimizer restoration; and
-- package dependencies avoid a needless Ray minor-version pin.
+Exit: exact branch head passes pure, package, CPU framework, restore, and insufficient-capacity
+contracts.
 
-GitHub Actions run `31849703451` re-established repeated generation transition, fresh-runtime
-restore, logical Lightning topology, and real two-rank DDP on Ray 2.57.0 / Lightning 2.6.5 /
-PyTorch 2.10.0+cpu. Passing that mechanics/lifecycle gate does not itself establish production
-readiness.
+## 2. Hardware/topology qualification surfaces
 
-## Next production work
+- Keep the CUDA/NCCL test small: two Tune members, one GPU each, synthetic data, two-layer MLP,
+  repeated Clan transition, no model download.
+- Provide physical multi-node qualification against an existing Ray cluster, requiring shared
+  Tune storage and proof that the two members actually ran on distinct nodes.
+- Record hardware/software/topology with any passing evidence before broadening support claims.
 
-### Complete-cohort and failure behavior
+Exit: tests are runnable from a checkout and self-skip when their required environment is not
+present. Support remains a non-claim until the corresponding test is actually executed.
 
-Keep the explicit requirement that the complete Clan fit concurrently. Qualify insufficient
-capacity and participant failure with the current Ray/Lightning/PyTorch lifecycle before
-considering extra admission/watchdog machinery. Do not build a second resource scheduler
-without evidence that it materially improves the overall design.
+## 3. Diagnostics
 
-### Compatibility
+- Emit standard Python logging for cohort registration/join, generation boundary progress,
+  selected parent/child mutation values, checkpoint source, timeout/failure, and successful
+  runtime release.
+- Keep diagnostics at Clan ownership seams; do not replace Ray/Lightning/PyTorch logging.
+- Avoid dumping arbitrary full user configs when only mutation-controlled keys are relevant.
 
-Maintain a reasonable minimum Ray/Lightning/PyTorch installation envelope and test
-representative versions as the project matures. Do not point-pin users merely to avoid
-maintaining the compatibility seam. Narrow dependency bounds only when direct evidence shows
-an incompatible version that cannot reasonably be adapted.
+Exit: an operator can identify cohort/member/round/selection/checkpoint/timeout/release state
+without a second package-owned execution system.
 
-### GPU and multi-node
+## 4. Typing and distribution
 
-Run the same public path on CUDA/NCCL, then across physical nodes. Resolve only gaps shown by
-those environments. Revisit the logical one-process-node topology if physical-node semantics
-become relevant.
+- Ship `py.typed` only with an executable maintained package-source type-check contract.
+- Build wheel and sdist, validate metadata, validate release rendering, install the wheel
+  non-editably, and import the actual public surface from the installed artifact.
+- Preserve broad major-version dependency bounds; qualification evidence, not point pinning,
+  determines support.
 
-### Realistic application and performance
+Exit: static and built-artifact checks pass on the exact branch head.
 
-Add a small realistic optimizer-training E2E and measure generation-boundary overhead,
-checkpoint cost, function-process restart cost, and throughput relative to ordinary DDP.
-Actor reuse or another user API should be reconsidered only if measurements show the current
-function path is materially too expensive.
+## 5. Performance evidence
 
-### Observability
+- Provide a no-download benchmark using the same tiny realistic workload.
+- Record wall clock, Ray member time, checkpoint size/count, generation count, and final
+  fitness on representative hardware.
+- Do not invent a universal threshold from CI. Use measurements to decide whether restart
+  overhead or actor reuse is materially important before reopening API design.
 
-Add Clan-specific diagnostics for cohort formation, generation boundary, selected parent,
-child mutations, checkpoint transfer, and failure while avoiding duplicate framework logs.
+Exit: measurement tooling is reproducible. Performance claims require recorded representative
+runs, not merely the existence of the script.
 
-### Typing and distribution
+## 6. Security, release, and legal readiness
 
-Finish trustworthy annotations and decide on a maintained static-checker/PEP 561 support
-claim. Continue testing a built wheel rather than only editable-checkout behavior.
+- Publish a vulnerability-reporting path that does not solicit exploit details in public.
+- Maintain a pre-1.0 version/release checklist, changelog, build and `twine check` validation,
+  and evidence-bounded release notes.
+- Do not select a project license on behalf of the owner.
 
-### Release/adoption
+Exit: process/docs/artifact checks are ready; ordinary public release remains blocked until the
+owner selects a license.
 
-The project owner must select a license before an ordinary open-source production release.
-Add security reporting, release/version policy, and a reproducible release process
-appropriate to the intended support level.
+## 7. Documentation and examples synchronization
 
-## Completion boundary
+- Re-run the public API/example review after all new qualification surfaces exist.
+- Keep userspace optimizer application visible.
+- Make local GPU/multi-node/failure commands operational and distinguish runnable harnesses
+  from directly qualified support.
+- Ensure STATUS, API docs, README, examples, qualification records, and release policy tell the
+  same story.
 
-Production readiness requires the corrected architecture plus the relevant
-hardware/failure/performance/release evidence. “It runs” and “all tests pass” remain inputs to
-the final design review rather than its conclusion.
+Exit: an implementer can install, run the CPU example, run applicable local qualification, and
+understand every current non-claim without reading development history.
+
+## 8. Final style and quality re-audit — mandatory last gate
+
+This gate is performed only after gates 1–7 have been synchronized. Passing tests is input to
+this review, not its conclusion.
+
+Re-audit the shipped source, tests, examples, active docs, packaging, and release surfaces
+against the authoritative project style/quality contract. At minimum review:
+
+- fast, effective, maintainable, correct, and concise simultaneously;
+- module/class/function documentation and complete type annotations;
+- whether each retained function/method earns its abstraction, using useful documentation as
+  a forcing function rather than a coverage target;
+- dependency injection/construction boundaries and absence of hidden construction ownership;
+- imports, module organization, and responsibility level;
+- test isolation, documentation quality, no patching where injection should exist, and a few
+  small realistic end-to-end contracts;
+- Ray/Lightning/PyTorch ownership versus CBT ownership;
+- userspace genome ownership and scientific validity boundaries;
+- distribution/release truthfulness and dependency compatibility policy; and
+- synchronization of README, API docs, examples, STATUS, qualification, and release records.
+
+Any concrete issue found is corrected and the relevant executable evidence is rerun. A
+function whose useful docstring can only paraphrase its name, signature, or obvious body is a
+prompt to reconsider the abstraction; framework-required small methods are retained when their
+interface role itself is the reason. External evidence gates such as owner license selection or
+hardware that has not been run remain explicitly blocked/non-claimed rather than being waved
+through by the code-quality audit.
+
+### Gate result
+
+Completed against executable commit `5f117df15b89d468663abdb6ec9e316ca89ca2b8`
+after the initial audit was reopened for a documentation-driven abstraction pass. Exact
+executable evidence is GitHub Actions run `31902897008`, which passed Python 3.11, Python 3.13,
+and the real Ray/Lightning job. The audit result and remaining external blockers are recorded
+in [`reviews/readiness_quality_audit.md`](reviews/readiness_quality_audit.md).

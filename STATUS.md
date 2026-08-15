@@ -1,94 +1,110 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
-## Current corrective branch
+## Current readiness branch
 
-The function-API branch now contains the corrected architecture intended for continued
-maintenance. The public user shape remains:
+Merged PR #52 remains the corrected function-API baseline. The readiness branch adds
+qualification, diagnostics, typing/distribution checks, release process, and the final
+repository quality audit without changing the accepted public three-object API or moving
+genome application out of userspace.
 
-- an ordinary Ray Tune function receiving the current genome/config;
-- `ClanScheduler` through `TuneConfig(scheduler=...)`;
-- `ClanDDPStrategy` through Lightning's strategy interface;
-- `ClanTuneReportCallback` through Lightning callbacks; and
-- one Ray trial/resource allocation per Clan member.
+The latest executable candidate is commit
+`5f117df15b89d468663abdb6ec9e316ca89ca2b8`. GitHub Actions run `31902897008` passed both
+ordinary Python validation jobs and the real Ray/Lightning framework job on that exact commit.
+Subsequent commits only synchronize audit/status documentation.
 
-Genome application remains entirely userspace.
+## Directly established CPU behavior
 
-## Architecture correction
+The real framework job used Python 3.11.15, Ray 2.57.0, Lightning 2.6.5, PyTorch 2.10.0+cpu,
+Linux, and local CPU execution. It passed:
 
-The corrective implementation removes inheritance from Ray's stock PBT internals. The
-scheduler owns the small synchronous Clan transition and isolates the unavoidable Tune
-checkpoint/config transfer details in `ray_compat.py`. Package users are therefore not tied
-to one Ray minor release merely to preserve PBT subclass internals.
+- repeated two-member single-parent Clan generation transition;
+- fresh-runtime `Tuner.restore` after a deliberate post-restore failure;
+- insufficient-capacity failure at the CBT rendezvous boundary before DDP;
+- a realistic tiny two-layer MLP + AdamW repeated training/restore contract;
+- logical one-process-member Lightning topology; and
+- a real two-rank framework-managed GLOO DDP world.
 
-The same wave:
+The insufficient-capacity contract gives Ray only one CPU for a two-member Clan. Both trials
+must fail with the CBT `complete Clan did not become resident` rendezvous error and neither may
+reach a `DistNetworkError`. Timed-out pre-DDP announcements are retracted before failure so a
+later process cannot rendezvous with a dead member.
 
-- removes the one-use stateful `ClanController`;
-- makes generation selection/mutation one pure deterministic operation in stable member
-  order;
-- prevents paused early reporters from re-entering before the complete generation transition;
-- separates pure cohort/session state from Ray runtime effects;
-- scopes runtime registry identity by Tune experiment and trial;
-- documents the one-process-per-member Lightning topology as logical rather than physical;
-- replaces serialized Lightning checkpoint editing with explicit userspace genome
-  application in `on_train_start()` after optimizer restore; and
-- makes Ray/Lightning/PyTorch ordinary runtime dependencies of the usable package.
+The ordinary validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
+package-source mypy, wheel/sdist build and `twine check`, non-editable installed-wheel import,
+package-surface checks, pure cohort/runtime/evolution contracts, and the remaining non-Ray
+suite.
 
-## Current qualification
+## Dependency and compatibility policy
 
-The corrected CPU path is directly qualified by GitHub Actions run `31849703451`.
+The package dependency envelope remains intentionally broader than the directly tested
+configuration:
 
-The real Ray contract ran with:
+- `ray[tune]>=2.56,<3`;
+- `lightning>=2.6,<3`; and
+- `torch>=2.10,<3`.
 
-- Python 3.11.15;
-- Ray 2.57.0;
-- Lightning 2.6.5;
-- PyTorch 2.10.0+cpu;
-- Linux;
-- one CPU node; and
-- two concurrently live Clan members.
+These are compatibility/installability bounds, not a claim that every admitted version has
+been qualified. Ray-specific low-level continuation transfer remains isolated in
+`ray_compat.py`; framework-minor changes should be repaired at that boundary when possible
+rather than forcing users onto one point release.
 
-All four real framework contracts passed: repeated single-parent generation transition,
-fresh-runtime `Tuner.restore` after a deliberate post-restore failure, logical external
-Lightning topology, and a real two-rank framework-managed DDP world. The repeated-transition
-contract also preserves the accepted seed-7 sibling learning rates.
+## Repository quality audit
 
-The non-Ray validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
-wheel/sdist installation metadata and import checks, package surface checks, pure cohort
-contracts, and pure evolution contracts.
+The mandatory post-gate repository-wide audit is recorded in
+[`docs/reviews/readiness_quality_audit.md`](docs/reviews/readiness_quality_audit.md). It reviewed
+shipped source, tests, examples, active docs, packaging, qualification, and release surfaces
+against the project style/quality contract after the readiness work was synchronized.
 
-The package dependency range is intentionally broader than this evidence: currently
-`ray[tune]>=2.56,<3`, `lightning>=2.6,<3`, and `torch>=2.10,<3`. That range avoids needless
-minor-version installation breakage; it is not a claim that every admitted version has been
-qualified. Ray 2.57.0 is the current directly established scheduler compatibility point.
+The audit was reopened for a documentation-driven abstraction pass after it became clear that
+mere docstring coverage could hide weak functions. Retained functions now document non-obvious
+responsibility, invariants, framework contracts, failure semantics, or ownership. Helpers and
+state that could not justify an independent boundary were removed rather than given ceremonial
+docstrings. The same pass removed tests that froze harmless `__all__` ordering.
 
-## Deliberate support limits
+Earlier audit findings also fixed runtime-construction ownership, repeated Ray registration
+work, completed-runtime cleanup, stale pre-DDP rendezvous state, and auxiliary-function
+injection seams. Passing tests were treated as evidence for the review rather than as the
+review itself.
 
-The complete Clan must fit concurrently. The current path does not yet claim:
+## Runnable but not yet qualified locally
 
-- CUDA/NCCL;
-- physical multi-node execution;
-- bounded recovery after a participant disappears inside an active collective;
-- custom/sharded checkpoint plugins;
-- arbitrary user-supplied distributed validation samplers;
-- model-sharded Clan execution; or
-- realistic scientific/performance overhead.
+The repository contains no-download/local qualification harnesses for remaining environment-
+dependent claims:
 
-Function-trainable actor reuse is not a current target. Restart cost should be measured
-before reopening the accepted function API.
+- two-GPU CUDA/NCCL;
+- physical multi-node Ray execution with shared Tune storage; and
+- destructive live-DDP-participant failure.
 
-## Remaining production/adoption gates
+A skip is not evidence. These support claims remain open until the corresponding test passes
+on a named environment and that evidence is recorded.
 
-The corrected CPU mechanics/lifecycle path is qualified, but that is not a production-ready
-claim. Remaining work includes:
+The CUDA/NCCL test can be run from a checkout with:
 
-- GPU/multi-node/failure evidence for any corresponding support claim;
-- realistic generation-boundary, checkpoint, restart, throughput, and scaling measurements;
-- Clan-specific diagnostics for cohort/round/parent/mutation/checkpoint/failure events;
-- a maintained static typing/PEP 561 policy if typing is claimed as supported API;
-- a project-owner license decision;
-- security reporting and release/version policy; and
-- a real release/distribution process.
+```bash
+python -m pip install -e '.[dev]'
+python -m pytest tests/hardware/test_cuda_function_path.py -vv
+```
+
+It uses only the tiny synthetic MLP/AdamW workload; no model or dataset download is required.
+Physical multi-node and destructive-failure setup are documented in
+[`docs/qualification/hardware.md`](docs/qualification/hardware.md).
+
+## Remaining external release gates
+
+The repository engineering/readiness audit is complete, but an ordinary production/public
+release is still blocked by evidence or owner decisions outside this CPU qualification run:
+
+- **License:** the project owner must choose the license; this branch does not make that legal
+  decision.
+- **CUDA/NCCL:** test exists but has not been run on two visible GPUs in recorded evidence.
+- **Physical multi-node:** test exists but has not been run against a recorded two-node cluster.
+- **Active-collective participant failure:** destructive harness exists but has not been run in
+  recorded evidence.
+- **Performance:** reproducible measurement tooling exists, but representative workload/hardware
+  measurements are still required before making overhead or scaling claims.
+- **Model sharding/custom checkpoint plugins:** remain unqualified and are not current support
+  claims.
 
 CI workflow expansion remains separately approved work and was not modified by this branch.
