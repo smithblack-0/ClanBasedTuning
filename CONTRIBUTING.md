@@ -75,6 +75,21 @@ small, documented compatibility boundary over copying version-sensitive calls th
 system. The current Ray checkpoint/config transfer dependency is isolated in `ray_compat.py`;
 changes there require direct framework qualification.
 
+## Documentation as a design check
+
+Docstrings and comments preserve knowledge that is expensive to reconstruct from the code;
+they are not a coverage target. A useful docstring explains a non-obvious contract, ownership
+boundary, lifecycle/order constraint, failure mode, compatibility reason, or invariant.
+
+If a private helper's best explanation merely restates its name, arguments, return value, or
+obvious implementation, first ask whether the helper should be inlined or removed. Small
+framework-required overrides may still be necessary; document the framework assumption they
+adapt or the failure the override prevents rather than writing a ceremonial getter description.
+
+A practical review question is: **if this documentation disappeared, what maintenance knowledge
+would become materially harder to recover?** If the answer is “none,” either improve the
+explanation with real design information or reconsider the abstraction.
+
 ## Test priorities
 
 Use the narrowest test that establishes the contract:
