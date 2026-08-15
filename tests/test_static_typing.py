@@ -1,9 +1,9 @@
 """Static-typing quality contract for the shipped package source.
 
-The package advertises PEP 561 typing, so the repository's normal validation must prove that
-all package function definitions remain annotated and pass the maintained mypy policy. The
-framework boundaries are intentionally treated as external/dynamic; this contract checks CBT's
-own source rather than attempting to type-check Ray, Lightning, or PyTorch internals.
+The package advertises PEP 561 typing, so repository validation must exercise the same checker
+policy contributors are expected to maintain. Framework libraries remain dynamic external
+boundaries; this contract asks whether CBT's own annotated source is internally consistent,
+not whether Ray/Lightning/PyTorch type stubs are complete.
 """
 
 import subprocess
@@ -12,7 +12,11 @@ from pathlib import Path
 
 
 def test_package_source_passes_mypy_policy() -> None:
-    """The shipped package source satisfies the repository's configured static checker."""
+    """Run mypy from the repository root so project configuration is part of the contract.
+
+    A subprocess is intentional here: importing mypy APIs would bypass or partially duplicate
+    the command/config path contributors and CI actually use, weakening the value of the gate.
+    """
 
     repository_root = Path(__file__).resolve().parents[1]
     subprocess.run(
