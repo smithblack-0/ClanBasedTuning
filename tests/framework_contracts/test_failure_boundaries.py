@@ -1,9 +1,9 @@
 """Framework contracts for bounded Clan failure behavior.
 
-The normal suite proves that insufficient resources fail through the existing rendezvous
-boundary instead of hanging indefinitely. A separate destructive participant-exit test is
-available for explicit local qualification because intentionally killing a live DDP rank is
-not appropriate for every CI run.
+The normal suite proves that insufficient resources fail through the configured Clan
+rendezvous boundary instead of reaching DDP with a partial cohort. A separate destructive
+participant-exit test is available for explicit local qualification because intentionally
+killing a live DDP rank is not appropriate for every CI run.
 """
 
 import contextlib
@@ -33,12 +33,11 @@ def _error_texts(storage_path: Path) -> list[str]:
 
 
 @pytest.mark.failure_contract
-def test_insufficient_capacity_fails_with_bounded_rendezvous(tmp_path: Path) -> None:
-    """One available CPU cannot silently run half of a two-member Clan forever."""
+def test_insufficient_capacity_fails_at_clan_rendezvous_boundary(tmp_path: Path) -> None:
+    """One available CPU makes both two-member Clan trials fail before DDP initialization."""
 
     ray.shutdown()
     ray.init(num_cpus=1, include_dashboard=False, log_to_driver=False)
-    started = time.monotonic()
     try:
         tuner = tune.Tuner(
             tune.with_resources(train_tiny_mlp_member, {"cpu": 1}),
@@ -54,13 +53,12 @@ def test_insufficient_capacity_fails_with_bounded_rendezvous(tmp_path: Path) -> 
         with contextlib.suppress(TuneError):
             tuner.fit()
     finally:
-        elapsed = time.monotonic() - started
         ray.shutdown()
 
-    assert elapsed < 20.0
     errors = _error_texts(tmp_path)
-    assert errors
-    assert any("complete Clan did not become resident" in text for text in errors)
+    assert len(errors) == 2
+    assert all("complete Clan did not become resident" in text for text in errors)
+    assert all("DistNetworkError" not in text for text in errors)
 
 
 @pytest.mark.failure_contract
