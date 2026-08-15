@@ -1,10 +1,10 @@
 """Pure cohort identity and rendezvous state for Clan Tune members.
 
-The Ray runtime adapter creates these objects inside named actors, but their behavior is
-framework-independent. ``RuntimeRegistry`` maps one experiment/trial identity to a Clan
-runtime specification. ``ClanCoordinator`` assigns stable member IDs and opens one rendezvous
-session only after every registered member announces the same function invocation boundary.
-No object here creates actors, touches sockets, or initializes distributed process groups.
+The Ray runtime adapter places these objects inside named actors, but the state machine itself
+has no Ray, socket, or process-group effects. ``RuntimeRegistry`` answers "which Clan owns this
+experiment/trial?" while ``ClanCoordinator`` answers "which stable member is this trial, and
+are all members from the same function invocation ready to enter DDP?" Keeping those questions
+pure makes the failure/rendezvous invariants testable without a distributed runtime.
 """
 
 from dataclasses import dataclass
@@ -14,7 +14,11 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class _PendingMember:
-    """One member announcement waiting for the complete invocation cohort."""
+    """One not-yet-complete invocation announcement.
+
+    ``token`` distinguishes process invocations of the same stable Tune trial. Rank zero also
+    contributes the rendezvous port; other members contribute only their host identity.
+    """
 
     token: str
     host: str
@@ -23,7 +27,11 @@ class _PendingMember:
 
 @dataclass(frozen=True, slots=True)
 class _Session:
-    """One complete invocation cohort sharing a single DDP rendezvous endpoint."""
+    """Immutable rendezvous snapshot shared by one complete invocation cohort.
+
+    The per-trial token map is what prevents a process from accidentally reading a session
+    opened for an older invocation of the same Tune trial.
+    """
 
     session_id: int
     tokens: dict[str, str]
@@ -36,12 +44,12 @@ class _Session:
 
 @dataclass(frozen=True, slots=True)
 class ClanRuntimeSpec:
-    """Scheduler-owned configuration needed for one Clan cohort.
+    """Scheduler authority that every member needs before it can join the Clan.
 
-    ``coordinator_name`` uniquely identifies this scheduler instance. ``experiment_name`` is
-    paired with Tune trial IDs so concurrently running experiments cannot collide in the
-    process-wide registry. The remaining values are immutable facts consumed by every member
-    while it discovers and joins the cohort.
+    ``coordinator_name`` identifies this scheduler instance. ``experiment_name`` scopes trial
+    IDs in the cluster-wide registry so independent Tune runs cannot collide. The selection
+    and timeout fields are immutable because workers and driver must make the same decision
+    and observe the same rendezvous policy across retries/restores.
     """
 
     coordinator_name: str
@@ -56,7 +64,12 @@ class ClanRuntimeSpec:
 
 @dataclass(frozen=True, slots=True)
 class ClanRuntime:
-    """Process-local member identity and externally assigned DDP rendezvous facts."""
+    """Resolved process-local identity needed to hand this Tune trial to Lightning.
+
+    ``member_id`` is both the stable Clan member identity and externally assigned DDP global
+    rank. ``main_address``/``main_port`` identify the rank-zero rendezvous selected for this
+    exact function invocation.
+    """
 
     spec: ClanRuntimeSpec
     trial_id: str
@@ -64,19 +77,13 @@ class ClanRuntime:
     main_address: str
     main_port: int
 
-    @property
-    def world_size(self) -> int:
-        """Return the complete Clan member count used as the DDP world size."""
-
-        return self.spec.population_size
-
 
 class RuntimeRegistry:
-    """Keep experiment-scoped trial assignments discoverable by Tune member processes.
+    """Cluster-wide lookup from experiment-scoped Tune trials to scheduler authority.
 
-    One cluster-local Ray actor wraps this pure state. Schedulers add assignments before
-    members launch and remove them after the complete successful population finishes. Lookup
-    keys include both experiment and trial identity so unrelated Tune runs cannot collide.
+    Ray wraps one instance as a named actor. The small RPC-shaped methods are intentional:
+    member processes may start independently from the driver and must discover their runtime
+    assignment without receiving CBT state through the user's Tune config.
     """
 
     def __init__(self) -> None:
@@ -88,10 +95,11 @@ class RuntimeRegistry:
         trial_ids: list[str],
         runtime_spec: ClanRuntimeSpec,
     ) -> None:
-        """Register one complete scheduler assignment idempotently.
+        """Install one assignment idempotently, rejecting identity reuse by another Clan.
 
-        A conflicting assignment for the same experiment/trial identity is rejected rather
-        than silently redirecting a live or restored member into another Clan.
+        Re-registration is expected after scheduler restore, so writing the same mapping again
+        is harmless. A different spec for an existing experiment/trial key is rejected because
+        silently redirecting a live/restored worker would join it to the wrong DDP world.
         """
 
         for trial_id in trial_ids:
@@ -105,25 +113,36 @@ class RuntimeRegistry:
             self._runtime_specs[(experiment_name, trial_id)] = runtime_spec
 
     def unregister_trials(self, experiment_name: str, trial_ids: list[str]) -> None:
-        """Remove completed assignments without affecting other experiments or trials."""
+        """Remove only this experiment's completed assignments from the shared registry.
+
+        Missing keys are tolerated because successful cleanup is idempotent; unrelated
+        experiments sharing the registry remain untouched.
+        """
 
         for trial_id in trial_ids:
             self._runtime_specs.pop((experiment_name, trial_id), None)
 
     def get_runtime_spec(self, experiment_name: str, trial_id: str) -> ClanRuntimeSpec | None:
-        """Return the assignment for one experiment-scoped trial, if registered."""
+        """Support worker polling while scheduler registration races process startup.
+
+        ``None`` means "not registered yet", not "invalid trial"; ``join_runtime`` bounds that
+        polling with its bootstrap timeout.
+        """
 
         return self._runtime_specs.get((experiment_name, trial_id))
 
 
 class ClanCoordinator:
-    """Hold stable member assignment and per-invocation rendezvous state only.
+    """Bind stable members and same-invocation processes into one rendezvous session.
 
-    Trial registration fixes the mapping from Tune trial ID to Clan member ID. Each function
-    invocation supplies a fresh token; a session opens only when every member has announced,
-    preventing members from different invocations from entering one DDP rendezvous. A member
-    that abandons a pre-DDP rendezvous retracts its token so a later process cannot form a
-    session with a dead participant.
+    Trial registration is immutable once established and defines stable member IDs by sorted
+    trial ID. Every subsequent function invocation announces a fresh token. A session opens
+    only when every registered member has a pending token, preventing an early restarted
+    member from entering DDP with peers still executing the previous invocation.
+
+    A process that abandons pre-DDP rendezvous can retract only its exact token. This prevents
+    both stale dead-peer sessions and an older failing process from deleting a newer retry's
+    announcement.
     """
 
     def __init__(self, population_size: int) -> None:
@@ -135,13 +154,22 @@ class ClanCoordinator:
         self._next_session_id = 0
 
     def validate_population_size(self, population_size: int) -> None:
-        """Reject reuse of a named coordinator for a different Clan size."""
+        """Protect named-actor reuse from binding a new scheduler to an old cohort shape.
+
+        ``get_if_exists=True`` may return a pre-existing actor after restore. The actor is safe
+        to reuse only when its immutable population size matches the restoring scheduler.
+        """
 
         if population_size != self.population_size:
             raise RuntimeError("existing Clan coordinator has a different population size")
 
     def register_trials(self, trial_ids: list[str]) -> None:
-        """Fix stable member IDs for exactly one complete Tune population."""
+        """Freeze the complete Tune population into deterministic stable member IDs.
+
+        Sorting makes member/rank identity independent of Tune's trial-creation order. Once a
+        coordinator has an assignment, a different population is rejected rather than
+        remapping ranks underneath live or restored workers.
+        """
 
         if len(trial_ids) != self.population_size:
             raise ValueError("Clan coordinator requires the complete Tune population")
@@ -154,14 +182,25 @@ class ClanCoordinator:
         self.member_ids = assignment
 
     def get_member_id(self, trial_id: str) -> int | None:
-        """Return the stable member ID assigned to ``trial_id``."""
+        """Let workers poll until registration has assigned their stable DDP rank.
+
+        ``None`` is transient during startup; an unknown trial becomes a bounded runtime
+        failure in ``join_runtime`` rather than an actor-side exception that obscures context.
+        """
 
         return self.member_ids.get(trial_id)
 
     def announce(self, trial_id: str, token: str, host: str, port: int | None) -> None:
-        """Record one member's readiness for its current function invocation."""
+        """Publish readiness for one exact function invocation and try to open its session.
 
-        member_id = self._require_member(trial_id)
+        Rank zero alone supplies the rendezvous port because every member must converge on one
+        endpoint. Reusing the previous completed token is rejected: without fresh invocation
+        identity, a restarted process could consume a session belonging to its predecessor.
+        """
+
+        if trial_id not in self.member_ids:
+            raise RuntimeError(f"Tune trial {trial_id!r} is not registered with this Clan")
+        member_id = self.member_ids[trial_id]
         if not token:
             raise ValueError("runtime token must be non-empty")
         if not host:
@@ -177,19 +216,26 @@ class ClanCoordinator:
         self._try_open_session()
 
     def abort_announcement(self, trial_id: str, token: str) -> None:
-        """Retract this exact pending invocation announcement after pre-DDP failure.
+        """Retract only the failed process's still-current pre-DDP announcement.
 
-        A stale or superseded token is ignored so an older failing process cannot remove a
-        newer invocation that has already replaced its pending announcement.
+        A stale/superseded token is intentionally ignored. That compare-before-delete is what
+        makes timeout cleanup safe when Ray has already started a newer invocation of the same
+        stable trial.
         """
 
-        self._require_member(trial_id)
+        if trial_id not in self.member_ids:
+            raise RuntimeError(f"Tune trial {trial_id!r} is not registered with this Clan")
         pending = self._pending.get(trial_id)
         if pending is not None and pending.token == token:
             del self._pending[trial_id]
 
     def get_session(self, trial_id: str, token: str) -> dict[str, int | str] | None:
-        """Return the opened session only when it contains this trial's current token."""
+        """Expose a session only to the exact invocation that participated in opening it.
+
+        The coordinator retains the completed session long enough for independently polling
+        members to read it. Token matching prevents a later retry of the same trial from
+        inheriting that stale endpoint while another generation is forming.
+        """
 
         session = self._session
         if session is None or session.tokens.get(trial_id) != token:
@@ -201,16 +247,14 @@ class ClanCoordinator:
             "main_port": session.main_port,
         }
 
-    def _require_member(self, trial_id: str) -> int:
-        """Return the stable member ID or reject an unregistered Tune trial."""
-
-        member_id = self.member_ids.get(trial_id)
-        if member_id is None:
-            raise RuntimeError(f"Tune trial {trial_id!r} is not registered with this Clan")
-        return member_id
-
     def _try_open_session(self) -> None:
-        """Open one rendezvous session only after every registered member has announced."""
+        """Atomically snapshot a complete pending cohort into one immutable DDP session.
+
+        The pending set must exactly equal the registered population. Rank zero's announced
+        host/port becomes the common rendezvous endpoint. Once snapshotted, pending entries are
+        cleared so announcements for the next invocation cannot mix with the current session;
+        ``_last_tokens`` separately prevents completed-token reuse.
+        """
 
         if len(self.member_ids) != self.population_size:
             return
