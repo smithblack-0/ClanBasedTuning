@@ -67,15 +67,44 @@ For every awkward part, ask:
 
 ### 4. Documentation pass
 
+Documentation is a forcing function for design quality, not a coverage target.
+The purpose is to preserve knowledge that a future maintainer cannot cheaply
+recover from the syntax alone.
+
 - A blind reader must understand why every nontrivial class exists from its
   docstring.
+- Every retained function or method must earn its abstraction. It should either
+  establish a real contract/invariant, centralize genuinely repeated behavior,
+  isolate an external-effect or compatibility seam, or be required by a
+  framework/public interface.
+- If the best docstring for a private helper merely paraphrases its name,
+  signature, or obvious implementation, treat that as a refactoring signal:
+  first ask whether the helper should be inlined, merged into its owner, or
+  removed rather than manufacturing a longer description.
+- Small framework-required methods are not automatically unnecessary. Their
+  documentation should explain the framework assumption being adapted or the
+  failure that the override prevents, not state that a getter “returns” its
+  field.
+- Useful function/class documentation records non-obvious ownership, lifecycle,
+  ordering, failure semantics, invariants, deliberate alternatives, or reasons a
+  boundary exists. Do not fill `Args`, `Returns`, or comments with information
+  already obvious from names and types unless the parameter carries a hidden
+  contract.
 - Document what a calculation tells the user, not merely which operations it
   performs.
 - Explain lifecycle boundaries, authority, intentional state, data structures,
   algorithms, approximations, and surprising framework constraints where they
   occur.
 - Preserve useful comments during rewrites. Concision never justifies making code
-  unauditable.
+  unauditable, but verbosity that adds no recoverability is not maintainability.
+
+A useful adversarial question is:
+
+> If this comment or docstring disappeared, what maintenance knowledge would
+> become materially harder to recover?
+
+If the answer is “none,” either improve the documentation with real design
+knowledge or reconsider the abstraction it is attached to.
 
 ### 5. Fresh adversarial pass
 
