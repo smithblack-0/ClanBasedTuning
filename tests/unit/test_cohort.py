@@ -2,7 +2,8 @@
 
 The cohort state is deliberately tested without Ray actors. These contracts establish that
 concurrent experiments cannot collide in the registry, completed assignments are releasable,
-and a DDP session opens only for one complete set of fresh invocation tokens.
+and a DDP session opens only for one complete set of fresh invocation tokens. Failed pre-DDP
+announcements are retractable so later members cannot rendezvous with a dead process.
 """
 
 import pytest
@@ -79,6 +80,29 @@ def test_coordinator_assigns_stable_members_and_opens_only_complete_sessions() -
         "member_id": 1,
         "main_address": "host-a",
         "main_port": 12345,
+    }
+
+
+def test_aborted_announcement_cannot_form_a_session_with_a_later_member() -> None:
+    """A timed-out process leaves no rendezvous token that can represent a dead participant."""
+
+    coordinator = ClanCoordinator(population_size=2)
+    coordinator.register_trials(["trial-a", "trial-b"])
+
+    coordinator.announce("trial-a", "dead-token", "host-a", 12345)
+    coordinator.abort_announcement("trial-a", "dead-token")
+    coordinator.announce("trial-b", "token-b", "host-b", None)
+
+    assert coordinator.get_session("trial-b", "token-b") is None
+
+    # A stale abort from the dead process cannot erase a newer attempt from the same member.
+    coordinator.announce("trial-a", "fresh-token", "host-a", 54321)
+    coordinator.abort_announcement("trial-a", "dead-token")
+    assert coordinator.get_session("trial-a", "fresh-token") == {
+        "session_id": 0,
+        "member_id": 0,
+        "main_address": "host-a",
+        "main_port": 54321,
     }
 
 
