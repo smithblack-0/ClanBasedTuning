@@ -1,10 +1,10 @@
 """Framework-independent Clan generation policy.
 
 This module owns the calculations that turn one completed Clan generation into the next.
-It validates mutation rules, selects the single parent, and deterministically constructs one
-independently mutated child config per stable member. Framework adapters supply fitnesses and
-configs in member order and apply the returned decision; this module does not know about Ray,
-Lightning, checkpoints, or optimizer semantics.
+Framework adapters supply member-ordered fitness/config state; this module selects one parent,
+snapshots it once, and derives every child config from that same snapshot. Keeping this logic
+free of Ray and Lightning is what makes seeded sibling generation reproducible independently
+of framework scheduling order.
 """
 
 import copy
@@ -15,15 +15,24 @@ from typing import Any, Protocol
 
 
 class _GaussianRandom(Protocol):
-    """Random source required by scalar Clan mutation."""
+    """Minimum random interface needed by mutation policy.
+
+    The scheduler owns the concrete random stream so its state is serialized with Tune. Tests
+    can provide a deterministic stand-in without coupling the policy to ``random.Random``.
+    """
 
     def gauss(self, mean: float, standard_deviation: float) -> float:
-        """Return one Gaussian sample."""
+        """Provide the Gaussian displacement consumed by one mutation."""
 
 
 @dataclass(frozen=True, slots=True)
 class _MutationRule:
-    """Normalized internal form of one scalar mutation rule."""
+    """Validated scalar mutation policy kept deliberately ignorant of parameter meaning.
+
+    ``linear`` applies additive Gaussian displacement. ``log`` applies Gaussian displacement
+    in log space, preserving multiplicative scale. Bounds are applied after mutation so every
+    generated child remains inside the user's declared search region.
+    """
 
     standard_deviation: float
     geometry: str
@@ -31,7 +40,11 @@ class _MutationRule:
     maximum: float
 
     def mutate(self, value: float, random_stream: _GaussianRandom) -> float:
-        """Return one bounded mutation of ``value`` using ``random_stream``."""
+        """Apply this rule without interpreting what the controlled genome value does.
+
+        Log geometry requires a positive source because mutation is multiplicative. The rule
+        clips only the proposed child value; it never changes the stored parent snapshot.
+        """
 
         value = float(value)
         if not math.isfinite(value):
@@ -49,10 +62,12 @@ class _MutationRule:
 
 @dataclass(frozen=True, slots=True)
 class GenerationDecision:
-    """Resolved parent and complete next-generation configs for one Clan boundary.
+    """Complete framework-independent decision for one Clan boundary.
 
-    ``child_configs`` is indexed by stable Clan member ID. Every child, including the prior
-    winner, is independently mutated from the same snapshotted parent config.
+    ``parent_config`` is a deep snapshot taken before any child mutation. ``child_configs`` is
+    indexed by stable Clan member ID, and every entry—including the prior winner—is an
+    independent mutation of that same parent snapshot. Framework adapters may transfer this
+    decision but must not reinterpret or regenerate it.
     """
 
     winner_id: int
@@ -60,22 +75,24 @@ class GenerationDecision:
     child_configs: tuple[dict[str, Any], ...]
 
 
-# Helpers
+# Construction
 
 
 def build_mutation_rule(
     config: Mapping[str, Any],
     _cls: type[_MutationRule] = _MutationRule,
 ) -> _MutationRule:
-    """Validate one public mutation dictionary and return its normalized rule.
+    """Normalize one user mutation declaration before generation-time execution.
+
+    Validation happens once when the scheduler is constructed so generation transitions do
+    not repeatedly rediscover malformed search-space metadata. This function validates only
+    mutation geometry and numeric bounds; the genome key's optimizer/model meaning remains
+    userspace-owned.
 
     Args:
         config: Mapping containing exactly ``standard_deviation``, ``geometry``, ``minimum``,
             and ``maximum``.
-        _cls: Injectable normalized rule type for isolated construction tests.
-
-    Returns:
-        Validated immutable mutation rule.
+        _cls: Replacement normalized rule type that must preserve the same mutation contract.
 
     Raises:
         ValueError: If required fields, geometry, bounds, or numeric values are invalid.
@@ -114,34 +131,16 @@ def build_mutation_rule(
     )
 
 
-def build_mutation_rules(
-    configs: Mapping[str, Mapping[str, Any]],
-    _build_rule: Callable[[Mapping[str, Any]], _MutationRule] = build_mutation_rule,
-) -> dict[str, _MutationRule]:
-    """Normalize all mutation dictionaries while preserving user genome keys.
-
-    Args:
-        configs: Mutation dictionaries keyed by the corresponding Tune config/genome field.
-        _build_rule: Injectable single-rule construction function for isolated tests.
-
-    Returns:
-        Validated immutable mutation rules keyed by the original user genome fields.
-    """
-
-    return {key: _build_rule(config) for key, config in configs.items()}
-
-
 # Main
 
 
 def select_winner_id(population: Sequence[float], mode: str) -> int:
-    """Return the stable winning member ID from finite member-ordered fitness values.
+    """Select one parent deterministically from member-ordered fitness values.
 
-    Ties are resolved by lower stable member ID for both minimization and maximization.
-
-    Raises:
-        ValueError: If the population is empty, contains non-finite fitness, or uses an
-            unsupported comparison mode.
+    Stable member order is part of the algorithm, not presentation: exact ties resolve to the
+    lower member ID so worker-side and driver-side selection cannot depend on incidental
+    container ordering. Non-finite values are rejected because NaN/inf ordering would make
+    that agreement unreliable.
     """
 
     fitnesses = [float(value) for value in population]
@@ -166,18 +165,15 @@ def resolve_generation(
     random_stream: _GaussianRandom,
     _select_winner: Callable[[Sequence[float], str], int] = select_winner_id,
 ) -> GenerationDecision:
-    """Resolve one complete Clan boundary into a parent and next-generation configs.
+    """Freeze one parent and construct the entire next generation in stable member order.
 
-    Args:
-        fitnesses: Finite candidate fitnesses in stable member-ID order.
-        configs: Current Tune configs in the same stable member-ID order.
-        mode: ``"min"`` or ``"max"`` selection direction.
-        mutations: Normalized mutation rules keyed by user genome/config field.
-        random_stream: Scheduler-owned random stream whose state persists with the scheduler.
-        _select_winner: Injectable winner-selection function for isolated composition tests.
+    The parent config is deep-copied before the first mutation. Each child then starts from a
+    fresh deep copy of that snapshot, which prevents sibling mutations from accumulating on
+    each other. Iterating children by stable member ID makes a serialized RNG state produce
+    the same sibling assignment regardless of Ray trial iteration order.
 
-    Returns:
-        One winner plus a complete tuple of independently mutated child configs.
+    ``mutations`` may touch only declared user config keys; this function deliberately knows
+    nothing about how user code later applies those values to an optimizer or model.
 
     Raises:
         ValueError: If population inputs are empty, misaligned, or contain non-finite fitness.
