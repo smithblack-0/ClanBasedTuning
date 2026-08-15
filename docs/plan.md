@@ -90,6 +90,8 @@ against the authoritative project style/quality contract. At minimum review:
 
 - fast, effective, maintainable, correct, and concise simultaneously;
 - module/class/function documentation and complete type annotations;
+- whether each retained function/method earns its abstraction, using useful documentation as
+  a forcing function rather than a coverage target;
 - dependency injection/construction boundaries and absence of hidden construction ownership;
 - imports, module organization, and responsibility level;
 - test isolation, documentation quality, no patching where injection should exist, and a few
@@ -99,14 +101,17 @@ against the authoritative project style/quality contract. At minimum review:
 - distribution/release truthfulness and dependency compatibility policy; and
 - synchronization of README, API docs, examples, STATUS, qualification, and release records.
 
-Any concrete issue found is corrected and the relevant executable evidence is rerun. Only then
-may the audit record pass. External evidence gates such as owner license selection or hardware
-that has not been run remain explicitly blocked/non-claimed rather than being waved through by
-the code-quality audit.
+Any concrete issue found is corrected and the relevant executable evidence is rerun. A
+function whose useful docstring can only paraphrase its name, signature, or obvious body is a
+prompt to reconsider the abstraction; framework-required small methods are retained when their
+interface role itself is the reason. External evidence gates such as owner license selection or
+hardware that has not been run remain explicitly blocked/non-claimed rather than being waved
+through by the code-quality audit.
 
 ### Gate result
 
-Completed against executable commit `8f4e07ea93c8d4525920212f93c365cfd148e1e7`
-after correcting the issues found during review. Exact executable evidence is GitHub Actions
-run `31852871160`. The audit result and remaining external blockers are recorded in
-[`reviews/readiness_quality_audit.md`](reviews/readiness_quality_audit.md).
+Completed against executable commit `5f117df15b89d468663abdb6ec9e316ca89ca2b8`
+after the initial audit was reopened for a documentation-driven abstraction pass. Exact
+executable evidence is GitHub Actions run `31902897008`, which passed Python 3.11, Python 3.13,
+and the real Ray/Lightning job. The audit result and remaining external blockers are recorded
+in [`reviews/readiness_quality_audit.md`](reviews/readiness_quality_audit.md).
