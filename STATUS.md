@@ -1,72 +1,110 @@
 # ClanBasedTuning project status
 
-Last updated: 2026-08-01
+Last updated: 2026-08-15
 
-## Current implementation
+## Current readiness branch
 
-The active package contains:
+Merged PR #52 remains the corrected function-API baseline. The readiness branch adds
+qualification, diagnostics, typing/distribution checks, release process, and the final
+repository quality audit without changing the accepted public three-object API or moving
+genome application out of userspace.
 
-- `ClanController`, with one local fitness, one injected population exchange, and one
-  cached checkpoint-source decision;
-- the shared deterministic winner-selection function;
-- `MutationSpec`; and
-- scheduler-owned configuration type aliases.
+The latest executable candidate is commit
+`5f117df15b89d468663abdb6ec9e316ca89ca2b8`. GitHub Actions run `31902897008` passed both
+ordinary Python validation jobs and the real Ray/Lightning framework job on that exact commit.
+Subsequent commits only synchronize audit/status documentation.
 
-The current tests establish the framework-independent controller lifecycle, stable tie
-behavior, finite-fitness requirements, mutation behavior, and the intentionally small
-package surface.
+## Directly established CPU behavior
 
-## Accepted design
+The real framework job used Python 3.11.15, Ray 2.57.0, Lightning 2.6.5, PyTorch 2.10.0+cpu,
+Linux, and local CPU execution. It passed:
 
-The current integration design assigns:
+- repeated two-member single-parent Clan generation transition;
+- fresh-runtime `Tuner.restore` after a deliberate post-restore failure;
+- insufficient-capacity failure at the CBT rendezvous boundary before DDP;
+- a realistic tiny two-layer MLP + AdamW repeated training/restore contract;
+- logical one-process-member Lightning topology; and
+- a real two-rank framework-managed GLOO DDP world.
 
-- trial execution and native resource and scheduler lifecycle to Ray Tune;
-- complete-Clan coordination, stable member assignment, evolution, and atomic generation
-  transition to a CBT Tune scheduler;
-- externally launched distributed setup, training cadence, validation, restoration, and
-  checkpoint construction to Lightning;
-- process-group lifecycle, collectives, model synchronization, and shared gradients to
-  native PyTorch DDP for the initial path;
-- population fitness exchange to a narrow collaborator using that already-established
-  framework-managed distributed context;
-- deterministic selection and mutation behavior to framework-independent policy
-  functions; and
-- one local fitness, cached save decision, and winner provenance to `ClanController`.
+The insufficient-capacity contract gives Ray only one CPU for a two-member Clan. Both trials
+must fail with the CBT `complete Clan did not become resident` rendezvous error and neither may
+reach a `DistNetworkError`. Timed-out pre-DDP announcements are retracted before failure so a
+later process cannot rendezvous with a dead member.
 
-One live Tune trial represents one stable Clan member and one DDP rank in the initial
-path. ClanBasedTuning supplies the missing cohort identity and topology facts but does not
-create or tear down a separate population process group.
+The ordinary validation jobs passed on Python 3.11 and 3.13. They include Ruff lint/format,
+package-source mypy, wheel/sdist build and `twine check`, non-editable installed-wheel import,
+package-surface checks, pure cohort/runtime/evolution contracts, and the remaining non-Ray
+suite.
 
-The scheduler's existence and evolutionary authority are accepted. Its exact Ray
-superclass, cohort-admission mechanism, delegated native machinery, and hook path remain
-open to direct framework evidence. No persistent evolutionary controller exists beside
-it.
+## Dependency and compatibility policy
 
-## Not yet implemented
+The package dependency envelope remains intentionally broader than the directly tested
+configuration:
 
-The repository does not yet contain:
+- `ray[tune]>=2.56,<3`;
+- `lightning>=2.6,<3`; and
+- `torch>=2.10,<3`.
 
-- the production Tune-trial-to-Lightning DDP cohort integration;
-- the framework-managed population exchange;
-- selected-worker checkpoint provenance;
-- the CBT Tune scheduler;
-- member-local optimizer application for a qualified live path;
-- a repeated real multi-member Clan workflow; or
-- the later ClanFSDP topology.
+These are compatibility/installability bounds, not a claim that every admitted version has
+been qualified. Ray-specific low-level continuation transfer remains isolated in
+`ray_compat.py`; framework-minor changes should be repaired at that boundary when possible
+rather than forcing users onto one point release.
 
-## Current work
+## Repository quality audit
 
-[`docs/plan.md`](docs/plan.md) begins by directly establishing the one-trial,
-one-member, one-DDP-rank topology through real Ray Tune, Lightning, and PyTorch framework
-seams. Population resolution then uses that established context rather than creating a
-second Ray collective group.
+The mandatory post-gate repository-wide audit is recorded in
+[`docs/reviews/readiness_quality_audit.md`](docs/reviews/readiness_quality_audit.md). It reviewed
+shipped source, tests, examples, active docs, packaging, qualification, and release surfaces
+against the project style/quality contract after the readiness work was synchronized.
 
-The rejected standalone Ray/GLOO population-runtime branch was closed without merge. Its
-process-group ownership model is not active implementation or accepted evidence.
+The audit was reopened for a documentation-driven abstraction pass after it became clear that
+mere docstring coverage could hide weak functions. Retained functions now document non-obvious
+responsibility, invariants, framework contracts, failure semantics, or ownership. Helpers and
+state that could not justify an independent boundary were removed rather than given ceremonial
+docstrings. The same pass removed tests that froze harmless `__all__` ordering.
 
-Later steps connect population selection, selected checkpointing, the scheduler-owned
-generation transition, complete Lightning/PyTorch training behavior, and a repeated manual
-workflow. ClanFSDP remains a later separate extension.
+Earlier audit findings also fixed runtime-construction ownership, repeated Ray registration
+work, completed-runtime cleanup, stale pre-DDP rendezvous state, and auxiliary-function
+injection seams. Passing tests were treated as evidence for the review rather than as the
+review itself.
 
-The governing product direction remains [`docs/product_roadmap.md`](docs/product_roadmap.md).
-Current design and contracts are indexed by [`docs/README.md`](docs/README.md).
+## Runnable but not yet qualified locally
+
+The repository contains no-download/local qualification harnesses for remaining environment-
+dependent claims:
+
+- two-GPU CUDA/NCCL;
+- physical multi-node Ray execution with shared Tune storage; and
+- destructive live-DDP-participant failure.
+
+A skip is not evidence. These support claims remain open until the corresponding test passes
+on a named environment and that evidence is recorded.
+
+The CUDA/NCCL test can be run from a checkout with:
+
+```bash
+python -m pip install -e '.[dev]'
+python -m pytest tests/hardware/test_cuda_function_path.py -vv
+```
+
+It uses only the tiny synthetic MLP/AdamW workload; no model or dataset download is required.
+Physical multi-node and destructive-failure setup are documented in
+[`docs/qualification/hardware.md`](docs/qualification/hardware.md).
+
+## Remaining external release gates
+
+The repository engineering/readiness audit is complete, but an ordinary production/public
+release is still blocked by evidence or owner decisions outside this CPU qualification run:
+
+- **License:** the project owner must choose the license; this branch does not make that legal
+  decision.
+- **CUDA/NCCL:** test exists but has not been run on two visible GPUs in recorded evidence.
+- **Physical multi-node:** test exists but has not been run against a recorded two-node cluster.
+- **Active-collective participant failure:** destructive harness exists but has not been run in
+  recorded evidence.
+- **Performance:** reproducible measurement tooling exists, but representative workload/hardware
+  measurements are still required before making overhead or scaling claims.
+- **Model sharding/custom checkpoint plugins:** remain unqualified and are not current support
+  claims.
+
+CI workflow expansion remains separately approved work and was not modified by this branch.

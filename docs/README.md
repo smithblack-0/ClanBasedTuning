@@ -1,52 +1,53 @@
 # ClanBasedTuning documentation
 
-This is the active documentation entry point.
+This directory separates the public usage path, implementation design, executable evidence,
+and release/readiness process.
 
-## Governing product direction
+## User path
 
-- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning, the project goals, and
-  the stable criteria by which development is judged.
+- [`../README.md`](../README.md) gives installation, the shortest complete usage path, and
+  local qualification commands.
+- [`api.md`](api.md) explains the public API and lifecycle in detail.
+- [`../examples/function_api.py`](../examples/function_api.py) is the runnable CPU example.
+- [`../STATUS.md`](../STATUS.md) records what is actually qualified now.
 
-## Current accepted design
+## Product and architecture
 
-- [`design/integration.md`](design/integration.md) defines the current framework lifecycle,
-  state authority, and deliberately open integration surface.
-- [`contracts/system_behavior.md`](contracts/system_behavior.md) states the observable
-  behavior of a complete Clan Tuning integration.
+- [`product_roadmap.md`](product_roadmap.md) defines Clan Tuning and the durable project goals.
+- [`contracts/system_behavior.md`](contracts/system_behavior.md) states observable Clan
+  behavior independently of framework hooks.
 - [`contracts/population_resolution_invariants.md`](contracts/population_resolution_invariants.md)
-  states what the pre-report population boundary must preserve.
+  defines the complete-population generation boundary.
 - [`contracts/population_resolution_responsibilities.md`](contracts/population_resolution_responsibilities.md)
   assigns ownership at that boundary.
+- [`design/integration.md`](design/integration.md) records the Ray/Lightning/PyTorch composition.
 
-## Public lowering
+## Qualification
 
-- [`api.md`](api.md) records the current and accepted intended public surface while
-  leaving internal helpers, population-exchange collaborators, framework hooks, and
-  metadata representation free to evolve.
+- [`qualification/function_api.md`](qualification/function_api.md) records repeated-generation
+  and restore evidence.
+- [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
+  records the foundational cross-trial DDP evidence.
+- [`qualification/hardware.md`](qualification/hardware.md) gives the executable CUDA/NCCL,
+  physical multi-node, and destructive peer-failure procedures.
+- [`qualification/performance.md`](qualification/performance.md) defines the tiny measurement
+  harness and what would count as performance evidence.
+- [`qualification/observability.md`](qualification/observability.md) records the operational
+  diagnostics available from the package.
 
-## Current implementation choice and evidence boundary
+## Implementation evidence
 
 - [`implementation/framework_managed_distributed_context.md`](implementation/framework_managed_distributed_context.md)
-  defines the initial one-trial/one-member/one-DDP-rank direction while retaining
-  Lightning/PyTorch ownership of distributed lifecycle.
-- [`qualification/framework_managed_distributed_context.md`](qualification/framework_managed_distributed_context.md)
-  states what real Tune, Lightning, DDP, population, and failure evidence must exist
-  before that path is supported.
+  records the externally launched Lightning DDP topology.
+- [`implementation/ray_scheduler_compatibility.md`](implementation/ray_scheduler_compatibility.md)
+  explains the owned synchronous scheduler and narrow Ray compatibility seam.
 
-## Current work
+## Release and maintainer process
 
-- [`plan.md`](plan.md) sequences the present implementation work.
-- Root [`STATUS.md`](../STATUS.md) records what the repository actually implements now.
-- Code and tests remain authoritative for current executable behavior.
-
-## Engineering process
-
+- [`plan.md`](plan.md) is the ordered readiness gate sequence.
+- [`releasing.md`](releasing.md) is the release checklist and evidence policy.
+- [`reviews/framework_native_review.md`](reviews/framework_native_review.md) is the standing
+  framework-ownership review.
+- [`reviews/readiness_quality_audit.md`](reviews/readiness_quality_audit.md) records the final
+  style/quality audit once all preceding gates are synchronized.
 - [`llm/README.md`](llm/README.md) routes substantial engineering and writing work.
-- [`reviews/framework_native_review.md`](reviews/framework_native_review.md) checks that
-  Clan-specific behavior remains narrow and framework-native.
-
-## Non-active material
-
-Completed and superseded records live under [`archive/`](archive/) and do not compete
-with current authority. Tentative reasoning belongs under [`scratchwork/`](scratchwork/)
-until accepted in the artifact that owns it.

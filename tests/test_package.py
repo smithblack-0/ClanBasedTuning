@@ -1,29 +1,21 @@
-"""Package-level public-surface checks."""
+"""Public package-surface contract for the three ordinary user integration objects.
+
+The contract protects which objects CBT asks users to compose, not the source-order formatting
+of ``__all__``. Keeping that distinction avoids turning harmless export reordering into an API
+failure while still rejecting accidental additions/removals.
+"""
+
+import clan_based_tuning
 
 
-def test_package_exports_the_worker_controller_and_mutation_spec():
-    """The package root exposes the active CBT surface and no rejected lifecycle API."""
+def test_package_root_exports_the_complete_user_surface() -> None:
+    """Expose exactly scheduler, strategy, and reporting callback from the package root."""
 
-    import clan_based_tuning
-
-    assert clan_based_tuning.__name__ == "clan_based_tuning"
-    assert clan_based_tuning.__all__ == [
-        "ClanController",
-        "MutationSpec",
-    ]
-    for name in clan_based_tuning.__all__:
-        assert getattr(clan_based_tuning, name) is not None
-
-    removed_names = {
-        "ClanRound",
-        "ClanBasedTraining",
+    assert set(clan_based_tuning.__all__) == {
         "ClanDDPStrategy",
-        "ClanLightningEnvironment",
-        "ClanLightningPlugins",
-        "apply_optimizer_strategy",
-        "make_clan_lightning_plugins",
-        "prepare_clan_trainer",
-        "replicated_sampler",
-        "tune_checkpoint_path",
+        "ClanScheduler",
+        "ClanTuneReportCallback",
     }
-    assert not any(hasattr(clan_based_tuning, name) for name in removed_names)
+    assert clan_based_tuning.ClanScheduler is not None
+    assert clan_based_tuning.ClanDDPStrategy is not None
+    assert clan_based_tuning.ClanTuneReportCallback is not None

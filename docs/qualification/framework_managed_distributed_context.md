@@ -1,159 +1,69 @@
 # Framework-managed distributed-context qualification
 
-Status: accepted qualification boundary
+Status: qualified single-node CPU foundation
+Date: 2026-08-14
+Evidence: GitHub Actions run `31849703451`
 
 ## Purpose
 
-This document states what the initial Tune-trial-to-Lightning/PyTorch distributed path
-must prove before the project claims that one trial can operate as one Clan member in a
-shared DDP group.
+This record captures the distributed foundation used by the complete function API: separate
+Ray Tune trials can operate as stable Clan members/ranks in one Lightning/PyTorch-managed DDP
+world without CBT creating another process group.
 
-This is an evidence boundary, not architecture. An untested topology is unsupported; it
-is not automatically prohibited.
+## Qualified environment
 
-## Required qualification path
+The current retained framework contract passed with:
 
-The initial path must be exercised with:
+- Ray 2.57.0;
+- Lightning 2.6.5;
+- PyTorch 2.10.0+cpu;
+- Python 3.11.15;
+- Linux;
+- one CPU node;
+- two concurrently live Ray Tune function trials; and
+- one externally launched Lightning process per trial.
 
-- real Ray Tune trials rather than stand-alone test actors;
-- at least two concurrently live stable Clan members;
-- one externally launched Lightning training process per trial;
-- one native PyTorch DDP group spanning those member processes; and
-- population fitness exchanged through that already-established distributed context.
+The CPU harness chooses GLOO through the normal Lightning/PyTorch setup. Production CBT code
+does not select GLOO, initialize/destroy the process group, or create a second Ray collective
+group.
 
-A controller callback, mocked strategy, isolated Ray collective, or manually created
-GLOO process group is not evidence for this topology.
+## Established identity and topology
 
-## Cohort admission evidence
+The passing contract establishes that one live Tune trial can represent one stable Clan
+member and one DDP global rank. Each Tune process has local rank zero and is presented as one
+logical one-process Lightning node, with logical node/global rank equal to stable member ID.
+That representation is adapter bookkeeping rather than physical machine identity.
 
-Tests or a retained executable harness prove that:
+The production runtime derives assignments from the complete Tune trial set and uses a fresh
+per-invocation rendezvous rather than test-harness constants.
 
-- the complete configured Clan can be admitted with its required resources;
-- no partial cohort holds resources indefinitely while preventing the remaining members
-  from being scheduled;
-- every admitted trial belongs to exactly one active Clan cohort; and
-- no trial enters distributed initialization under mixed generation or cohort metadata.
+## Framework ownership
 
-The evidence records the exact Ray mechanism used for resource reservation, placement,
-and trial release. It must show that Tune remains the native trial and resource owner.
+The evidence establishes that:
 
-## Identity and topology evidence
+- Ray Tune creates and resources trial processes;
+- CBT supplies cohort identity and topology facts;
+- Lightning/PyTorch initialize the distributed group;
+- backend/device behavior belongs to Lightning/PyTorch;
+- DDP owns gradient synchronization; and
+- CBT does not compensate with package-owned process-group lifecycle machinery.
 
-Tests prove that:
+## Shared-gradient evidence
 
-- one live Tune trial maps to one stable Clan member;
-- one member process maps to one DDP rank for the initial path;
-- every required member and rank appears exactly once;
-- stable member identity remains correctly associated with rank-derived collective
-  results; and
-- rank ordering or trial scheduling order is not mistaken for undocumented identity.
+The two-trial contract gives ranks distinct local gradients and verifies that
+Lightning/PyTorch reduce them to the same common gradient before local optimizer updates.
+This is the required Clan training seam: every member contributes to shared gradient work
+while retaining its own post-gradient optimizer update.
 
-The first implementation may assign the same integer to member identity and rank, but the
-evidence must establish that assignment rather than rely on incidental ordering.
+The complete function qualification separately establishes divergence, selection, checkpoint
+transition, sibling mutation, repeated operation, and fresh-runtime restore.
 
-## Framework-ownership evidence
+## Support boundary
 
-Source inspection and executable behavior prove that:
+This foundation does not establish CUDA/NCCL, physical multi-node topology, actor reuse,
+bounded recovery after a member fails inside active distributed work, atomic cross-trial gang
+scheduling, arbitrary validation-sampler arrangements, or model-sharded Clan execution.
 
-- Ray Tune creates and resources the trial processes;
-- ClanBasedTuning supplies only Clan cohort and topology metadata;
-- Lightning/PyTorch initialize and tear down the distributed group;
-- backend and device behavior come from the qualified Lightning/PyTorch path; and
-- production ClanBasedTuning code does not call Ray collective-group construction,
-  `torch.distributed.init_process_group`, or equivalent backend lifecycle APIs.
-
-A test harness may configure the framework path, but the production population component
-must not own process-group creation or teardown.
-
-## Shared-training evidence
-
-The initial DDP qualification proves that:
-
-- every required member contributes to one common reduced gradient;
-- corresponding supported parameters receive the same reduced gradient before local
-  optimizer application;
-- member-local optimizer configurations can produce divergent parameter updates after
-  that common gradient; and
-- no later DDP synchronization silently erases the intended member divergence.
-
-This evidence may begin with a minimal model and optimizer. It does not by itself qualify
-the full Lightning training, checkpoint, or scheduler lifecycle.
-
-## Population-resolution evidence
-
-At a qualifying boundary, tests prove that:
-
-- each member contributes exactly one finite local fitness through the established group;
-- every successful member receives complete fitness associated with stable member
-  identity;
-- minimizing, maximizing, and stable tie behavior agree across workers;
-- payload conversion does not change the selected member for supported values;
-- the first controller query performs one exchange; and
-- repeated queries use the cached result without another collective operation.
-
-The exact collective call and payload representation are recorded as implementation
-evidence, not elevated into architecture.
-
-## Lifecycle and failure evidence
-
-The real framework path exercises at least:
-
-- incomplete cohort admission;
-- a member that fails before distributed initialization;
-- a member that fails while peers are in distributed work;
-- a member that never reaches the population boundary; and
-- malformed or non-finite local fitness.
-
-Each case demonstrates that:
-
-- no checkpoint source is accepted from a partial population;
-- no next generation is released;
-- peers fail or are released through supported Ray, Lightning, and PyTorch lifecycle
-  behavior rather than a package-owned communication watchdog; and
-- the experiment does not continue with a silently reduced Clan.
-
-The exact timeout and cancellation behavior may differ by qualified framework path. The
-evidence must state how the common failure outcome is achieved.
-
-## Checkpoint and scheduler evidence
-
-Later complete-integration evidence proves that:
-
-- exactly the worker selected through population resolution retains and reports the
-  checkpoint;
-- the CBT Tune scheduler independently selects the same member from reported results;
-- a missing, extra, or losing checkpoint is rejected;
-- producer provenance matches the selected member and active controlled optimizer
-  configuration; and
-- every next-generation member receives the same accepted continuation.
-
-Those claims are not established merely by qualifying the distributed context.
-
-## Initial non-claims
-
-Unless separately qualified, the initial path does not claim support for:
-
-- elastic membership or world-size changes;
-- model sharding or ClanFSDP;
-- multiple distributed processes inside one Clan member;
-- multiple Clan cohorts sharing one distributed group;
-- mixed CPU and CUDA membership in one group;
-- arbitrary Lightning strategies or third-party backends; or
-- recovery that resumes the same failed distributed operation.
-
-These are qualification limits, not architectural prohibitions.
-
-## Evidence record
-
-Every implementation change that establishes or broadens support records:
-
-- exact Ray, Lightning, PyTorch, and Python versions;
-- device and backend observed for each path;
-- member count and resource assignment;
-- trial, stable-member, rank, and device mapping;
-- cohort-admission and rendezvous mechanism;
-- collective operation and payload representation;
-- timeout and failure configuration;
-- commands or retained harness used;
-- pass/fail output; and
-- any support claim intentionally withheld.
+The current runtime has a bounded pre-DDP rendezvous timeout and the scheduler forbids an
+early-paused member from entering the next generation until the complete current boundary has
+resolved. The entire Clan must nevertheless fit concurrently on provisioned resources.
